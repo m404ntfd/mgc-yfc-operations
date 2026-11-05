@@ -139,3 +139,5 @@ body[data-section=print]>header{background:#073ea6;color:#ffffff}body[data-secti
 body{background:var(--page-background,#faf6f5);min-height:100vh;color:var(--page-text,#282b36)}:root[data-theme=dark] body{background:var(--page-background,#101821);color:var(--page-text,#e6edf5)}#pageColorFields fieldset{margin:16px 0;padding:18px;border:1px solid #8495a7;border-radius:10px}#pageColorFields label{display:flex;justify-content:space-between;align-items:center;gap:20px;margin:10px 0}#pageColorFields input[type=color]{width:80px;padding:4px;flex:none}body>header #currentSection{opacity:1}
 
 :is(.panel,.job,.totalCard,.receiptShortcut){color:#282b36}:root[data-theme=dark] :is(.panel,.job,.totalCard,.receiptShortcut){color:#e6edf5}
+
+.reimbursementLabel{display:flex;align-items:center;gap:12px;margin:18px 0}.reimbursementLabel input{width:auto;min-height:24px;flex:none}#receiptAssigneeLabel .muted{display:block;margin-top:8px}
