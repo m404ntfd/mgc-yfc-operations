@@ -1,10 +1,6 @@
-# MGC YFC Operations 0.38.0
+# MGC YFC Operations 0.38.1
 
-- Adds a QuickBooks Online Payroll CSV export for completed seven-day workweeks. Grant View and export payroll through Roles to give a bookkeeper access.
-- Flags scheduled shifts without a matching clock-in, missing clock-outs, open breaks, and worked shifts without a recorded break after the selected threshold. Review flags before export and correct open punches and breaks before including those hours.
-- Adds Edit time cards permission and a read-only Time card audit for administrators. Corrections record the actor, time, reason, and before-and-after values.
-- Prompts staff without an approved or pending profile picture to take a picture, upload one, or skip for now.
-
-In QuickBooks Online Payroll, upload the CSV via Run payroll → Add from file. Confirm the pay period, employee matches, and regular and overtime totals in the draft before submitting payroll.
+- Adds Login & legal names in Users. Staff with Edit user names permission can assign a unique sign-in username and record legal first, middle, and last names. Existing display names, passwords, and account history are preserved.
+- Adds an Add time cards permission for recording missed shifts with clock-in, clock-out, and optional breaks. Manual entries require a reason, cannot overlap another time card, and appear in the read-only audit log and payroll totals.
 
 Use Check for Updates on an existing server, or run the full Windows installer over the current installation.

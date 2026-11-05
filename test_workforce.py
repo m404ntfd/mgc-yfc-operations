@@ -140,8 +140,30 @@ class WorkforceTests(unittest.TestCase):
                 db.execute('INSERT OR REPLACE INTO work_time_card_audit SELECT * FROM work_time_card_audit')
         self.assertEqual(call('admin/rename-user',dict(name='Staff',new_name='Staff Updated'))[0],200)
         self.assertEqual(call('workforce/overview',client=staff)[1]['shifts'][0]['name'],'Staff Updated')
+        identity=dict(name='Staff Updated',username='staff.login',first='Legal',middle='M',last='Name')
+        self.assertEqual(call('admin/user-identity',identity,staff)[0],403)
+        self.assertEqual(call('admin/user-identity',dict(identity,username='Manager'))[0],409)
+        self.assertEqual(call('admin/user-identity',identity)[0],200)
+        alternate=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+        self.assertEqual(call('login',dict(name='Staff Updated',password='testpassword'),alternate)[0],401)
+        self.assertEqual(call('login',dict(name='STAFF.LOGIN',password='testpassword'),alternate)[0],200)
+        self.assertEqual(call('profile/identity',client=alternate)[1],
+                         dict(username='staff.login',first='Legal',middle='M',last='Name'))
+        self.assertEqual(call('workforce/overview',client=alternate)[1]['shifts'][0]['name'],'Staff Updated')
+        past=datetime.datetime.now()-datetime.timedelta(days=10)
+        add=dict(account=staff_id,start=past.isoformat(timespec='seconds'),
+                 end=(past+datetime.timedelta(hours=1)).isoformat(timespec='seconds'),reason='Missed punches')
+        self.assertEqual(call('workforce/add-time-card',add,manager)[0],403)
+        add_role=call('roles',dict(name='Manual punches',grants={'add_time_cards':True}))[1]['id']
+        self.assertEqual(call('admin/user-role',dict(name='Manager',role_id=add_role))[0],200)
+        self.assertEqual(call('workforce/add-time-card',add,manager)[0],200)
+        self.assertEqual(call('workforce/add-time-card',add,manager)[0],409)
+        self.assertEqual(call('workforce/edit-time-card',correction,manager)[0],403)
+        entry=call('workforce/time-card-audit')[1]['entries'][0]
+        self.assertIsNone(entry['before'])
+        self.assertEqual(entry['after']['start'],add['start'])
         with closing(sqlite3.connect(fixture.tmp.name+'/schedule.db')) as db:
-            self.assertEqual(db.execute('SELECT account,site_in,site_out FROM work_periods WHERE account=?',(staff_id,)).fetchone(),
+            self.assertEqual(db.execute('SELECT account,site_in,site_out FROM work_periods WHERE account=? AND site_in IS NOT NULL',(staff_id,)).fetchone(),
                              (staff_id,'Main Office','Main Office'))
 
     def test_payroll_preview_flags_open_and_removed_accounts(self):

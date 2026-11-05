@@ -1,5 +1,6 @@
 """Exercise the manager and staff views with simulated mobile geolocation."""
 import csv
+import datetime
 
 from playwright.sync_api import expect, sync_playwright
 from test_server import Tests as Fixture
@@ -168,8 +169,17 @@ def run():
             card.locator('[name=reason]').fill('Correct missing clock-out')
             card.get_by_role('button',name='Save correction').click()
             expect(manager.locator('#workCardDialog')).to_be_hidden()
+            manager.locator('#workAddCard').click()
+            card.locator('[name=account]').select_option(label='Admin')
+            first=datetime.datetime.fromisoformat(start)-datetime.timedelta(hours=2)
+            card.locator('[name=start]').fill(first.isoformat(timespec='seconds'))
+            card.locator('[name=end]').fill((first+datetime.timedelta(hours=1)).isoformat(timespec='seconds'))
+            card.locator('[name=reason]').fill('Enter a missed shift')
+            card.get_by_role('button',name='Save time card').click()
+            expect(manager.locator('#workCardDialog')).to_be_hidden()
             manager.locator('[data-work-view=time-card-audit]').click()
             expect(manager.locator('#workTimeAudit')).to_contain_text('Correct missing clock-out')
+            expect(manager.locator('#workTimeAudit')).to_contain_text('No entry existed.')
             expect(manager.locator('#workTimeAudit')).to_contain_text('Before')
             expect(manager.locator('#workTimeAudit')).to_contain_text('After')
             manager.locator('[data-work-view=payroll]').click()

@@ -253,8 +253,38 @@ def can_review_request(c,u,account):
     return c.execute(f'SELECT ? IN ({scope})',(account,*args)).fetchone()[0]
 
 
+def user_identity(c,account,name):
+    row=c.execute('SELECT username,first,middle,last FROM user_identity WHERE account=?',(account,)).fetchone()
+    return dict(row) if row else dict(username=name,first='',middle='',last='')
+
+
+def find_login_user(c,username):
+    return c.execute("""SELECT u.* FROM users u LEFT JOIN receipt_profiles p ON p.name=u.name
+        LEFT JOIN user_identity i ON i.account=p.profile_id
+        WHERE COALESCE(i.username,u.name)=? COLLATE NOCASE""",(username,)).fetchone()
+
+
+def check_username_available(c,username,account=None):
+    identity=c.execute('SELECT account FROM user_identity WHERE username=?',(username,)).fetchone()
+    reserved=c.execute('SELECT u.name,p.profile_id FROM users u LEFT JOIN receipt_profiles p ON p.name=u.name WHERE u.name=?',
+                       (username,)).fetchone()
+    if (identity and identity['account']!=account) or (reserved and (account is None or reserved['profile_id']!=account)):
+        raise Problem('That username is already in use.',409)
+
+
+def identity_target(c,u,name):
+    if not has_permission(u,'rename_users'): raise Problem('Edit user names permission required.',403)
+    row=c.execute('SELECT u.name,u.admin,p.profile_id FROM users u JOIN receipt_profiles p ON p.name=u.name WHERE u.name=?',
+                  (name,)).fetchone()
+    if not row: raise Problem('User not found.',404)
+    if row['admin'] and not u['admin']: raise Problem('Only an administrator can edit this account.',403)
+    return row
+
+
 def profile_get(handler,c,u,path):
     account=u['receipt_owner']
+    if path=='identity':
+        return handler.send(user_identity(c,account,u['name']))
     if path=='mine':
         row=c.execute("""SELECT account,approved IS NOT NULL AS approved,pending_revision,status
                          FROM user_profile_photos WHERE account=?""",(account,)).fetchone()
@@ -319,6 +349,10 @@ def profile_post(handler,c,u,path,d):
 
 def init_comms(c):
     c.executescript("""
+        CREATE TABLE IF NOT EXISTS user_identity(
+            account TEXT PRIMARY KEY, username TEXT NOT NULL COLLATE NOCASE UNIQUE,
+            first TEXT NOT NULL, middle TEXT NOT NULL, last TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS user_profile_photos (
             account TEXT PRIMARY KEY, approved BLOB, pending BLOB,
             pending_revision TEXT, status TEXT NOT NULL
@@ -1103,6 +1137,41 @@ def work_edit_time_card(c,u,d):
                  json.dumps(work_card_display(before)),json.dumps(work_card_display(after))))
 
 
+def work_add_time_card(c,u,d):
+    if not has_permission(u,'add_time_cards'): raise Problem('Add time cards permission required.',403)
+    account,reason=d.get('account'),d.get('reason')
+    if not isinstance(account,str):
+        raise Problem('Choose an employee.')
+    person=c.execute('SELECT u.name FROM users u JOIN receipt_profiles p ON p.name=u.name WHERE p.profile_id=?',
+                     (account,)).fetchone()
+    if not person: raise Problem('Choose a current employee.')
+    if not isinstance(reason,str) or not 1<=len(reason.strip())<=500:
+        raise Problem('Enter a reason of up to 500 characters.')
+    start,end=work_card_timestamp(d.get('start')),work_card_timestamp(d.get('end'))
+    if end<=start: raise Problem('Clock-out must be after clock-in.')
+    if c.execute("""SELECT 1 FROM work_periods WHERE account=? AND start<? AND (end IS NULL OR end>?)""",
+                 (account,end,start)).fetchone():
+        raise Problem('This entry overlaps another time card.',409)
+    raw=d.get('breaks',[])
+    if not isinstance(raw,list) or len(raw)>20 or any(not isinstance(item,dict) for item in raw):
+        raise Problem('Add up to 20 valid break periods.')
+    breaks=sorted((work_card_timestamp(item.get('start')),work_card_timestamp(item.get('end'))) for item in raw)
+    previous=start
+    for first,last in breaks:
+        if not previous<=first<last<=end:
+            raise Problem('Breaks must be within the time card and cannot overlap.')
+        previous=last
+    period=c.execute('INSERT INTO work_periods(account,start,end) VALUES(?,?,?)',(account,start,end)).lastrowid
+    saved=[]
+    for first,last in breaks:
+        ident=c.execute('INSERT INTO work_breaks(period,start,end) VALUES(?,?,?)',(period,first,last)).lastrowid
+        saved.append(dict(id=ident,start=first,end=last))
+    c.execute("""INSERT INTO work_time_card_audit(period,employee,actor,at,reason,before,after)
+                 VALUES(?,?,?,?,?,?,?)""",(period,person['name'],u['name'],
+                 dt.datetime.now().astimezone().isoformat(timespec='seconds'),reason.strip(),'null',
+                 json.dumps(work_card_display(dict(start=start,end=end,breaks=saved)))))
+
+
 def work_get(handler,c,u,path,query,clock_only=False):
     account=u['receipt_owner']
     if not account: raise Problem('Staff account required.',403)
@@ -1110,8 +1179,11 @@ def work_get(handler,c,u,path,query,clock_only=False):
     today=dt.date.fromtimestamp(now)
     week=work_week(query.get('week',[''])[0],today)
     if path=='time-cards':
-        if not has_permission(u,'edit_time_cards'): raise Problem('Edit time cards permission required.',403)
-        return handler.send({'cards':work_time_cards(c,week)})
+        edit,add=has_permission(u,'edit_time_cards'),has_permission(u,'add_time_cards')
+        if not (edit or add): raise Problem('Time card permission required.',403)
+        people=[dict(row) for row in c.execute("""SELECT p.profile_id AS id,u.name FROM users u
+                 JOIN receipt_profiles p ON p.name=u.name ORDER BY u.name""")] if add else []
+        return handler.send({'cards':work_time_cards(c,week),'people':people})
     if path=='time-card-audit':
         if not u['admin']: raise Problem('Administrator access required.',403)
         before=comm_number(query.get('before',[''])[0],2**63-1)
@@ -1132,7 +1204,7 @@ def work_get(handler,c,u,path,query,clock_only=False):
             clock=dict(state=state,since=work_local(period['start']) if period else None,
                        gross=gross,worked=worked,week_gross=week_gross,week_worked=week_worked),
             require_location=assignment['require_location'],sites_ready=bool(work_assigned_sites(c,assignment)),
-            manage_schedule=has_permission(u,'manage_staff_schedule'),edit_time_cards=has_permission(u,'edit_time_cards'),export_payroll=has_permission(u,'export_payroll'),manage_review=can_review_requests(u),manage_sites=has_permission(u,'manage_work_sites'),
+            manage_schedule=has_permission(u,'manage_staff_schedule'),edit_time_cards=has_permission(u,'edit_time_cards'),add_time_cards=has_permission(u,'add_time_cards'),export_payroll=has_permission(u,'export_payroll'),manage_review=can_review_requests(u),manage_sites=has_permission(u,'manage_work_sites'),
             shifts=[] if clock_only else work_shifts(c,week,account)))
     if path=='team':
         if not has_permission(u,'manage_staff_schedule'): raise Problem('Schedule management permission required.',403)
@@ -1192,8 +1264,9 @@ def work_check_location(c,account,position):
 def work_post(handler,c,u,path,d,clock_only=False):
     account=u['receipt_owner']
     if not account: raise Problem('Staff account required.',403)
-    if path=='edit-time-card':
-        work_edit_time_card(c,u,d)
+    if path in ('edit-time-card','add-time-card'):
+        if path=='add-time-card': work_add_time_card(c,u,d)
+        else: work_edit_time_card(c,u,d)
         c.commit()
         return handler.send({'ok':True})
     if path in ('request','withdraw-request','review-request'):
@@ -1367,7 +1440,7 @@ PERMISSIONS={
  'text_contacts':'Show On Our Way text button', 'navigate':'Show navigation button',
  'manage_roles':'Create and edit permission roles',
  'manage_comms_groups':'Create and manage groups',
- 'manage_staff_schedule':'Create and edit staff shifts', 'edit_time_cards':'Edit time cards', 'export_payroll':'View and export payroll', 'manage_work_sites':'Manage time clock work sites and geofencing',
+ 'manage_staff_schedule':'Create and edit staff shifts', 'edit_time_cards':'Edit time cards', 'add_time_cards':'Add time cards', 'export_payroll':'View and export payroll', 'manage_work_sites':'Manage time clock work sites and geofencing',
  'manage_vehicles':'Add vehicles', 'manage_users':'Add/remove employees and edit permissions',
  'rename_users':'Edit user names', 'unlock_users':'Unlock employee accounts after failed logins',
  'reset_passwords':'Reset employee passwords/passcodes', 'change_own_password':'Change own password/passcode',
@@ -1392,7 +1465,7 @@ DEFAULT_PAGE_COLORS={name:{'header':color,'light':'#faf6f5','dark':'#101821'} fo
 def permission_groups():
     dispatch={'view_reports','view_schedule','create_appointments','edit_appointments','delete_appointments','update_status','cancel_appointments','submit_requests','review_requests','see_requests','call_contacts','text_contacts','navigate','manage_vehicles','show_vehicle_filter','show_search'}
     paging={'send_pages','receive_pages'};receipts={'submit_receipts','view_all_receipts'}
-    workforce={'manage_staff_schedule','manage_work_sites','edit_time_cards','export_payroll'}
+    workforce={'manage_staff_schedule','manage_work_sites','edit_time_cards','add_time_cards','export_payroll'}
     return {'Application Settings':[k for k in PERMISSIONS if k not in dispatch|paging|receipts|workforce],'Thrift Mart Dispatch':[k for k in PERMISSIONS if k in dispatch],'Store Associate Paging':[k for k in PERMISSIONS if k in paging],'Receipts & Accounting':[k for k in PERMISSIONS if k in receipts],'Print with a Purpose':[],'Scheduling & Time Clock':[k for k in PERMISSIONS if k in workforce]}
 
 def has_permission(u,key): return bool(u['admin'] or u.get('grants',{}).get(key,False))
@@ -1755,6 +1828,9 @@ class Handler(BaseHTTPRequestHandler):
                     return work_get(self,c,clock_pin_user(self,c),'overview',{},clock_only=True)
                 u=self.user()
                 request=urlsplit(self.path)
+                if request.path=='/api/admin/user-identity':
+                    target=identity_target(c,u,parse_qs(request.query).get('name',[''])[0])
+                    return self.send(user_identity(c,target['profile_id'],target['name']))
                 if request.path.startswith('/api/profile/'):
                     return profile_get(self,c,u,request.path[len('/api/profile/'):])
                 if request.path.startswith('/api/workforce/'):
@@ -1894,7 +1970,7 @@ class Handler(BaseHTTPRequestHandler):
                         if self.client_address[0] not in ('127.0.0.1','::1') or self.headers.get('X-Forwarded-Proto') or self.headers.get('CF-Connecting-IP'): raise Problem('Create the first account on the server computer.',403)
                         if c.execute('SELECT 1 FROM users').fetchone(): raise Problem('Already set up.',409)
                         self.add_user(c,name,p,True)
-                    r=c.execute('SELECT * FROM users WHERE name=?',(name,)).fetchone()
+                    r=find_login_user(c,name)
                     if not r:
                         key=self.client_address[0]; attempts=[t for t in ATTEMPTS.get(key,[]) if t>time.time()-300]
                         if len(attempts)>=15: raise Problem('Too many attempts. Wait five minutes.',429)
@@ -1992,8 +2068,8 @@ class Handler(BaseHTTPRequestHandler):
                     attempts=[t for t in ATTEMPTS.get(key,[]) if t>time.time()-300]
                     if len(attempts)>=5:raise Problem('Too many attempts. Wait five minutes.',429)
                     ATTEMPTS[key]=attempts+[time.time()]
-                    row=c.execute('SELECT * FROM users WHERE name=?',(name,)).fetchone()
-                    locked=c.execute('SELECT locked_at FROM account_lockouts WHERE name=?',(name,)).fetchone()
+                    row=find_login_user(c,name)
+                    locked=c.execute('SELECT locked_at FROM account_lockouts WHERE name=?',(row['name'],)).fetchone() if row else None
                     if not row or not row['admin'] or (locked and locked['locked_at']) or not hmac.compare_digest(row['hash'],password(str(d.get('password','')),row['salt'])):
                         raise Problem('Valid administrator credentials are required.',403)
                     ATTEMPTS.pop(key,None)
@@ -2190,6 +2266,21 @@ class Handler(BaseHTTPRequestHandler):
                     c.commit()
                     for token,session in list(CLOCK_SESSIONS.items()):
                         if session[0]==account: del CLOCK_SESSIONS[token]
+                elif self.path=='/api/admin/user-identity':
+                    name=d.get('name')
+                    if not isinstance(name,str): raise Problem('Choose a user.')
+                    target=identity_target(c,u,name)
+                    fields=[d.get(key) for key in ('username','first','middle','last')]
+                    if any(not isinstance(value,str) for value in fields): raise Problem('Enter valid profile names.')
+                    username,first,middle,last=[value.strip() for value in fields]
+                    if not username or any(len(value)>80 or (value and not value.isprintable()) for value in (username,first,middle,last)):
+                        raise Problem('A login username is required. Names can contain up to 80 characters.')
+                    check_username_available(c,username,target['profile_id'])
+                    c.execute("""INSERT INTO user_identity VALUES(?,?,?,?,?) ON CONFLICT(account) DO UPDATE SET
+                        username=excluded.username,first=excluded.first,middle=excluded.middle,last=excluded.last""",
+                              (target['profile_id'],username,first,middle,last))
+                    c.execute('INSERT INTO audit VALUES(?,?,?,?)',(dt.datetime.now().isoformat(timespec='seconds'),
+                              u['name'],'Updated login and legal name fields for '+target['name'],''))
                 elif self.path=='/api/admin/rename-user':
                     if not has_permission(u,'rename_users'):
                         raise Problem('Edit user names permission required.',403)
@@ -2205,6 +2296,7 @@ class Handler(BaseHTTPRequestHandler):
                         raise Problem('Only an administrator can rename an administrator account.',403)
                     old_name=target['name']
                     if old_name!=new_name:
+                        check_username_available(c,new_name,work_assignment_target(c,old_name))
                         # Move the account's name keys together. Its profile ID and credentials stay the same.
                         for table in ('users','permissions','daily_home','landing_preferences','account_lockouts',
                                       'local_admin_sessions','user_roles','receipt_profiles','appearance_preferences','user_grants'):
@@ -2241,6 +2333,7 @@ class Handler(BaseHTTPRequestHandler):
                     c.execute('DELETE FROM comm_push_devices WHERE account=(SELECT profile_id FROM receipt_profiles WHERE name=?)',(target['name'],))
                     c.execute('DELETE FROM work_assignments WHERE account=(SELECT profile_id FROM receipt_profiles WHERE name=?)',(target['name'],))
                     c.execute('DELETE FROM work_clock_pins WHERE account=(SELECT profile_id FROM receipt_profiles WHERE name=?)',(target['name'],))
+                    c.execute('DELETE FROM user_identity WHERE account=(SELECT profile_id FROM receipt_profiles WHERE name=?)',(target['name'],))
                     c.execute('DELETE FROM user_profile_photos WHERE account=(SELECT profile_id FROM receipt_profiles WHERE name=?)',(target['name'],))
                     c.execute('DELETE FROM receipt_profiles WHERE name=?',(target['name'],))
                     c.execute('DELETE FROM user_roles WHERE name=?',(target['name'],))
@@ -2354,6 +2447,7 @@ class Handler(BaseHTTPRequestHandler):
             print('Request failed:',e); self.send({'error':'Unable to save. Check the server and try again.'},500)
     def add_user(self,c,name,p,admin):
         if not 1<=len(name)<=80 or not valid_credential(p): raise Problem('Enter a name and a password of 8–256 characters.')
+        check_username_available(c,name)
         salt=secrets.token_hex(16)
         c.execute('INSERT INTO users VALUES(?,?,?,?)',(name,salt,password(p,salt),int(admin)))
         c.execute('INSERT INTO receipt_profiles VALUES(?,?)',(name,secrets.token_hex(16)))
