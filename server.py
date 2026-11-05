@@ -2,7 +2,7 @@
 import datetime as dt
 import hashlib, hmac, json, os, secrets, socket, sqlite3, threading, time
 import updater
-import tempfile, zipfile, base64
+import tempfile, zipfile, base64, re
 from contextlib import contextmanager, closing
 from pathlib import Path
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
@@ -60,6 +60,7 @@ CREATE TABLE IF NOT EXISTS audit(at TEXT, actor TEXT, action TEXT, job TEXT);'''
         if 'chosen_on' not in {r[1] for r in c.execute('PRAGMA table_info(landing_preferences)')}:
             c.execute('ALTER TABLE landing_preferences ADD COLUMN chosen_on TEXT')
         c.execute('CREATE TABLE IF NOT EXISTS local_admin_sessions(token_hash TEXT PRIMARY KEY,name TEXT COLLATE NOCASE,version TEXT)')
+        c.execute('CREATE TABLE IF NOT EXISTS page_colors(id INTEGER PRIMARY KEY CHECK(id=1),body TEXT)')
         c.execute('CREATE TABLE IF NOT EXISTS sharing_settings(id INTEGER PRIMARY KEY CHECK(id=1),body TEXT)')
         c.execute('CREATE TABLE IF NOT EXISTS receipt_profiles(name TEXT PRIMARY KEY COLLATE NOCASE,profile_id TEXT UNIQUE)')
         for person in c.execute('SELECT name FROM users').fetchall():c.execute('INSERT OR IGNORE INTO receipt_profiles VALUES(?,?)',(person['name'],secrets.token_hex(16)))
@@ -105,6 +106,8 @@ ROUTE_PERMISSIONS={'/api/admin/lockouts':'unlock_users','/api/admin/unlock-user'
  '/api/admin/backup':'create_backups','/api/admin/status':'view_server','/api/admin/restart':'restart_server',
  '/api/updates':'check_updates','/api/update-check':'check_updates','/api/update-config':'configure_updates',
  '/api/update-install':'install_updates','/api/audit':'view_audit'}
+DEFAULT_PAGE_COLORS={name:{'header':color,'light':'#faf6f5','dark':'#101821'} for name,color in {'dispatch':'#b51f2b','paging':'#7a1520','receipts':'#067a06','print':'#073ea6','settings':'#000000','signin':'#ffffff'}.items()}
+
 def has_permission(u,key): return bool(u['admin'] or u.get('grants',{}).get(key,False))
 def route_allowed(u,path): return has_permission(u,ROUTE_PERMISSIONS.get(path,''))
 
@@ -386,6 +389,9 @@ class Handler(BaseHTTPRequestHandler):
                 if filename=='index.html':body=body.replace(b'</head>',b'<link rel="icon" type="image/svg+xml" href="/favicon.svg"></head>')
                 return self.send(body,kind=kind)
             with LOCK, connect() as c:
+                if self.path=='/api/page-colors':
+                    row=c.execute('SELECT body FROM page_colors WHERE id=1').fetchone()
+                    return self.send({'pages':json.loads(row['body']) if row else DEFAULT_PAGE_COLORS,'defaults':DEFAULT_PAGE_COLORS})
                 if self.path=='/api/sharing':
                     row=c.execute('SELECT body FROM sharing_settings WHERE id=1').fetchone()
                     return self.send(json.loads(row['body']) if row else {'mobile':{'text':True,'email':True,'native':True},'desktop':{'text':True,'email':True,'native':False}})
@@ -576,6 +582,13 @@ class Handler(BaseHTTPRequestHandler):
                     c.execute('INSERT INTO receipt_ownership VALUES(?,?)',(ident,owner))
                     return self.send({'ok':True,'id':ident,'email_pending':True})
                 u=self.user()
+                if self.path=='/api/page-colors':
+                    if not u['admin']:raise Problem('Administrator access required.',403)
+                    pages=d.get('pages')
+                    if not isinstance(pages,dict) or set(pages)!=set(DEFAULT_PAGE_COLORS) or any(not isinstance(v,dict) or set(v)!={'header','light','dark'} or any(not isinstance(color,str) or not re.fullmatch(r'#[0-9a-fA-F]{6}',color) for color in v.values()) for v in pages.values()):raise Problem('Use six-digit hex colors for every page.')
+                    pages={name:{key:value.lower() for key,value in colors.items()} for name,colors in pages.items()}
+                    c.execute('INSERT OR REPLACE INTO page_colors VALUES(1,?)',(json.dumps(pages),))
+                    return self.send({'pages':pages,'defaults':DEFAULT_PAGE_COLORS})
                 if self.path=='/api/sharing':
                     if not u['admin']:raise Problem('Administrator access required.',403)
                     if set(d)!={'mobile','desktop'} or any(not isinstance(d[k],dict) or set(d[k])!={'text','email','native'} or any(not isinstance(v,bool) for v in d[k].values()) for k in d):raise Problem('Invalid sharing options.')
