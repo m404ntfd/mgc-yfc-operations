@@ -19,7 +19,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - run: python -m unittest test_server test_updater test_remote test_lockout test_journal test_receipts test_daily_session test_native_revision test_login_counts test_revision29 test_page_colors test_receipt_assignment test_roles test_web_assets
+      - run: python -m unittest test_server test_updater test_remote test_lockout test_journal test_receipts test_daily_session test_native_revision test_login_counts test_revision29 test_page_colors test_receipt_assignment test_roles test_web_assets test_mobile_media
       - run: node --check static/app.js
   mobile-browser:
     runs-on: ubuntu-latest
@@ -29,7 +29,7 @@ jobs:
         with:
           python-version: '3.13'
       - run: python -m pip install playwright
-      - run: python -m playwright install --with-deps chromium
+      - run: python -m playwright install --with-deps chromium webkit
       - run: python test_mobile.py
       - run: python test_purpose_ui.py
       - run: python test_revision28.py
@@ -40,6 +40,9 @@ jobs:
       - run: python test_daily.py
       - run: python test_login.py
       - run: python test_mobile_intro.py
+      - run: python test_mobile_autoplay.py
+        env:
+          TEST_WEBKIT: '1'
       - run: python test_desktop_links.py
       - run: python test_sections.py
       - run: python test_receipt_ui.py
