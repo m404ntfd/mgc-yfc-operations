@@ -21,11 +21,13 @@ class Client:
         self.address=normalize_address(address)
         self.opener=urllib.request.build_opener(urllib.request.ProxyHandler({}),NoRedirect(),urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
     def request(self,path,data=None):
-        req=urllib.request.Request(self.address+'/api/'+path,data=None if data is None else json.dumps(data).encode(),headers={'X-Dispatch':'1','Content-Type':'application/json'})
+        req=urllib.request.Request(self.address+'/api/'+path,data=None if data is None else json.dumps(data).encode(),headers={'X-Dispatch':'1','X-Dispatch-Activity':'1','Content-Type':'application/json'})
         try:
             with self.opener.open(req,timeout=60 if path=='update-install' else 30) as r:return json.loads(r.read(1024*1024))
         except urllib.error.HTTPError as e:
-            try: message=json.loads(e.read()).get('error','Request failed.')
+            try:
+                error=json.loads(e.read());message=error.get('error','Request failed.')
+                if isinstance(error.get('attempts_remaining'),int):message+='\nAttempts Remaining Until Account Lock: '+str(error['attempts_remaining'])
             except Exception:message='Server refused the request.'
             raise ValueError(message) from e
         except (urllib.error.URLError,TimeoutError,OSError) as e:raise ValueError('Cannot reach the server. Check its address, power, staff network, and Windows Firewall.') from e
