@@ -31,6 +31,8 @@ Name: "remote"; Description: "Thrift Mart Dispatch Remote Manager"; Types: remot
 Name: "desktop"; Description: "Create desktop shortcuts"; Flags: unchecked
 Name: "startup"; Description: "Start the server when I sign in to Windows"; Components: server; Flags: unchecked
 [Files]
+Source: "..\unlock_local.py"; DestDir: "{app}"; Components: server; Flags: ignoreversion
+Source: "..\LOGIN-SECURITY.md"; DestDir: "{app}"; Components: server; Flags: ignoreversion
 Source: "..\dist\Thrift Mart Dispatch Server Console.exe"; DestDir: "{app}"; Components: server; Flags: ignoreversion
 Source: "..\dist\Thrift Mart Dispatch Server.exe"; DestDir: "{app}"; Components: server; Flags: ignoreversion
 Source: "..\assets\dispatch.ico"; DestDir: "{app}\assets"; Components: server; Flags: ignoreversion

@@ -24,7 +24,7 @@ def run():
                 page = phone.new_page()
                 errors = []
                 page.on('pageerror', lambda e: errors.append(str(e)))
-                page.goto(base + '/mobile/')
+                page.emulate_media(reduced_motion='reduce');page.goto(base + '/mobile/')
                 page.locator('#login [name=name]').fill('Manager')
                 page.locator('#login [name=password]').fill('testpassword')
                 page.locator('#login button').click()

@@ -37,6 +37,9 @@ CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY, revision INTEGER, body TEXT
 CREATE TABLE IF NOT EXISTS update_notices(id INTEGER PRIMARY KEY AUTOINCREMENT, version TEXT, actor TEXT, at TEXT);
 CREATE TABLE IF NOT EXISTS landing_preferences(name TEXT PRIMARY KEY COLLATE NOCASE, section TEXT);
 CREATE TABLE IF NOT EXISTS pages(id INTEGER PRIMARY KEY AUTOINCREMENT, at REAL, actor TEXT, area TEXT);
+CREATE TABLE IF NOT EXISTS login_security(id INTEGER PRIMARY KEY CHECK(id=1), max_attempts INTEGER NOT NULL);
+INSERT OR IGNORE INTO login_security VALUES(1,5);
+CREATE TABLE IF NOT EXISTS account_lockouts(name TEXT PRIMARY KEY COLLATE NOCASE, failures INTEGER NOT NULL DEFAULT 0, locked_at TEXT);
 CREATE TABLE IF NOT EXISTS audit(at TEXT, actor TEXT, action TEXT, job TEXT);''')
         c.execute('CREATE TABLE IF NOT EXISTS user_grants(name TEXT PRIMARY KEY COLLATE NOCASE, body TEXT)')
         c.execute('CREATE TABLE IF NOT EXISTS app_migrations(name TEXT PRIMARY KEY)')
@@ -58,12 +61,13 @@ PERMISSIONS={
  'see_requests':'Show flashing Pending Requests button', 'call_contacts':'Show customer call button',
  'text_contacts':'Show On Our Way text button', 'navigate':'Show navigation button',
  'manage_vehicles':'Add vehicles', 'manage_users':'Add/remove employees and edit permissions',
+ 'unlock_users':'Unlock employee accounts after failed logins',
  'reset_passwords':'Reset employee passwords/passcodes', 'change_own_password':'Change own password/passcode',
  'view_audit':'View recent changes', 'backup_settings':'Manage backup settings',
  'create_backups':'Create backups', 'check_updates':'Check server updates',
  'configure_updates':'Change update repository', 'install_updates':'Install server updates',
  'view_server':'View server status', 'restart_server':'Restart server'}
-ROUTE_PERMISSIONS={'/api/paging/send':'send_pages',
+ROUTE_PERMISSIONS={'/api/admin/lockouts':'unlock_users','/api/admin/unlock-user':'unlock_users','/api/paging/send':'send_pages',
  'send_pages':'Page an associate to an area', 'receive_pages':'Use device as paging speaker',
  'show_vehicle_filter':'Show vehicle filter on main dashboard', 'show_search':'Show search bar on main dashboard',
  'view_reports':'Open and print schedule/request reports','/api/admin/users':'manage_users','/api/admin/permissions':'manage_users',
@@ -164,7 +168,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Cache-Control','no-store')
         self.send_header('X-Content-Type-Options','nosniff')
         self.send_header('X-Frame-Options','DENY')
-        self.send_header('Content-Security-Policy',"default-src 'self'; img-src 'self' data: blob:; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'")
+        self.send_header('Content-Security-Policy',"default-src 'self'; img-src 'self' data: blob:; media-src 'self' data:; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'")
         if cookie: self.send_header('Set-Cookie',cookie+('; Secure' if self.external_scheme()=='https' else ''))
         self.end_headers(); self.wfile.write(raw)
     def user(self):
@@ -201,6 +205,12 @@ class Handler(BaseHTTPRequestHandler):
                     except Problem: u=None
                     return self.send({'application':'thrift-mart-dispatch','name':'Thrift Mart Dispatch Server','version':updater.current(),'setup':setup,'user':u and {'name':u['name'],'admin':u['admin'],'can_create':u['can_create'],'see_requests':u['see_requests'],'grants':u['grants']},'local':self.client_address[0] in ('127.0.0.1','::1')})
                 u=self.user()
+                if self.path=='/api/admin/login-security':
+                    if not u['admin']: raise Problem('Administrator access required.',403)
+                    return self.send({'max_attempts':c.execute('SELECT max_attempts FROM login_security WHERE id=1').fetchone()[0]})
+                if self.path=='/api/admin/lockouts':
+                    if not has_permission(u,'unlock_users'): raise Problem('Unlock users permission required.',403)
+                    return self.send({'users':[dict(r) for r in c.execute('SELECT l.name,l.failures,l.locked_at FROM account_lockouts l JOIN users u ON u.name=l.name WHERE l.locked_at IS NOT NULL ORDER BY l.name')]})
                 if self.path=='/api/admin/permission-catalog':
                     if not u['admin']: raise Problem('Administrator access required.',403)
                     return self.send({'permissions':PERMISSIONS,'users':[{'name':r['name'],'grants':json.loads(r['body'])} for r in c.execute('SELECT * FROM user_grants')]})
@@ -276,15 +286,42 @@ class Handler(BaseHTTPRequestHandler):
                         if self.client_address[0] not in ('127.0.0.1','::1') or self.headers.get('X-Forwarded-Proto') or self.headers.get('CF-Connecting-IP'): raise Problem('Create the first account on the server computer.',403)
                         if c.execute('SELECT 1 FROM users').fetchone(): raise Problem('Already set up.',409)
                         self.add_user(c,name,p,True)
-                    key=self.client_address[0]; attempts=[t for t in ATTEMPTS.get(key,[]) if t>time.time()-300]
-                    if len(attempts)>=15: raise Problem('Too many attempts. Wait five minutes.',429)
                     r=c.execute('SELECT * FROM users WHERE name=?',(name,)).fetchone()
-                    if not r or not hmac.compare_digest(r['hash'],password(p,r['salt'])):
-                        ATTEMPTS[key]=attempts+[time.time()]; raise Problem('Incorrect name or password.',401)
+                    if not r:
+                        key=self.client_address[0]; attempts=[t for t in ATTEMPTS.get(key,[]) if t>time.time()-300]
+                        if len(attempts)>=15: raise Problem('Too many attempts. Wait five minutes.',429)
+                        ATTEMPTS[key]=attempts+[time.time()]
+                        raise Problem('Incorrect name or password.',401)
+                    lockout=c.execute('SELECT * FROM account_lockouts WHERE name=?',(r['name'],)).fetchone()
+                    if lockout and lockout['locked_at']: raise Problem('Account locked. Ask an administrator or authorized employee to unlock it.',423)
+                    if not hmac.compare_digest(r['hash'],password(p,r['salt'])):
+                        failures=(lockout['failures'] if lockout else 0)+1
+                        limit=c.execute('SELECT max_attempts FROM login_security WHERE id=1').fetchone()[0]
+                        locked_at=dt.datetime.now().astimezone().isoformat(timespec='seconds') if failures>=limit else None
+                        c.execute('INSERT OR REPLACE INTO account_lockouts VALUES(?,?,?)',(r['name'],failures,locked_at))
+                        if locked_at: c.execute('INSERT INTO audit VALUES(?,?,?,?)',(locked_at,r['name'],'Account locked after failed login attempts',''))
+                        c.commit() # Persist failures even though the response below raises an error.
+                        if locked_at: raise Problem('Account locked. Ask an administrator or authorized employee to unlock it.',423)
+                        raise Problem('Incorrect name or password.',401)
+                    c.execute('DELETE FROM account_lockouts WHERE name=?',(r['name'],))
                     token=secrets.token_urlsafe(32); SESSIONS[token]={'name':r['name'],'admin':bool(r['admin']),'expires':time.time()+43200}
                     return self.send({'ok':True},cookie=f'session={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200')
                 u=self.user()
                 if self.path in ROUTE_PERMISSIONS and not route_allowed(u,self.path): raise Problem('Administrator or delegated permission required.',403)
+                if self.path=='/api/admin/login-security':
+                    if not u['admin']: raise Problem('Administrator access required.',403)
+                    limit=d.get('max_attempts')
+                    if type(limit) is not int or not 1<=limit<=100: raise Problem('Enter a whole number from 1 to 100.')
+                    c.execute('UPDATE login_security SET max_attempts=? WHERE id=1',(limit,))
+                    c.execute('INSERT INTO audit VALUES(?,?,?,?)',(dt.datetime.now().isoformat(timespec='seconds'),u['name'],'Login attempt limit changed to '+str(limit),''))
+                    return self.send({'ok':True})
+                if self.path=='/api/admin/unlock-user':
+                    target=c.execute('SELECT name FROM users WHERE name=?',(str(d.get('name','')).strip(),)).fetchone()
+                    if not target: raise Problem('Employee not found.',404)
+                    if target['name'].casefold()==u['name'].casefold(): raise Problem('Ask another authorized employee to unlock your account.',403)
+                    c.execute('DELETE FROM account_lockouts WHERE name=?',(target['name'],))
+                    c.execute('INSERT INTO audit VALUES(?,?,?,?)',(dt.datetime.now().isoformat(timespec='seconds'),u['name'],'Account unlocked: '+target['name'],''))
+                    return self.send({'ok':True})
                 if self.path=='/api/admin/notify-update':
                     if not u['admin']: raise Problem('Administrator access required.',403)
                     c.execute('INSERT INTO update_notices(version,actor,at) VALUES(?,?,?)',(updater.current(),u['name'],dt.datetime.now().astimezone().isoformat(timespec='seconds')))
@@ -292,7 +329,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send({'ok':True})
                 if self.path=='/api/account/landing':
                     section=d.get('section')
-                    if section not in ('dispatch','paging'): raise Problem('Choose a section.')
+                    if section not in ('dispatch','paging','receipts'): raise Problem('Choose a section.')
                     if section=='paging' and not has_permission(u,'send_pages') and not has_permission(u,'receive_pages'): raise Problem('Paging permission required.',403)
                     c.execute('INSERT OR REPLACE INTO landing_preferences VALUES(?,?)',(u['name'],section))
                     return self.send({'ok':True})
@@ -387,6 +424,7 @@ class Handler(BaseHTTPRequestHandler):
                     if not target: raise Problem('Employee not found.',404)
                     if target['admin']: raise Problem('Administrator accounts cannot be removed here.',403)
                     c.execute('DELETE FROM users WHERE name=?',(target['name'],))
+                    c.execute('DELETE FROM account_lockouts WHERE name=?',(target['name'],))
                     for token in list(SESSIONS):
                         if SESSIONS[token]['name'].casefold()==target['name'].casefold(): del SESSIONS[token]
                     c.execute('INSERT INTO audit VALUES(?,?,?,?)',(dt.datetime.now().isoformat(timespec='seconds'),u['name'],'Removed employee: '+target['name'],''))

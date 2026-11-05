@@ -36,6 +36,7 @@ class App:
         account_actions=ttk.Frame(frame);account_actions.pack(fill='x',pady=(8,0))
         ttk.Button(account_actions,text='Manage employees',command=self.employees).pack(side='left')
         ttk.Button(account_actions,text='Change a user’s password',command=self.passwords).pack(side='left',padx=8)
+        ttk.Button(account_actions,text='Login security / unlock',command=self.login_security).pack(side='left')
         updates=ttk.LabelFrame(frame,text='Server updates from GitHub',padding=12);updates.pack(fill='both',expand=True,pady=16)
         row=ttk.Frame(updates);row.pack(fill='x');ttk.Button(row,text='Check for server updates',command=self.check).pack(side='left');self.install=ttk.Button(row,text='Install update & restart',command=self.install_update,state='disabled');self.install.pack(side='left',padx=8)
         self.notes=tk.Text(updates,height=7,wrap='word',font=('Segoe UI',10),state='disabled');self.notes.pack(fill='both',expand=True,pady=8)
@@ -136,6 +137,34 @@ class App:
             ttk.Button(frame,text='Add employee',command=add).pack(anchor='w',pady=8)
             ttk.Label(frame,textvariable=message,wraplength=490).pack(anchor='w')
         self.run(lambda:client.request('admin/users'),show)
+    def login_security(self):
+        if not self.client:
+            self.status.set('Sign in first.');return
+        def show(data):
+            dialog=tk.Toplevel(self.root);dialog.title('Login security / unlock users');dialog.geometry('620x480');dialog.transient(self.root)
+            f=ttk.Frame(dialog,padding=20);f.pack(fill='both',expand=True)
+            ttk.Label(f,text='Failed attempts before account lockout').pack(anchor='w')
+            limit=tk.StringVar(value=str(data['max_attempts']));ttk.Spinbox(f,from_=1,to=100,textvariable=limit).pack(anchor='w',pady=6)
+            message=tk.StringVar();ttk.Label(f,textvariable=message,wraplength=560).pack(anchor='w')
+            def save():
+                try:value=int(limit.get())
+                except ValueError:message.set('Enter a whole number from 1 to 100.');return
+                self.run(lambda:self.client.request('admin/login-security',{'max_attempts':value}),lambda r:message.set('Login limit saved. Existing locks remain.'))
+            ttk.Button(f,text='Save login limit',command=save).pack(anchor='w',pady=8)
+            ttk.Label(f,text='Locked accounts').pack(anchor='w');names=tk.StringVar();choice=ttk.Combobox(f,textvariable=names,state='readonly',width=50);choice.pack(anchor='w',pady=8)
+            def refresh():
+                def fill(r):
+                    choice['values']=[u['name'] for u in r['users']];names.set(choice['values'][0] if choice['values'] else '')
+                    message.set('Select an account to unlock.' if choice['values'] else 'No locked accounts.')
+                self.run(lambda:self.client.request('admin/lockouts'),fill)
+            def unlock():
+                name=names.get()
+                if not name:return
+                self.run(lambda:self.client.request('admin/unlock-user',{'name':name}),lambda r:refresh())
+            ttk.Button(f,text='Unlock selected user',command=unlock).pack(anchor='w',pady=8)
+            ttk.Button(f,text='Refresh locked accounts',command=refresh).pack(anchor='w');refresh()
+        self.run(lambda:self.client.request('admin/login-security'),show)
+
     def passwords(self):
         if not self.require():return
         def show(r):
