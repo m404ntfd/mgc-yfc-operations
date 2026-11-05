@@ -41,6 +41,9 @@ CREATE TABLE IF NOT EXISTS login_security(id INTEGER PRIMARY KEY CHECK(id=1), ma
 INSERT OR IGNORE INTO login_security VALUES(1,5);
 CREATE TABLE IF NOT EXISTS account_lockouts(name TEXT PRIMARY KEY COLLATE NOCASE, failures INTEGER NOT NULL DEFAULT 0, locked_at TEXT);
 CREATE TABLE IF NOT EXISTS audit(at TEXT, actor TEXT, action TEXT, job TEXT);''')
+        if 'chosen_on' not in {r[1] for r in c.execute('PRAGMA table_info(landing_preferences)')}:
+            c.execute('ALTER TABLE landing_preferences ADD COLUMN chosen_on TEXT')
+        c.execute('CREATE TABLE IF NOT EXISTS journal_archives(file TEXT PRIMARY KEY, sha256 TEXT NOT NULL, records INTEGER NOT NULL, archived_at TEXT NOT NULL)')
         c.execute('CREATE TABLE IF NOT EXISTS user_grants(name TEXT PRIMARY KEY COLLATE NOCASE, body TEXT)')
         c.execute('CREATE TABLE IF NOT EXISTS app_migrations(name TEXT PRIMARY KEY)')
         if not c.execute("SELECT 1 FROM app_migrations WHERE name='schedule-view-default-v1'").fetchone():
@@ -80,6 +83,13 @@ ROUTE_PERMISSIONS={'/api/admin/lockouts':'unlock_users','/api/admin/unlock-user'
 def has_permission(u,key): return bool(u['admin'] or u.get('grants',{}).get(key,False))
 def route_allowed(u,path): return has_permission(u,ROUTE_PERMISSIONS.get(path,''))
 
+def section_options(u):
+    options=[]
+    if has_permission(u,'view_schedule'): options.append({'id':'dispatch','label':'Thrift Mart Dispatch'})
+    if has_permission(u,'send_pages') or has_permission(u,'receive_pages'): options.append({'id':'paging','label':'Store Associate Paging'})
+    options.append({'id':'receipts','label':'Receipts & Accounting'})
+    return options
+
 def valid_credential(p): return 8<=len(p)<=256 or (len(p)==4 and all(c in '0123456789' for c in p))
 def password(p,s): return hashlib.pbkdf2_hmac('sha256',p.encode(),bytes.fromhex(s),200000).hex()
 def backup():
@@ -95,7 +105,129 @@ def backup_config():
     base=os.environ.get('OneDriveCommercial') or os.environ.get('OneDriveConsumer') or os.environ.get('OneDrive')
     return {'enabled':False,'folder':str(Path(base)/'Thrift Mart Dispatch Backups') if base else ''}
 
+def file_digest(path):
+    h=hashlib.sha256()
+    with Path(path).open('rb') as f:
+        for block in iter(lambda:f.read(1024*1024),b''):h.update(block)
+    return h.hexdigest()
+
+def journal_folder():
+    cfg=backup_config()
+    folder=Path(cfg.get('folder',''))
+    if not cfg.get('folder') or not folder.is_absolute():raise ValueError('Configure the server backup folder first.')
+    return folder/'Dispatch Journal'
+
+@contextmanager
+def open_journal(row):
+    name=row['file']
+    if Path(name).name!=name or not name.endswith('.db'):raise ValueError('Invalid Dispatch Journal filename.')
+    path=journal_folder()/name
+    if not path.is_file() or file_digest(path)!=row['sha256']:raise ValueError('Dispatch Journal unavailable or damaged: '+name+'. Check OneDrive before continuing.')
+    with closing(sqlite3.connect(path.as_uri()+'?mode=ro',uri=True)) as c:
+        c.row_factory=sqlite3.Row
+        if c.execute('PRAGMA integrity_check').fetchone()[0]!='ok':raise ValueError('Dispatch Journal integrity check failed: '+name)
+        yield c
+
+def all_report_jobs(c):
+    jobs={}
+    for archive in c.execute('SELECT * FROM journal_archives ORDER BY archived_at'):
+        with open_journal(archive) as journal:
+            for row in journal.execute('SELECT * FROM jobs'):jobs[row['id']]=dict(json.loads(row['body']),id=row['id'])
+    for row in c.execute('SELECT * FROM jobs'):jobs[row['id']]=dict(json.loads(row['body']),id=row['id'])
+    return list(jobs.values())
+
+def merge_journals(snapshot):
+    # Make every complete backup independently restorable, including journal history.
+    with closing(sqlite3.connect(snapshot)) as c:
+        c.row_factory=sqlite3.Row
+        for archive in c.execute('SELECT * FROM journal_archives ORDER BY archived_at DESC').fetchall():
+            with open_journal(archive) as j:
+                for row in j.execute('SELECT * FROM jobs'):c.execute('INSERT OR IGNORE INTO jobs VALUES(?,?,?)',tuple(row))
+                for row in j.execute('SELECT * FROM photos'):c.execute('INSERT OR IGNORE INTO photos VALUES(?,?,?)',tuple(row))
+                for row in j.execute('SELECT * FROM audit'):
+                    if not c.execute('SELECT 1 FROM audit WHERE at=? AND actor=? AND action=? AND job=?',tuple(row)).fetchone():c.execute('INSERT INTO audit VALUES(?,?,?,?)',tuple(row))
+        c.execute('DELETE FROM journal_archives');c.commit()
+        if c.execute('PRAGMA integrity_check').fetchone()[0]!='ok':raise ValueError('Backup database integrity check failed.')
+        counts={'Pickup':0,'Delivery':0,'other':0,'total':0,'photos':c.execute('SELECT COUNT(*) FROM photos').fetchone()[0]}
+        for row in c.execute('SELECT body FROM jobs'):
+            kind=json.loads(row[0]).get('type');counts[kind if kind in ('Pickup','Delivery') else 'other']+=1;counts['total']+=1
+        return counts
+
+def verify_backup_archive(path,expected_digest):
+    with zipfile.ZipFile(path) as z:
+        if z.testzip() is not None:raise ValueError('Backup ZIP integrity check failed.')
+        digest=hashlib.sha256(z.read('schedule.db')).hexdigest()
+        manifest=json.loads(z.read('manifest.json'))
+        if digest!=expected_digest or manifest.get('database_sha256')!=digest:raise ValueError('Saved backup does not match the database snapshot.')
+        return manifest
+
+def archive_dispatch(today=None):
+    try:
+        count=_archive_dispatch(today)
+        (DATA/'journal-status.json').write_text(json.dumps({'at':dt.datetime.now().isoformat(),'archived':count,'error':None}))
+        return count
+    except Exception as e:
+        (DATA/'journal-status.json').write_text(json.dumps({'at':dt.datetime.now().isoformat(),'error':str(e)}))
+        raise
+
+def _archive_dispatch(today=None):
+    # The shared lock prevents an appointment changing between copy, verify and removal.
+    with LOCK:
+        cfg=backup_config()
+        if not cfg.get('enabled') or not cfg.get('journal_enabled',True):return 0
+        cutoff=(today or dt.date.today())-dt.timedelta(days=30)
+        with connect() as c:
+            selected=[]
+            for row in c.execute('SELECT * FROM jobs'):
+                job=json.loads(row['body'])
+                if job.get('status') not in ('Completed','Canceled'):continue
+                try:
+                    event=dt.date.fromisoformat((job.get('end') or job.get('start') or '')[:10])
+                    last=c.execute('SELECT MAX(at) FROM audit WHERE job=?',(row['id'],)).fetchone()[0]
+                    modified=dt.date.fromisoformat(last[:10]) if last else event
+                except ValueError:continue
+                if max(event,modified)>=cutoff:continue
+                selected.append(tuple(row))
+            if not selected:return 0
+        # A fresh, complete and verified fallback must exist before any local removal.
+        complete_backup()
+        folder=journal_folder();folder.mkdir(parents=True,exist_ok=True)
+        target=folder/('Dispatch-'+dt.datetime.now().strftime('%Y%m%d-%H%M%S')+'-'+secrets.token_hex(6)+'.db')
+        partial=target.with_suffix('.partial')
+        try:
+            with connect() as source, closing(sqlite3.connect(partial)) as dest:
+                dest.executescript('CREATE TABLE jobs(id TEXT PRIMARY KEY,revision INTEGER,body TEXT); CREATE TABLE photos(job TEXT,position INTEGER,body BLOB,PRIMARY KEY(job,position)); CREATE TABLE audit(at TEXT,actor TEXT,action TEXT,job TEXT);')
+                for row in selected:
+                    dest.execute('INSERT INTO jobs VALUES(?,?,?)',row)
+                    dest.executemany('INSERT INTO photos VALUES(?,?,?)',[tuple(r) for r in source.execute('SELECT * FROM photos WHERE job=?',(row[0],))])
+                    dest.executemany('INSERT INTO audit VALUES(?,?,?,?)',[tuple(r) for r in source.execute('SELECT * FROM audit WHERE job=?',(row[0],))])
+                dest.commit()
+                if dest.execute('PRAGMA integrity_check').fetchone()[0]!='ok':raise ValueError('Journal integrity check failed.')
+            digest=file_digest(partial)
+            os.replace(partial,target)
+            record={'file':target.name,'sha256':digest}
+            with open_journal(record) as saved, connect() as source:
+                for row in selected:
+                    current=source.execute('SELECT * FROM jobs WHERE id=?',(row[0],)).fetchone()
+                    copy=saved.execute('SELECT * FROM jobs WHERE id=?',(row[0],)).fetchone()
+                    if not current or tuple(current)!=row or not copy or tuple(copy)!=row:raise ValueError('Dispatch record changed during archiving; local data retained.')
+                    for table,order in [('photos','position'),('audit','rowid')]:
+                        query=f'SELECT * FROM {table} WHERE job=? ORDER BY {order}'
+                        if [tuple(r) for r in source.execute(query,(row[0],))]!=[tuple(r) for r in saved.execute(query,(row[0],))]:raise ValueError('Journal attachments or history failed verification.')
+                source.execute('INSERT INTO journal_archives VALUES(?,?,?,?)',(target.name,digest,len(selected),dt.datetime.now().isoformat()))
+                for row in selected:
+                    source.execute('DELETE FROM photos WHERE job=?',(row[0],))
+                    source.execute('DELETE FROM audit WHERE job=?',(row[0],))
+                    source.execute('DELETE FROM jobs WHERE id=?',(row[0],))
+            # Reclaim the pages only after the verified archive and DB transaction succeed.
+            with closing(sqlite3.connect(DB)) as c:c.execute('VACUUM')
+            return len(selected)
+        finally:partial.unlink(missing_ok=True)
+
 def complete_backup():
+    with LOCK:return _complete_backup()
+
+def _complete_backup():
     cfg=backup_config()
     if not cfg.get('folder'): raise ValueError('Set up a OneDrive backup folder in Settings first.')
     folder=Path(cfg['folder'])
@@ -107,15 +239,18 @@ def complete_backup():
         with tempfile.TemporaryDirectory(dir=DATA) as temp:
             snapshot=Path(temp)/'schedule.db'
             with connect() as src, closing(sqlite3.connect(snapshot)) as dst: src.backup(dst)
+            counts=merge_journals(snapshot);digest=file_digest(snapshot)
             with zipfile.ZipFile(partial,'w',zipfile.ZIP_DEFLATED) as z:
                 z.write(snapshot,'schedule.db')
                 for name in ('updates.json','backup-settings.json'):
                     if (DATA/name).exists(): z.write(DATA/name,name)
-                z.writestr('manifest.json',json.dumps({'application':'thrift-mart-dispatch','format':1,'version':updater.current(),'created':dt.datetime.now().isoformat()}))
+                z.writestr('manifest.json',json.dumps({'application':'thrift-mart-dispatch','format':1,'version':updater.current(),'created':dt.datetime.now().isoformat(),'database_sha256':digest,'verified_counts':counts,'includes_dispatch_journal':True}))
+            verify_backup_archive(partial,digest)
             os.replace(partial,target)
+            verify_backup_archive(target,digest)
         # Keep the latest 90 complete archives in the configured folder.
         for old in sorted(folder.glob('Thrift-Mart-Dispatch-Backup-*.zip'),key=lambda p:p.stat().st_mtime)[:-90]:old.unlink()
-        (DATA/'backup-status.json').write_text(json.dumps({'file':str(target),'at':dt.datetime.now().isoformat(timespec='seconds'),'saved_at':time.time(),'error':None}))
+        (DATA/'backup-status.json').write_text(json.dumps({'file':str(target),'at':dt.datetime.now().isoformat(timespec='seconds'),'saved_at':time.time(),'error':None,'verified':True,'counts':counts,'database_sha256':digest,'cloud_sync':'Check OneDrive sync status on the host computer'}))
         return str(target)
     except Exception as e:
         partial.unlink(missing_ok=True)
@@ -132,7 +267,8 @@ def background():
                 backup()
                 status=DATA/'backup-status.json'
                 last=json.loads(status.read_text()).get('saved_at',0) if status.exists() else 0
-                if backup_config().get('enabled') and time.time()-last>=3600: complete_backup()
+                if backup_config().get('enabled') and time.time()-last>=3600:
+                    complete_backup();archive_dispatch()
         except Exception as e: print('Backup failed:',e)
         time.sleep(60)
 
@@ -220,7 +356,7 @@ class Handler(BaseHTTPRequestHandler):
                 if self.path=='/api/admin/backup-settings':
                     if not route_allowed(u,self.path): raise Problem('Administrator access required.',403)
                     p=DATA/'backup-status.json'
-                    return self.send({'config':backup_config(),'status':json.loads(p.read_text()) if p.exists() else None})
+                    return self.send({'config':backup_config(),'status':json.loads(p.read_text()) if p.exists() else None,'journal':{'status':json.loads((DATA/'journal-status.json').read_text()) if (DATA/'journal-status.json').exists() else None,'archives':c.execute('SELECT COUNT(*) FROM journal_archives').fetchone()[0],'records':c.execute('SELECT COALESCE(SUM(records),0) FROM journal_archives').fetchone()[0]}})
                 if self.path=='/api/admin/status':
                     if not route_allowed(u,self.path): raise Problem('Administrator access required.',403)
                     return self.send({'name':'Thrift Mart Dispatch Server','version':updater.current(),'uptime_minutes':int((time.time()-STARTED)/60),'time':dt.datetime.now().isoformat(timespec='seconds'),'jobs':c.execute('SELECT COUNT(*) FROM jobs').fetchone()[0],'vehicles':c.execute('SELECT COUNT(*) FROM vehicles').fetchone()[0],'users':c.execute('SELECT COUNT(*) FROM users').fetchone()[0]})
@@ -238,14 +374,18 @@ class Handler(BaseHTTPRequestHandler):
                     if not photo: raise Problem('Not found',404)
                     return self.send(bytes(photo['body']),kind='image/jpeg')
                 if self.path=='/api/account/landing':
-                    preference=c.execute('SELECT section FROM landing_preferences WHERE name=?',(u['name'],)).fetchone()
-                    return self.send({'section':preference['section'] if preference else None})
+                    preference=c.execute('SELECT section,chosen_on FROM landing_preferences WHERE name=?',(u['name'],)).fetchone()
+                    today=dt.date.today().isoformat();options=section_options(u)
+                    section=preference['section'] if preference and preference['chosen_on']==today and preference['section'] in {o['id'] for o in options} else None
+                    return self.send({'section':section,'date':today,'options':options})
                 if self.path=='/api/paging':
                     if not has_permission(u,'send_pages') and not has_permission(u,'receive_pages'): raise Problem('Paging permission required.',403)
                     return self.send({'pages':[dict(r) for r in c.execute('SELECT * FROM pages WHERE at>? ORDER BY id',(time.time()-60,))],'latest':c.execute('SELECT COALESCE(MAX(id),0) FROM pages').fetchone()[0]})
                 if self.path=='/api/reports':
                     if not has_permission(u,'view_reports'): raise Problem('Reports permission required.',403)
-                    return self.send({'jobs':[dict(json.loads(r['body']),id=r['id']) for r in c.execute('SELECT * FROM jobs') if not json.loads(r['body']).get('request') or u['can_create'] or json.loads(r['body']).get('requestedBy')==u['name']]})
+                    try: jobs=all_report_jobs(c)
+                    except Exception as e:raise Problem('Historical reports unavailable: '+str(e),503)
+                    return self.send({'jobs':[j for j in jobs if not j.get('request') or u['can_create'] or j.get('requestedBy')==u['name']]})
                 if self.path=='/api/state':
                     if not has_permission(u,'view_schedule'): raise Problem('Schedule access required.',403)
                     pending_counts={}
@@ -329,9 +469,9 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send({'ok':True})
                 if self.path=='/api/account/landing':
                     section=d.get('section')
-                    if section not in ('dispatch','paging','receipts'): raise Problem('Choose a section.')
+                    if section not in {o['id'] for o in section_options(u)}: raise Problem('Choose an available section.',403)
                     if section=='paging' and not has_permission(u,'send_pages') and not has_permission(u,'receive_pages'): raise Problem('Paging permission required.',403)
-                    c.execute('INSERT OR REPLACE INTO landing_preferences VALUES(?,?)',(u['name'],section))
+                    c.execute('INSERT OR REPLACE INTO landing_preferences(name,section,chosen_on) VALUES(?,?,?)',(u['name'],section,dt.date.today().isoformat()))
                     return self.send({'ok':True})
                 if self.path=='/api/paging/send':
                     area=str(d.get('area','')).strip()
@@ -383,7 +523,8 @@ class Handler(BaseHTTPRequestHandler):
                         if folder:
                             candidate=Path(folder).resolve()
                             if candidate==ROOT or candidate==DATA or ROOT in candidate.parents: raise Problem('Choose a OneDrive folder outside the program folder.')
-                        cfg={'folder':folder,'enabled':enabled}
+                        if folder!=backup_config().get('folder','') and c.execute('SELECT 1 FROM journal_archives').fetchone():raise Problem('Dispatch Journal exists. Keep the current backup folder until the journal has been migrated and verified.')
+                        cfg={'folder':folder,'enabled':enabled,'journal_enabled':d.get('journal_enabled',backup_config().get('journal_enabled',True)) is True}
                         tmp=DATA/'backup-settings.tmp';tmp.write_text(json.dumps(cfg));os.replace(tmp,DATA/'backup-settings.json')
                     else:
                         try: return self.send({'ok':True,'backup':complete_backup()})
