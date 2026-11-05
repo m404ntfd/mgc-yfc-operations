@@ -128,3 +128,5 @@ input[type=checkbox]{width:18px;height:18px;min-height:0;flex:none;vertical-alig
 #unlockRepository{margin-top:10px}
 
 body[data-section=print]>header{background:#00ffff;color:#003333}body[data-section=print] #currentSection{color:#003333}#printSection{background:#00ffff;color:#003333}#printPurpose{max-width:1100px;margin:24px auto}body[data-section=print] #storeMenuButton{color:#003333}
+
+.settingsSubcategories{min-height:58px;border-bottom:1px solid #9aa8b5;padding:12px 0;margin-bottom:16px}#settingsEmpty{padding:20px}html[data-mobile-view=desktop] body{min-width:1000px}html[data-mobile-view=mobile] main{max-width:740px}#loginAttempts{font-weight:600;color:inherit}
