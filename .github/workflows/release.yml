@@ -39,6 +39,7 @@ jobs:
       - run: python test_roles_ui.py
       - run: python test_daily.py
       - run: python test_login.py
+      - run: python test_mobile_intro.py
       - run: python test_desktop_links.py
       - run: python test_sections.py
       - run: python test_receipt_ui.py
