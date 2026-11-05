@@ -609,6 +609,7 @@ def init_workforce(c):
         CREATE TABLE IF NOT EXISTS work_pin_security(
             id INTEGER PRIMARY KEY CHECK(id=1), salt TEXT NOT NULL, window INTEGER NOT NULL, failures INTEGER NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS work_assignments(account TEXT PRIMARY KEY,body TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS work_shifts(
             id INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT NOT NULL, start INTEGER NOT NULL,
             end INTEGER NOT NULL CHECK(end>start), location TEXT NOT NULL, notes TEXT NOT NULL,
@@ -636,6 +637,8 @@ def init_workforce(c):
         );
         INSERT OR IGNORE INTO work_clock_settings VALUES(1,1);
     """)
+    if not any(row[1]=='job' for row in c.execute('PRAGMA table_info(work_shifts)')):
+        c.execute("ALTER TABLE work_shifts ADD COLUMN job TEXT NOT NULL DEFAULT ''")
     if not any(row[1]=='address' for row in c.execute('PRAGMA table_info(work_sites)')):
         c.execute("ALTER TABLE work_sites ADD COLUMN address TEXT NOT NULL DEFAULT ''")
 
@@ -736,7 +739,7 @@ def work_week(value, today):
             raise Problem('Choose a valid schedule date.')
     else:
         day=today
-    return day-dt.timedelta(days=day.weekday())
+    return day-dt.timedelta(days=(day.weekday()+1)%7)
 
 
 def work_local(timestamp):
@@ -781,8 +784,43 @@ def work_open(c, account):
     return period,pause
 
 
-def work_require_location(c):
-    return bool(c.execute('SELECT require_location FROM work_clock_settings WHERE id=1').fetchone()[0])
+def work_assignment(c,account):
+    row=c.execute('SELECT body FROM work_assignments WHERE account=?',(account,)).fetchone()
+    if not row:
+        return dict(jobs=[],sites=[],primary_job='',primary_site=None,require_location=False)
+    return json.loads(row['body'])
+
+
+def work_assigned_sites(c,assignment):
+    ids=set(assignment['sites'])
+    return [dict(row) for row in c.execute('SELECT * FROM work_sites ORDER BY name') if row['id'] in ids]
+
+
+def work_assignment_target(c,name):
+    if not isinstance(name,str): raise Problem('Choose a current employee.')
+    row=c.execute('SELECT profile_id FROM receipt_profiles WHERE name=?',(name,)).fetchone()
+    if not row: raise Problem('Employee not found.',404)
+    return row[0]
+
+
+def work_save_assignment(c,d):
+    account=work_assignment_target(c,d.get('name'))
+    jobs,sites=d.get('jobs'),d.get('sites')
+    job,site=d.get('primary_job'),d.get('primary_site')
+    required=d.get('require_location')
+    if (not isinstance(jobs,list) or len(jobs)>30 or any(not isinstance(j,str) or not 1<=len(j.strip())<=80 for j in jobs)
+            or not isinstance(sites,list) or len(sites)>50 or any(type(i) is not int for i in sites)
+            or type(required) is not bool):
+        raise Problem('Choose valid jobs, work sites and location settings.')
+    jobs=list(dict.fromkeys(j.strip() for j in jobs))
+    sites=list(dict.fromkeys(sites))
+    if (not set(sites)<={r[0] for r in c.execute('SELECT id FROM work_sites')}
+            or (bool(jobs) and job not in jobs) or (not jobs and job!='')
+            or (bool(sites) and (type(site) is not int or site not in sites)) or (not sites and site is not None)):
+        raise Problem('Choose a primary job and site from the assigned options.')
+    if required and not sites: raise Problem('Assign at least one work site to require location checks.')
+    body=dict(jobs=jobs,sites=sites,primary_job=job,primary_site=site,require_location=required)
+    c.execute('INSERT OR REPLACE INTO work_assignments VALUES(?,?)',(account,json.dumps(body)))
 
 
 def work_shifts(c, week, account=None):
@@ -831,7 +869,7 @@ def work_week_absences(c,week):
                     cells.append(dict(account=row['account'],day=day,kind='time-off'))
             elif day>=details['effective']:
                 for block in details['blocks']:
-                    if block['day']==i:
+                    if block['day']==(i+6)%7:
                         cells.append(dict(account=row['account'],day=day,kind='availability',**{
                             'start':block['start'],'end':block['end']}))
     return cells
@@ -906,27 +944,36 @@ def work_get(handler,c,u,path,query,clock_only=False):
         week_gross,week_worked=work_hours(c,account,work_bounds(week,7),now)
         period,pause=work_open(c,account)
         state='break' if pause else 'working' if period else 'out'
+        assignment=work_assignment(c,account)
         return handler.send(dict(week=week.isoformat(),today=today.isoformat(),now=now,
             day_end=work_bounds(today)[1],week_end=work_bounds(week,7)[1],week_start=work_bounds(week,7)[0],
             clock=dict(state=state,since=work_local(period['start']) if period else None,
                        gross=gross,worked=worked,week_gross=week_gross,week_worked=week_worked),
-            require_location=work_require_location(c),sites_ready=bool(c.execute('SELECT 1 FROM work_sites LIMIT 1').fetchone()),
+            require_location=assignment['require_location'],sites_ready=bool(work_assigned_sites(c,assignment)),
             manage_schedule=has_permission(u,'manage_staff_schedule'),manage_review=can_review_requests(u),manage_sites=has_permission(u,'manage_work_sites'),
             shifts=[] if clock_only else work_shifts(c,week,account)))
     if path=='team':
         if not has_permission(u,'manage_staff_schedule'): raise Problem('Schedule management permission required.',403)
         people=[dict(row) for row in c.execute("""SELECT p.profile_id AS id,u.name FROM users u
                     JOIN receipt_profiles p ON p.name=u.name ORDER BY u.name""")]
+        for person in people:
+            assignment=work_assignment(c,person['id'])
+            locations=work_assigned_sites(c,assignment)
+            person.update(jobs=assignment['jobs'],primary_job=assignment['primary_job'],locations=[site['name'] for site in locations],
+                          primary_location=next((site['name'] for site in locations if site['id']==assignment['primary_site']),''))
         return handler.send(dict(people=people,shifts=work_shifts(c,week),absences=work_week_absences(c,week)))
     if path=='requests':
         return handler.send({'requests':work_request_rows(c,account)})
     if path=='review-requests':
         if not can_review_requests(u): raise Problem('This request requires an administrator or an authorized manager.',403)
         return handler.send({'requests':work_request_rows(c,reviewer=u),'account':account})
+    if path=='assignment':
+        if not has_permission(u,'manage_staff_schedule'): raise Problem('Schedule management permission required.',403)
+        target=work_assignment_target(c,query.get('name',[''])[0])
+        return handler.send({'assignment':work_assignment(c,target),'sites':[dict(row) for row in c.execute('SELECT id,name FROM work_sites ORDER BY name')]})
     if path=='sites':
         if not has_permission(u,'manage_work_sites'): raise Problem('Work site management permission required.',403)
-        return handler.send(dict(required=work_require_location(c),
-                                 sites=[dict(row) for row in c.execute('SELECT * FROM work_sites ORDER BY name')]))
+        return handler.send(dict(sites=[dict(row) for row in c.execute('SELECT * FROM work_sites ORDER BY name')]))
     raise Problem('Not found.',404)
 
 
@@ -936,12 +983,13 @@ def work_number(value, low, high):
     return float(value)
 
 
-def work_check_location(c,position):
-    if not work_require_location(c):
+def work_check_location(c,account,position):
+    assignment=work_assignment(c,account)
+    if not assignment['require_location']:
         return None
-    sites=c.execute('SELECT * FROM work_sites').fetchall()
+    sites=work_assigned_sites(c,assignment)
     if not sites:
-        raise Problem('A manager must add a work site before you can clock in or out.',409)
+        raise Problem('A manager must assign you a work site before you can clock in or out.',409)
     if not isinstance(position,dict):
         raise Problem('Allow location access to clock in or out at a work site.',403)
     lat=work_number(position.get('latitude'),-90,90)
@@ -978,7 +1026,7 @@ def work_post(handler,c,u,path,d,clock_only=False):
         period,pause=work_open(c,account)
         allowed=('in',) if not period else ('out','end_break') if pause else ('out','start_break')
         if action not in allowed: raise Problem('This punch is no longer available. Refresh and check your clock status.',409)
-        site=work_check_location(c,d.get('position')) if action in ('in','out') else None
+        site=work_check_location(c,account,d.get('position')) if action in ('in','out') else None
         now=int(time.time())
         if (period and now<period['start']) or (pause and now<pause['start']):
             raise Problem('The server clock changed. Ask a manager to check it before punching again.',409)
@@ -994,12 +1042,17 @@ def work_post(handler,c,u,path,d,clock_only=False):
             CLOCK_SESSIONS.pop(clock_pin_cookie(handler),None)
             return handler.send({'ok':True},cookie='clock_session=; HttpOnly; SameSite=Strict; Path=/api/workforce/quick; Max-Age=0')
         return handler.send({'ok':True})
+    if path=='assignment':
+        if not has_permission(u,'manage_staff_schedule'): raise Problem('Schedule management permission required.',403)
+        work_save_assignment(c,d)
+        c.commit()
+        return handler.send({'ok':True})
     if path=='shift':
         if not has_permission(u,'manage_staff_schedule'): raise Problem('Schedule management permission required.',403)
         ident=d.get('id')
         if ident is not None and (type(ident) is not int or not 0<ident<2**63): raise Problem('Invalid shift.')
         if ident is not None:
-            old=c.execute('SELECT revision FROM work_shifts WHERE id=?',(ident,)).fetchone()
+            old=c.execute('SELECT * FROM work_shifts WHERE id=?',(ident,)).fetchone()
             if not old or d.get('revision')!=old['revision']: raise Problem('This shift changed. Refresh the schedule and try again.',409)
         if d.get('remove') is True:
             if ident is None: raise Problem('Choose a shift to remove.')
@@ -1014,40 +1067,49 @@ def work_post(handler,c,u,path,d,clock_only=False):
             if c.execute('SELECT 1 FROM work_shifts WHERE account=? AND start<? AND end>? AND id!=?',
                          (employee,end,start,ident or 0)).fetchone():
                 raise Problem('This employee already has a shift during those hours.',409)
-            location,notes=d.get('location',''),d.get('notes','')
+            assignment=work_assignment(c,employee)
+            locations=work_assigned_sites(c,assignment)
+            primary=next((site['name'] for site in locations if site['id']==assignment['primary_site']),'')
+            location,job,notes=d.get('location',primary),d.get('job',assignment['primary_job']),d.get('notes','')
+            if not isinstance(job,str) or len(job)>80:
+                raise Problem('Use up to 80 characters for the job.')
+            job=job.strip()
+            if assignment['jobs'] and job not in assignment['jobs'] and not (ident and old['account']==employee and job==old['job']):
+                raise Problem('Choose one of the employee’s assigned jobs.')
             if not isinstance(location,str) or not isinstance(notes,str) or len(location)>100 or len(notes)>500:
                 raise Problem('Use up to 100 characters for location and 500 for notes.')
-            fields=(employee,start,end,location.strip(),notes.strip())
+            location=location.strip()
+            if locations and location not in {site['name'] for site in locations} and not (ident and old['account']==employee and location==old['location']):
+                raise Problem('Choose one of the employee’s assigned work sites.')
+            fields=(employee,start,end,location,notes.strip(),job)
             if ident:
-                c.execute('UPDATE work_shifts SET account=?,start=?,end=?,location=?,notes=?,revision=revision+1 WHERE id=?',
+                c.execute('UPDATE work_shifts SET account=?,start=?,end=?,location=?,notes=?,job=?,revision=revision+1 WHERE id=?',
                           fields+(ident,))
             else:
-                c.execute('INSERT INTO work_shifts(account,start,end,location,notes) VALUES(?,?,?,?,?)',fields)
+                c.execute('INSERT INTO work_shifts(account,start,end,location,notes,job) VALUES(?,?,?,?,?,?)',fields)
         c.commit()
         return handler.send({'ok':True})
-    if path in ('site','site-policy'):
+    if path=='site':
         if not has_permission(u,'manage_work_sites'): raise Problem('Work site management permission required.',403)
-        if path=='site-policy':
-            if type(d.get('required')) is not bool: raise Problem('Choose whether to require location.')
-            c.execute('UPDATE work_clock_settings SET require_location=? WHERE id=1',(d['required'],))
+        ident=d.get('id')
+        if ident is not None and (type(ident) is not int or not 0<ident<2**63): raise Problem('Invalid work site.')
+        if ident and not c.execute('SELECT 1 FROM work_sites WHERE id=?',(ident,)).fetchone():
+            raise Problem('Work site not found.',404)
+        if d.get('remove') is True:
+            if ident is None: raise Problem('Choose a work site to remove.')
+            if c.execute("SELECT 1 FROM work_assignments a, json_each(a.body,'$.sites') s WHERE s.value=?",(ident,)).fetchone():
+                raise Problem('Remove this site from employee assignments before deleting it.',409)
+            c.execute('DELETE FROM work_sites WHERE id=?',(ident,))
         else:
-            ident=d.get('id')
-            if ident is not None and (type(ident) is not int or not 0<ident<2**63): raise Problem('Invalid work site.')
-            if ident and not c.execute('SELECT 1 FROM work_sites WHERE id=?',(ident,)).fetchone():
-                raise Problem('Work site not found.',404)
-            if d.get('remove') is True:
-                if ident is None: raise Problem('Choose a work site to remove.')
-                c.execute('DELETE FROM work_sites WHERE id=?',(ident,))
-            else:
-                name=d.get('name')
-                if not isinstance(name,str) or not 1<=len(name.strip())<=80: raise Problem('Enter a work site name.')
-                address=d.get('address','')
-                if not isinstance(address,str) or len(address)>240:
-                    raise Problem('Use up to 240 characters for the work site address.')
-                fields=(name.strip(),work_number(d.get('latitude'),-90,90),
-                        work_number(d.get('longitude'),-180,180),work_number(d.get('radius'),30,2000),address.strip())
-                if ident: c.execute('UPDATE work_sites SET name=?,latitude=?,longitude=?,radius=?,address=? WHERE id=?',fields+(ident,))
-                else: c.execute('INSERT INTO work_sites(name,latitude,longitude,radius,address) VALUES(?,?,?,?,?)',fields)
+            name=d.get('name')
+            if not isinstance(name,str) or not 1<=len(name.strip())<=80: raise Problem('Enter a work site name.')
+            address=d.get('address','')
+            if not isinstance(address,str) or len(address)>240:
+                raise Problem('Use up to 240 characters for the work site address.')
+            fields=(name.strip(),work_number(d.get('latitude'),-90,90),
+                    work_number(d.get('longitude'),-180,180),work_number(d.get('radius'),30,2000),address.strip())
+            if ident: c.execute('UPDATE work_sites SET name=?,latitude=?,longitude=?,radius=?,address=? WHERE id=?',fields+(ident,))
+            else: c.execute('INSERT INTO work_sites(name,latitude,longitude,radius,address) VALUES(?,?,?,?,?)',fields)
         c.commit()
         return handler.send({'ok':True})
     raise Problem('Not found.',404)
@@ -1558,7 +1620,7 @@ class Handler(BaseHTTPRequestHandler):
                     if not has_permission(u,'manage_users'): raise Problem('Administrator access required.',403)
                     return self.send({'permissions':PERMISSIONS,'users':[{'name':r['name'],'grants':json.loads(r['body'])} for r in c.execute('SELECT * FROM user_grants')]})
                 if self.path=='/api/admin/users':
-                    if not any(has_permission(u, permission) for permission in ('manage_users','reset_passwords','rename_users')):
+                    if not any(has_permission(u, permission) for permission in ('manage_users','reset_passwords','rename_users','manage_staff_schedule')):
                         raise Problem('Administrator access required.',403)
                     return self.send({'users':[dict(r) for r in c.execute('SELECT users.name,admin,COALESCE(permissions.can_create,1) AS can_create,COALESCE(permissions.see_requests,admin) AS see_requests FROM users LEFT JOIN permissions ON users.name=permissions.name ORDER BY users.name')]})
                 if self.path=='/api/admin/backup-settings':
@@ -1991,6 +2053,7 @@ class Handler(BaseHTTPRequestHandler):
                     if target['admin']: raise Problem('Administrator accounts cannot be removed here.',403)
                     c.execute('DELETE FROM users WHERE name=?',(target['name'],))
                     c.execute('DELETE FROM comm_push_devices WHERE account=(SELECT profile_id FROM receipt_profiles WHERE name=?)',(target['name'],))
+                    c.execute('DELETE FROM work_assignments WHERE account=(SELECT profile_id FROM receipt_profiles WHERE name=?)',(target['name'],))
                     c.execute('DELETE FROM work_clock_pins WHERE account=(SELECT profile_id FROM receipt_profiles WHERE name=?)',(target['name'],))
                     c.execute('DELETE FROM user_profile_photos WHERE account=(SELECT profile_id FROM receipt_profiles WHERE name=?)',(target['name'],))
                     c.execute('DELETE FROM receipt_profiles WHERE name=?',(target['name'],))

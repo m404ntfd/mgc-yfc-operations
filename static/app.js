@@ -200,7 +200,7 @@ const settingsCategories=document.createElement('nav');settingsCategories.classN
 const settingsTabs=document.createElement('nav');settingsTabs.className='settingsTabs settingsSubcategories';settingsTabs.id='settingsSubcategories';settingsTabs.setAttribute('aria-label','Settings subcategories');
 const settingsEmpty=document.createElement('p');settingsEmpty.id='settingsEmpty';settingsEmpty.setAttribute('role','status');settingsEmpty.hidden=true;
 let selectedSettingsCategory=null;
-function settingsAllowed(i){return i!==0&&(i===8||i===9||!!user?.admin||([[],['backup_settings','create_backups'],['check_updates','configure_updates','install_updates'],['manage_vehicles'],['manage_users','reset_passwords','rename_users','manage_roles'],['view_audit'],['unlock_users'],[],[],[]][i]||[]).some(can));}
+function settingsAllowed(i){return i!==0&&(i===8||i===9||!!user?.admin||([[],['backup_settings','create_backups'],['check_updates','configure_updates','install_updates'],['manage_vehicles'],['manage_users','reset_passwords','rename_users','manage_roles','manage_staff_schedule'],['view_audit'],['unlock_users'],[],[],[]][i]||[]).some(can));}
 function settingsCategory(index){selectedSettingsCategory=index;settingsPanels.forEach(panel=>panel.hidden=true);settingsTabs.replaceChildren();settingsEmpty.hidden=true;[...settingsCategories.children].forEach((button,i)=>{button.classList.toggle('selected',i===index);button.setAttribute('aria-pressed',String(i===index));});if(index===null)return;const panels=settingsGroups[index].panels.filter(settingsAllowed);for(const i of panels){const button=document.createElement('button');button.type='button';button.dataset.settingsPanel=i;button.textContent=settingsNames[i];button.onclick=()=>settingsSection(i);settingsTabs.append(button);}if(!panels.length){settingsEmpty.textContent='No settings are currently available in this category.';settingsEmpty.hidden=false;}}
 function settingsSection(index){if(!settingsAllowed(index))return;if(index===4)selectUserSettings();if(index===10)loadSharingSettings();if(index===11)loadPageColors(true);const group=settingsGroups.findIndex(g=>g.panels.includes(index));if(group!==selectedSettingsCategory)settingsCategory(group);settingsPanels.forEach((panel,i)=>panel.hidden=i!==index);[...settingsTabs.children].forEach(button=>{const selected=Number(button.dataset.settingsPanel)===index;button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected));});}
 settingsGroups.forEach((group,i)=>{const button=document.createElement('button');button.type='button';button.textContent=group.name;button.onclick=()=>settingsCategory(i);settingsCategories.append(button);});
@@ -533,6 +533,7 @@ function renderUserList(){
   const rename=can('rename_users')&&(!person.admin||user.admin);
   return `<div class="listRow"><span>${name}${person.admin?' · Administrator':''}</span>
    <span>${rename?`<button type="button" data-rename-user="${name}">Edit name</button>`:''}
+   ${can('manage_staff_schedule')?`<button type="button" data-work-assignment="${name}">Work assignments</button>`:''}
    ${pin?`<button type="button" data-clock-pin="${name}">Time Clock PIN</button>`:''}
    ${edit?`<button type="button" data-password="${name}">Edit user / permissions</button>`:''}</span></div>`;
  }).join('');
@@ -574,7 +575,7 @@ $('renameUserForm').onsubmit=async e=>{
 };
 
 function selectUserSettings(target){
- const usersAllowed=can('manage_users')||can('reset_passwords')||can('rename_users'),rolesAllowed=can('manage_roles');
+ const usersAllowed=can('manage_users')||can('reset_passwords')||can('rename_users')||can('manage_staff_schedule'),rolesAllowed=can('manage_roles');
  const roles=rolesAllowed&&(target==='roles'||!usersAllowed);
  usersSettingsButton.hidden=!usersAllowed;openRoles.hidden=!rolesAllowed;
  userSettingsPanel.hidden=roles||!usersAllowed;rolesArea.hidden=!roles;
@@ -1221,7 +1222,8 @@ workPanel.innerHTML = `
    <label>Employee<select name="account" required></select></label>
    <label>Start<input type="datetime-local" name="start" required></label>
    <label>End<input type="datetime-local" name="end" required></label>
-   <label>Location<input name="location" maxlength="100"></label>
+   <label>Job<input name="job" list="workShiftJobs" maxlength="80"></label><datalist id="workShiftJobs"></datalist>
+   <label>Location<input name="location" list="workShiftSites" maxlength="100"></label><datalist id="workShiftSites"></datalist>
    <label>Notes<textarea name="notes" maxlength="500" rows="2"></textarea></label>
    <div class="actions"><button type="button" id="workDeleteShift" hidden>Delete shift</button><button type="button" id="workCancelShift">Cancel</button><button class="primary">Save shift</button></div>
    <p id="workShiftError" role="alert"></p>
@@ -1252,11 +1254,7 @@ workPanel.innerHTML = `
  </form></dialog>
  <section data-work-panel="sites" hidden>
   <h3>Work sites and geofencing</h3>
-  <form id="workPolicyForm">
-   <label class="workCheck"><input type="checkbox" name="required"> Require a location check at clock-in and clock-out</label>
-   <p>Location is checked only when clocking in or out. Starting and ending breaks do not require it.</p>
-   <button type="submit" class="primary">Save location policy</button>
-  </form>
+  <p>Assign sites and location requirements per employee in Settings → Users → Work assignments.</p>
   <div id="workSiteList" class="workList"></div>
   <button type="button" id="workAddSite">Add work site</button>
   <form id="workSiteForm" class="workForm" hidden>
@@ -1305,6 +1303,7 @@ function workShiftList(shifts, editable) {
  return shifts.map(shift=>`<article class="workRow">
   <div><strong>${editable?esc(shift.name):esc(shift.location || 'Scheduled shift')}</strong>
   <p>${esc(shift.start.replace('T',' '))} – ${esc(shift.end.replace('T',' '))}</p>
+  ${shift.job?`<p>${esc(shift.job)}</p>`:''}
   ${editable&&shift.location?`<p>${esc(shift.location)}</p>`:''}
   ${shift.notes?`<p>${esc(shift.notes)}</p>`:''}</div>
   ${editable?`<div class="actions"><button type="button" data-edit-shift="${shift.id}">Edit</button><button type="button" data-remove-shift="${shift.id}">Remove</button></div>`:''}
@@ -1318,7 +1317,7 @@ function workRender(data) {
  $('workClockState').textContent = ({out:'Clocked out',working:'Clocked in',break:'On break'})[data.clock.state]
   + (data.clock.since ? ' since ' + data.clock.since.replace('T',' ') : '');
  $('workGeoStatus').textContent = data.require_location
-  ? (data.sites_ready ? 'Clock in and out from an approved work site.' : 'A manager needs to add a work site before clock-in and clock-out.')
+  ? (data.sites_ready ? 'Clock in and out from an approved work site.' : 'A manager needs to assign you a work site before clock-in and clock-out.')
   : 'Location checks are off.';
  const allowed = ({out:['in'],working:['out','start_break'],break:['out','end_break']})[data.clock.state];
  for (const button of workPanel.querySelectorAll('[data-work-punch]')) {
@@ -1359,8 +1358,6 @@ async function workLoad(version = workVersion) {
    if (workPanel.hidden || version!==workVersion || request!==workFetch || user!==signedIn) return;
    workSites=result.sites;
    $('workAddSite').disabled=false;
-   $('workPolicyForm').querySelector('button').disabled=false;
-   $('workPolicyForm').elements.required.checked=result.required;
    $('workSiteList').innerHTML=result.sites.map(site=>`<article class="workRow">
     <div><strong>${esc(site.name)}</strong><p>${esc(workRadiusText(site.radius))} radius</p>${site.address?`<p>${esc(site.address)}</p>`:''}</div>
     <div class="actions"><button type="button" data-edit-site="${site.id}">Edit</button><button type="button" data-remove-site="${site.id}">Remove</button></div>
@@ -1387,7 +1384,6 @@ function workSelect(view) {
  if(view==='sites'){
   $('workSiteList').textContent='Loading work sites…';
   $('workAddSite').disabled=true;
-  $('workPolicyForm').querySelector('button').disabled=true;
  }
  for (const tab of workPanel.querySelectorAll('[data-work-view]')) tab.setAttribute('aria-pressed',String(tab.dataset.workView===view));
  for (const panel of workPanel.querySelectorAll('[data-work-panel]')) panel.hidden=panel.dataset.workPanel!==view;
@@ -1471,12 +1467,13 @@ function workEditShift(shift,cell) {
  $('workShiftError').textContent='';
  const fields=form.elements;
  fields.account.replaceChildren(new Option('Choose an employee',''),...workTeam.people.map(p=>new Option(p.name,p.id)));
- if (shift) for (const key of ['account','start','end','location','notes']) fields[key].value=shift[key];
+ if (shift) for (const key of ['account','start','end','location','notes','job']) fields[key].value=shift[key];
  if(cell){
   fields.account.value=cell.account;
   fields.start.value=cell.day+'T09:00';
   fields.end.value=cell.day+'T17:00';
  }
+ workShiftOptions(!shift);
  form.hidden=false;
  $('workShiftDialog').showModal();
  fields.account.focus();
@@ -1512,6 +1509,14 @@ async function workSave(path,data,button,form) {
  } }
  finally { if(button)button.disabled=false; }
 }
+function workShiftOptions(defaults){
+ const form=$('workShiftForm'), fields=form.elements;
+ const person=workTeam.people.find(p=>p.id===fields.account.value);
+ $('workShiftJobs').replaceChildren(...(person?.jobs||[]).map(job=>new Option(job)));
+ $('workShiftSites').replaceChildren(...(person?.locations||[]).map(site=>new Option(site)));
+ if(defaults){fields.job.value=person?.primary_job||'';fields.location.value=person?.primary_location||'';}
+}
+$('workShiftForm').elements.account.onchange=()=>workShiftOptions(true);
 $('workAddShift').onclick=()=>workEditShift(null);
 $('workCancelShift').onclick=()=>$('workShiftDialog').close();
 $('workDeleteShift').onclick=e=>{
@@ -1548,10 +1553,6 @@ $('workSiteForm').onsubmit=e=>{
  delete data.radius_unit;
  if(workEditingSite)data.id=workEditingSite.id;
  workSave('site',data,e.submitter,e.currentTarget);
-};
-$('workPolicyForm').onsubmit=e=>{
- e.preventDefault();
- workSave('site-policy',{required:e.currentTarget.elements.required.checked},e.submitter);
 };
 workPanel.addEventListener('click',e=>{
  const button=e.target.closest('button');
@@ -1971,7 +1972,7 @@ function workShiftTime(value){
  return `${hour%12||12}:${String(minute).padStart(2,'0')} ${hour<12?'AM':'PM'}`;
 }
 function workRenderGrid(team,week){
- const days=workWeekdays.map((label,i)=>({label,day:workDateOffset(week,i),next:workDateOffset(week,i+1)}));
+ const days=[6,0,1,2,3,4,5].map((weekday,i)=>({label:workWeekdays[weekday],day:workDateOffset(week,i),next:workDateOffset(week,i+1)}));
  const shifts=new Map(),absences=new Map();
  for(const shift of team.shifts){
   if(!shifts.has(shift.account))shifts.set(shift.account,[]);
@@ -1995,6 +1996,7 @@ function workRenderGrid(team,week){
      return `<td>${blocked.map(b=>`<div class="workAbsence ${b.kind==='time-off'?'timeOff':''}">${b.kind==='time-off'?'Time off':b.start?'Unavailable '+workShiftTime(b.start)+' – '+workShiftTime(b.end):'Unavailable · all day'}</div>`).join('')}
       ${items.map(shift=>`<button class="workShiftCard" type="button" data-edit-shift="${shift.id}">
        <strong>${workShiftTime(shift.start)} – ${workShiftTime(shift.end)}</strong>
+       ${shift.job?`<span>${esc(shift.job)}</span>`:''}
        ${shift.location?`<span>${esc(shift.location)}</span>`:''}</button>`).join('')}
       <button type="button" class="workGridAdd" data-grid-account="${esc(person.id)}" data-grid-day="${day}" aria-label="Add shift for ${esc(person.name)} on ${day}">＋</button></td>`;
     }).join('')}<td>${new Intl.NumberFormat(undefined,{maximumFractionDigits:2}).format(hours)}</td></tr>`;
@@ -2011,7 +2013,7 @@ function workAddBlock(){
  if(list.children.length>=28)return;
  const row=document.createElement('div');
  row.className='workAvailabilityBlock';
- row.innerHTML=`<label>Day<select>${workWeekdays.map((day,i)=>`<option value="${i}">${day}</option>`).join('')}</select></label>
+ row.innerHTML=`<label>Day<select>${[6,0,1,2,3,4,5].map(i=>`<option value="${i}">${workWeekdays[i]}</option>`).join('')}</select></label>
   <label>From<input type="time"></label><label>Until<input type="time"></label>
   <label class="workCheck"><input type="checkbox" checked>All day</label>
   <button type="button" aria-label="Remove unavailable period">Remove</button>`;
@@ -2086,3 +2088,83 @@ for(const id of ['workMyRequests','workReviewRequests']){
   commPoll();
  });
 }
+
+const workAssignmentDialog=document.createElement('dialog');
+workAssignmentDialog.innerHTML=`<form id="workAssignmentForm">
+ <h2>Work assignments</h2><p id="workAssignmentName"></p>
+ <label>Assigned jobs (one per line)<textarea name="jobs" rows="4" maxlength="2430"></textarea></label>
+ <label>Primary job<select name="primary_job"></select></label>
+ <fieldset><legend>Assigned work sites</legend><div id="workAssignmentSites"></div></fieldset>
+ <label>Primary work site<select name="primary_site"></select></label>
+ <label class="workAssignmentCheck"><input type="checkbox" name="require_location"> Require location checks when clocking in and out</label>
+ <p id="workAssignmentError" role="alert"></p>
+ <div class="actions"><button type="button" id="workAssignmentClose">Cancel</button><button type="submit" class="primary">Save assignments</button></div>
+ </form>`;
+document.body.append(workAssignmentDialog);
+const workAssignmentForm=$('workAssignmentForm');
+let workAssignmentName='',workAssignmentVersion=0;
+function workAssignmentJobs(){
+ return [...new Set(workAssignmentForm.elements.jobs.value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean))];
+}
+function workAssignmentUpdateChoices(){
+ const fields=workAssignmentForm.elements,jobs=workAssignmentJobs();
+ const sites=[...$('workAssignmentSites').querySelectorAll('input:checked')];
+ for(const [field,choices,empty] of [[fields.primary_job,jobs.map(job=>[job,job]),'No jobs assigned'],
+     [fields.primary_site,sites.map(input=>[input.dataset.name,input.value]),'No sites assigned']]){
+  const current=field.value;
+  field.replaceChildren(...(choices.length?choices:[[empty,'']]).map(([label,value])=>new Option(label,value)));
+  if(choices.some(([,value])=>value===current))field.value=current;
+ }
+}
+workAssignmentForm.elements.jobs.addEventListener('input',workAssignmentUpdateChoices);
+$('workAssignmentSites').addEventListener('change',workAssignmentUpdateChoices);
+$('workAssignmentClose').onclick=()=>workAssignmentDialog.close();
+$('users').addEventListener('click',async e=>{
+ const button=e.target.closest('[data-work-assignment]');
+ if(!button)return;
+ const name=button.dataset.workAssignment,version=++workAssignmentVersion,signedIn=user;
+ const fields=workAssignmentForm.elements,submit=workAssignmentForm.querySelector('[type=submit]');
+ workAssignmentName=name;
+ workAssignmentForm.reset();
+ $('workAssignmentSites').replaceChildren();
+ workAssignmentUpdateChoices();
+ $('workAssignmentName').textContent=name;
+ $('workAssignmentError').textContent='Loading assignments…';
+ submit.disabled=true;
+ workAssignmentDialog.showModal();
+ try{
+  const {assignment,sites}=await workApi('assignment?name='+encodeURIComponent(name));
+  if(user!==signedIn||version!==workAssignmentVersion||!workAssignmentDialog.open)return;
+  fields.jobs.value=assignment.jobs.join('\n');
+  fields.require_location.checked=assignment.require_location;
+  $('workAssignmentSites').replaceChildren(...sites.map(site=>{
+   const label=document.createElement('label'),input=document.createElement('input');
+   label.className='workAssignmentCheck';
+   input.type='checkbox';
+   input.value=site.id;
+   input.dataset.name=site.name;
+   input.checked=assignment.sites.includes(site.id);
+   label.append(input,document.createTextNode(site.name));
+   return label;
+  }));
+  if(!sites.length)$('workAssignmentSites').textContent='No work sites have been configured.';
+  workAssignmentUpdateChoices();
+  fields.primary_job.value=assignment.primary_job;
+  fields.primary_site.value=assignment.primary_site??'';
+  $('workAssignmentError').textContent='';
+  submit.disabled=false;
+ }catch(err){if(version===workAssignmentVersion&&user===signedIn)$('workAssignmentError').textContent=err.message;}
+});
+workAssignmentForm.onsubmit=async e=>{
+ e.preventDefault();
+ const fields=e.currentTarget.elements,button=e.submitter,version=workAssignmentVersion,signedIn=user;
+ const sites=[...$('workAssignmentSites').querySelectorAll('input:checked')].map(input=>Number(input.value));
+ button.disabled=true;
+ try{
+  await workApi('assignment',{name:workAssignmentName,jobs:workAssignmentJobs(),sites,
+   primary_job:fields.primary_job.value,primary_site:fields.primary_site.value?Number(fields.primary_site.value):null,
+   require_location:fields.require_location.checked});
+  if(user===signedIn&&version===workAssignmentVersion){workAssignmentDialog.close();toast('Work assignments saved.');}
+ }catch(err){if(user===signedIn&&version===workAssignmentVersion)$('workAssignmentError').textContent=err.message;}
+ finally{if(version===workAssignmentVersion)button.disabled=false;}
+};

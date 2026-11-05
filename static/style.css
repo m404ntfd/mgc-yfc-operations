@@ -324,3 +324,6 @@ body{background:var(--page-background,#faf6f5);min-height:100vh;color:var(--page
 .workAvailabilityBlock,.workRequestDates {display:grid;grid-template-columns:repeat(auto-fit,minmax(115px,1fr));gap:8px;align-items:end;margin-bottom:8px}
 .workRequestState {text-transform:capitalize}
 #scheduleNotice {margin-bottom:14px}
+
+.workAssignmentCheck {display:flex;align-items:center;gap:8px;margin:8px 0}
+.workAssignmentCheck input[type=checkbox] {width:18px;min-height:18px;flex-shrink:0}
