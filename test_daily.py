@@ -12,10 +12,10 @@ def run():
    b=p.chromium.launch();page=b.new_page(viewport={'width':390,'height':844},reduced_motion='reduce')
    page.goto(f'http://127.0.0.1:{F.port}');page.locator('#login [name=name]').fill('Admin');page.locator('#login [name=password]').fill('testpassword');page.locator('#login button').click()
    expect(page.locator('#sectionChooser')).to_be_visible();assert page.locator('#sectionChoices label').all_text_contents()==['Thrift Mart Dispatch','Store Associate Paging','Receipts & Accounting']
-   page.locator('[name=section][value=receipts]').check();page.locator('#sectionChooserForm button').click();page.reload();expect(page.locator('#receipts')).to_be_visible();expect(page.locator('#sectionChooser')).to_be_hidden()
+   page.locator('[name=section][value=receipts]').check();page.locator('#sectionChooserForm button').click();expect(page.locator('#sectionChooser')).to_be_hidden();page.reload();expect(page.locator('#receipts')).to_be_visible();expect(page.locator('#sectionChooser')).to_be_hidden()
    with sqlite3.connect(Path(F.tmp.name)/'schedule.db') as c:c.execute("UPDATE landing_preferences SET chosen_on=?",((dt.date.today()-dt.timedelta(days=1)).isoformat(),))
-   page.reload();expect(page.locator('#sectionChooser')).to_be_visible();page.locator('[name=section][value=dispatch]').check();page.locator('#sectionChooserForm button').click();expect(page.locator('#app')).to_be_visible()
-   page.locator('#storeMenuButton').click();page.locator('#chooseStartSection').click();expect(page.locator('#sectionChooser')).to_be_visible();page.locator('#sectionChooserForm button').click()
+   page.reload();expect(page.locator('#sectionChooser')).to_be_visible();page.locator('[name=section][value=dispatch]').check();page.locator('#sectionChooserForm button').click();expect(page.locator('#sectionChooser')).to_be_hidden();expect(page.locator('#app')).to_be_visible()
+   page.locator('#storeMenuButton').click();page.locator('#chooseStartSection').click();expect(page.locator('#sectionChooser')).to_be_visible();page.locator('#sectionChooserForm button').click();expect(page.locator('#sectionChooser')).to_be_hidden()
    b.close()
   F.call('user',{'name':'Employee','password':'testpassword'})
   F.call('logout',{});F.call('login',{'name':'Employee','password':'testpassword'})
