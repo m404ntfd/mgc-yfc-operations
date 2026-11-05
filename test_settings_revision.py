@@ -31,9 +31,10 @@ def run():
      expect(page.locator('.shareYfc')).to_be_visible();page.locator('#shareYfcButton').click();expect(page.locator('#shareText')).to_be_visible();page.locator('#closeShare').click()
     page.locator('#login [name=name]').fill('Employee');page.locator('#login [name=password]').fill('testpassword');page.locator('#login button').click()
     expect(page.locator('html')).to_have_attribute('data-theme','dark')
-    if page.locator('#sectionChooser').is_visible():page.locator('#sectionChooserForm button').click()
+    if width==390:
+     expect(page.locator('#sectionChooser')).to_be_visible();page.locator('#sectionChooserForm button').click()
     expect(page.locator('#sectionChooser')).to_be_hidden()
-    page.locator('#settingsTab').click();expect(page.locator('#overview')).to_be_hidden();expect(page.locator('.scheduleNav')).to_be_hidden();expect(page.locator('#currentSection')).to_have_text('Settings')
+    page.locator('#settingsTab').click();page.get_by_role('button',name='Application Settings',exact=True).click();expect(page.locator('#overview')).to_be_hidden();expect(page.locator('.scheduleNav')).to_be_hidden();expect(page.locator('#currentSection')).to_have_text('Settings')
     page.get_by_role('button',name='Updates',exact=True).click();expect(page.locator('#updateRepo')).to_be_disabled()
     page.locator('#unlockRepository').click();page.locator('#repositoryUnlockForm [name=name]').fill('Admin');page.locator('#repositoryUnlockForm [name=password]').fill('testpassword');page.locator('#repositoryUnlockForm button[type=submit]').click();expect(page.locator('#updateRepo')).to_be_enabled()
     page.screenshot(path=f'/tmp/settings-revision-{width}.png')
