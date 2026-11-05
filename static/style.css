@@ -334,7 +334,18 @@ body{background:var(--page-background,#faf6f5);min-height:100vh;color:var(--page
 .workPayrollTable {width:100%;border-collapse:collapse;min-width:560px}
 .workPayrollTable th,.workPayrollTable td {text-align:left;padding:8px;border-bottom:1px solid var(--work-border)}
 .workPayrollTable small {color:inherit}
-#workPayrollDownload {margin-top:12px}
+#workPayrollActions {margin-top:12px}
+@media print {
+ body.printingPayroll > :not(#workPayrollPrintReport) {display:none!important}
+ body.printingPayroll > #workPayrollPrintReport {display:block!important;background:white;color:black;font-size:11pt}
+ #workPayrollPrintReport h1 {font-size:20pt;margin:0 0 8px}
+ #workPayrollPrintReport p {margin:0 0 10px}
+ #workPayrollPrintReport table {width:100%;border-collapse:collapse}
+ #workPayrollPrintReport thead {display:table-header-group}
+ #workPayrollPrintReport tr {break-inside:avoid}
+ #workPayrollPrintReport th,#workPayrollPrintReport td {padding:7px 6px;border-bottom:1px solid #888;text-align:right}
+ #workPayrollPrintReport th:first-child {text-align:left;overflow-wrap:anywhere}
+}
 
 #workCardDialog {width:min(660px,calc(100vw - 24px))}
 #workCardDialog .workForm {margin:0}

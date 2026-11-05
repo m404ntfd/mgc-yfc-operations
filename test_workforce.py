@@ -87,6 +87,8 @@ class WorkforceTests(unittest.TestCase):
         self.assertEqual(call('workforce/payroll?start=2025-01-05')[1],
                          dict(start='2025-01-05',end='2025-01-11',employees=[],unlinked=0))
         self.assertEqual(call('workforce/payroll?start=2025-01-06')[0],400)
+        self.assertEqual(call('workforce/payroll?start=2025-01-09&period=quickbooks')[1],
+                         dict(start='2025-01-09',end='2025-01-15',employees=[],unlinked=0))
         self.assertEqual(call('workforce/payroll?start='+week)[0],400)
         self.assertFalse(call('workforce/overview',client=staff)[1]['require_location'])
         site=dict(name='Main Office',latitude=30.69,longitude=-88.04,radius=150)
@@ -207,6 +209,9 @@ class WorkforceTests(unittest.TestCase):
         staff=next(e for e in all_shifts['employees'] if e['account']=='staff')
         self.assertEqual([i['kind'] for i in staff['issues']].count('no-break-recorded'),3)
         self.assertEqual(preview['unlinked'],1)
+        quickbooks=server.work_payroll_preview(c,'2025-01-09',period='quickbooks')
+        staff=next(e for e in quickbooks['employees'] if e['account']=='staff')
+        self.assertEqual((staff['gross'],staff['net']),(25200,25200))
 
     def test_elapsed_and_net_time_are_clipped_to_the_selected_period(self):
         c=sqlite3.connect(':memory:')

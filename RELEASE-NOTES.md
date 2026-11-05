@@ -1,5 +1,6 @@
-# MGC YFC Operations 0.38.3
+# MGC YFC Operations 0.38.4
 
-- Payroll Export lets you choose the Sunday that starts a completed pay period and displays the range through Saturday. The preview and QuickBooks CSV use that same seven-day period.
+- Adds Match QuickBooks pay period so the preview and CSV can cover a completed seven-day period beginning on any weekday. Sunday–Saturday is the default.
+- Adds Print / Save as PDF. The payroll report includes the pay period and each selected employee’s reviewed regular, overtime, and total hours for manual entry.
 
 Use Check for Updates on an existing server, or run the full Windows installer over the current installation.

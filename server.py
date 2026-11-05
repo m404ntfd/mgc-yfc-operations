@@ -981,14 +981,18 @@ def work_set_request_decision(c,row,decision,reviewer):
 DEFAULT_PAYROLL_BREAK_HOURS=5.5
 
 
-def work_payroll_preview(c,start_value,break_after=DEFAULT_PAYROLL_BREAK_HOURS):
+def work_payroll_preview(c,start_value,break_after=DEFAULT_PAYROLL_BREAK_HOURS,*,period='sunday'):
+    if period not in ('sunday','quickbooks'):
+        raise Problem('Choose a payroll period option.')
     try:
         start=dt.date.fromisoformat(start_value)
         end=start+dt.timedelta(days=6)
-        if not 2000<=start.year<=2100 or start.weekday()!=6 or end>=dt.date.today():
+        if not 2000<=start.year<=2100 or end>=dt.date.today():
             raise ValueError()
     except (TypeError,ValueError,OverflowError):
-        raise Problem('Choose the Sunday that starts a completed payroll week.')
+        raise Problem('Choose the start of a completed seven-day pay period.')
+    if period=='sunday' and start.weekday()!=6:
+        raise Problem('Choose the Sunday that starts the pay period.')
     try:
         break_threshold=float(break_after)
         if not 0<=break_threshold<=48: raise ValueError()
@@ -1196,7 +1200,8 @@ def work_get(handler,c,u,path,query,clock_only=False):
     if path=='payroll':
         if not has_permission(u,'export_payroll'): raise Problem('Payroll export permission required.',403)
         return handler.send(work_payroll_preview(c,query.get('start',[''])[0],
-                                                 query.get('break_after',[DEFAULT_PAYROLL_BREAK_HOURS])[0]))
+                                                 query.get('break_after',[DEFAULT_PAYROLL_BREAK_HOURS])[0],
+                                                 period=query.get('period',['sunday'])[0]))
     if path=='overview':
         gross,worked=work_hours(c,account,work_bounds(today),now)
         week_gross,week_worked=work_hours(c,account,work_bounds(week,7),now)

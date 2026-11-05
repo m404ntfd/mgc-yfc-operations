@@ -192,7 +192,9 @@ def run():
             expect(manager.locator('#workTimeAudit')).to_contain_text('After')
             manager.locator('[data-work-view=payroll]').click()
             manager.route('**/api/workforce/payroll?*',lambda route:route.fulfill(json={
-                'start':'2025-01-05','end':'2025-01-11','unlinked':0,
+                **(dict(start='2025-01-09',end='2025-01-15') if 'period=quickbooks' in route.request.url
+                   else dict(start='2025-01-05',end='2025-01-11')),
+                'unlinked':0,
                 'employees':[{'account':'staff','name':'Staff','gross':162000,'net':154800,'open_punch':False,
                                            'issues':[{'kind':'no-break-recorded','at':'2025-01-07T08:00'}]},
                              {'account':'open','name':'Incomplete','gross':1800,'net':1800,'open_punch':True}]
@@ -214,6 +216,7 @@ def run():
             expect(manager.locator('[data-payroll-account=staff] [data-overtime]')).to_have_text('3.00')
             expect(manager.locator('#workPayrollRows')).to_contain_text('No break recorded')
             expect(manager.locator('#workPayrollDownload')).to_be_hidden()
+            expect(manager.locator('#workPayrollPrint')).to_be_hidden()
             manager.get_by_role('checkbox',name='Reviewed flags for Staff').check()
             expect(manager.locator('#workPayrollDownload')).to_be_visible()
             manager.get_by_role('checkbox',name='Include Incomplete').check()
@@ -234,6 +237,40 @@ def run():
                 payroll.get_by_role('button',name='Preview hours').click()
             expect(manager.locator('[data-payroll-account=staff] [data-regular]')).to_have_text('41.00')
             expect(manager.locator('[data-payroll-account=staff] [data-overtime]')).to_have_text('4.00')
+            payroll.locator('[name=period]').select_option('quickbooks')
+            pay_start.fill('2025-01-09')
+            assert pay_start.evaluate('(input)=>input.validity.valid')
+            expect(payroll.locator('#workPayrollRange')).to_contain_text('Thursday')
+            expect(payroll.locator('#workPayrollRange')).to_contain_text('Wednesday')
+            expect(manager.locator('#workPayrollDownload')).to_be_hidden()
+            custom_query='**/api/workforce/payroll?start=2025-01-09&period=quickbooks&break_after=6'
+            with manager.expect_request(custom_query):
+                payroll.get_by_role('button',name='Preview hours').click()
+            manager.get_by_role('checkbox',name='Include Staff',exact=True).check()
+            manager.get_by_label('Overtime treatment for Staff').select_option('overtime')
+            manager.get_by_role('checkbox',name='Reviewed flags for Staff').check()
+            with manager.expect_request(custom_query), manager.expect_download() as exported:
+                manager.locator('#workPayrollDownload').click()
+            assert exported.value.suggested_filename=='quickbooks-payroll-2025-01-09-to-2025-01-15.csv'
+            with exported.value.path().open(newline='',encoding='utf-8') as file:
+                rows=list(csv.DictReader(file))
+            assert rows[0]['Pay Period Start']=='2025-01-09' and rows[0]['Pay Period End']=='2025-01-15'
+            manager.evaluate('window.print = () => { window.payrollPrintRequested = true; }')
+            with manager.expect_request(custom_query):
+                manager.locator('#workPayrollPrint').click()
+            manager.wait_for_function('window.payrollPrintRequested === true')
+            report=manager.locator('#workPayrollPrintReport')
+            expect(report).to_be_hidden()
+            manager.emulate_media(media='print')
+            expect(report).to_be_visible()
+            expect(manager.locator('main')).to_be_hidden()
+            expect(report).to_contain_text('Thursday, Jan 9, 2025')
+            expect(report).to_contain_text('Wednesday, Jan 15, 2025')
+            expect(report.locator('tbody tr')).to_have_count(1)
+            assert report.locator('tbody tr > *').all_text_contents()==['Staff','41.00','4.00','45.00']
+            manager.evaluate("window.dispatchEvent(new Event('afterprint'))")
+            expect(report).to_be_hidden()
+            manager.emulate_media(media='screen')
             assert not errors,errors
             browser.close()
     finally:

@@ -1317,10 +1317,12 @@ workPanel.innerHTML = `
  </form></dialog>
  <section data-work-panel="payroll" hidden>
   <h3>QuickBooks Online Payroll</h3>
-  <p>Preview recorded punches for a completed Sunday-to-Saturday pay period. Select employees on one QuickBooks pay schedule and confirm their overtime treatment before downloading.</p>
+  <p>Use the dates shown under Pay period in QuickBooks. Export one completed seven-day period for employees on the same QuickBooks pay schedule.</p>
   <form id="workPayrollForm" class="workForm">
-   <label>Pay period start (Sunday)<input name="start" type="date" min="2000-01-02" max="2100-12-31" step="7" aria-describedby="workPayrollRange" required></label>
+   <label>Pay period<select name="period"><option value="sunday">Sunday–Saturday</option><option value="quickbooks">Match QuickBooks pay period</option></select></label>
+   <label>Pay period start<input name="start" type="date" min="2000-01-02" max="2100-12-31" step="7" aria-describedby="workPayrollRange" required></label>
    <p id="workPayrollRange" role="status">Choose the Sunday that starts the pay period.</p>
+   <p id="workPayrollOvertimeHelp" hidden>Weekly overtime is calculated across the seven days shown. Use that treatment when these dates match the employee’s overtime workweek.</p>
    <label>Weekly overtime threshold (hours)<input name="threshold" type="number" min="1" max="168" step="0.25" value="40" required></label>
    <label>Flag no recorded break at this many hours<input name="break_after" type="number" min="0" max="48" step="0.25" value="5.5" required></label>
    <p>Use 0 to review all worked shifts with no break recorded. A flag does not mean a break was required.</p>
@@ -1329,7 +1331,10 @@ workPanel.innerHTML = `
   </form>
   <p id="workPayrollStatus" role="status"></p>
   <div id="workPayrollRows"></div>
-  <button type="button" id="workPayrollDownload" class="primary" hidden>Download QuickBooks CSV</button>
+  <div id="workPayrollActions" hidden>
+   <button type="button" id="workPayrollDownload" class="primary">Download QuickBooks CSV</button>
+   <button type="button" id="workPayrollPrint">Print / Save as PDF</button>
+  </div>
  </section>
  <section data-work-panel="sites" hidden>
   <h3>Work sites and geofencing</h3>
@@ -2346,6 +2351,15 @@ workAssignmentForm.onsubmit=async e=>{
 };
 
 const workPayrollForm=$('workPayrollForm');
+const workPayrollActions=$('workPayrollActions');
+const workPayrollPrintReport=document.createElement('article');
+workPayrollPrintReport.id='workPayrollPrintReport';
+workPayrollPrintReport.hidden=true;
+document.body.append(workPayrollPrintReport);
+window.addEventListener('afterprint',()=>{
+ document.body.classList.remove('printingPayroll');
+ workPayrollPrintReport.replaceChildren();
+});
 let workPayrollPreview=null,workPayrollChoices=new Map();
 const workPayrollIssueLabels={
  'missing-clock-in':'No clock-in matched this scheduled shift',
@@ -2364,14 +2378,15 @@ function workPayrollReset(){
  workPayrollChoices.clear();
  $('workPayrollRows').replaceChildren();
  $('workPayrollStatus').textContent='';
- $('workPayrollDownload').hidden=true;
+ workPayrollActions.hidden=true;
 }
 function workPayrollTotals(employee,treatment){
  const preview=workPayrollPreview;
  const seconds=preview.breaks==='include'?employee.gross:employee.net;
  const overtime=treatment==='overtime'?Math.max(0,seconds-preview.threshold*3600):0;
  const totalCents=Math.round(seconds/36),overtimeCents=Math.round(overtime/36);
- return {regular:((totalCents-overtimeCents)/100).toFixed(2),overtime:(overtimeCents/100).toFixed(2)};
+ return {regular:((totalCents-overtimeCents)/100).toFixed(2),overtime:(overtimeCents/100).toFixed(2),
+  total:(totalCents/100).toFixed(2)};
 }
 function workPayrollSelection(){
  if(!workPayrollPreview)return;
@@ -2389,7 +2404,7 @@ function workPayrollSelection(){
   selected++;
   if(!value||workPayrollHardStop(employee)||(review&&!review.checked))blocked=true;
  }
- $('workPayrollDownload').hidden=blocked||selected===0;
+ workPayrollActions.hidden=blocked||selected===0;
 }
 function workPayrollRender(){
  const result=workPayrollPreview;
@@ -2421,15 +2436,20 @@ $('workPayrollRows').onchange=e=>{
  workPayrollSelection();
 };
 workPayrollForm.oninput=e=>{
- if(e.target.name==='start'){
-  const start=e.target;
+ if(e.target.name==='start'||e.target.name==='period'){
+  workPayrollChoices.clear();
+  const {start,period}=workPayrollForm.elements;
+  const matchQuickBooks=period.value==='quickbooks';
+  start.min=matchQuickBooks?'2000-01-01':'2000-01-02';
+  start.step=matchQuickBooks?'1':'7';
+  $('workPayrollOvertimeHelp').hidden=!matchQuickBooks;
   $('workPayrollRange').textContent=start.value&&start.validity.valid
    ? `${dateLabel(start.value)} through ${dateLabel(shiftDate(start.value,6))}`
-   : 'Choose the Sunday that starts the pay period.';
+   : matchQuickBooks?'Choose the first date shown under Pay period in QuickBooks.':'Choose the Sunday that starts the pay period.';
  }
  workPayrollPreview=null;
  $('workPayrollRows').replaceChildren();
- $('workPayrollDownload').hidden=true;
+ workPayrollActions.hidden=true;
  $('workPayrollStatus').textContent='';
 };
 workPayrollForm.onsubmit=async e=>{
@@ -2439,12 +2459,12 @@ workPayrollForm.onsubmit=async e=>{
  button.disabled=true;
  $('workPayrollStatus').textContent='Loading recorded hours…';
  try{
-  const result=await workApi(workPayrollQuery(data.start,data.break_after));
+  const result=await workApi(workPayrollQuery(data));
   if(signedIn!==user||version!==workVersion)return;
   const current=Object.fromEntries(new FormData(workPayrollForm));
-  if(['start','threshold','breaks','break_after'].some(key=>data[key]!==current[key]))return;
+  if(Object.keys(data).some(key=>data[key]!==current[key]))return;
   for(const choice of workPayrollChoices.values())choice.reviewed=false;
-  workPayrollPreview={...result,threshold:Number(data.threshold),breaks:data.breaks,break_after:data.break_after};
+  workPayrollPreview={...data,...result,threshold:Number(data.threshold)};
 
   workPayrollRender();
  }catch(err){if(signedIn===user&&version===workVersion)$('workPayrollStatus').textContent=err.message;}
@@ -2455,42 +2475,58 @@ function workPayrollCsvCell(value){
  if(/^[\s]*[=+@-]|^[\t\r\n]/.test(text))text="'"+text;
  return '"'+text.replaceAll('"','""')+'"';
 }
-function workPayrollQuery(start,breakAfter){
- return 'payroll?'+new URLSearchParams({start,break_after:breakAfter}).toString();
+function workPayrollQuery({start,period,break_after}){
+ return 'payroll?'+new URLSearchParams({start,period,break_after}).toString();
 }
-$('workPayrollDownload').onclick=async e=>{
- if(!workData?.export_payroll||!workPayrollPreview||$('workPayrollDownload').hidden)return;
- const button=e.currentTarget,signedIn=user,version=workVersion,preview=workPayrollPreview;
+async function workPayrollExport(format){
+ const buttons=workPayrollActions.querySelectorAll('button');
+ if(!workData?.export_payroll||!workPayrollPreview||workPayrollActions.hidden||buttons[0].disabled)return;
+ const signedIn=user,version=workVersion,preview=workPayrollPreview;
  const {start,end,employees}=preview;
- button.disabled=true;
+ for(const button of buttons)button.disabled=true;
  try{
-  const latest=await workApi(workPayrollQuery(start,preview.break_after));
-  if(user!==signedIn||version!==workVersion||workPayrollPreview!==preview||button.hidden)return;
+  const latest=await workApi(workPayrollQuery(preview));
+  if(user!==signedIn||version!==workVersion||workPayrollPreview!==preview||workPayrollActions.hidden)return;
   if(latest.unlinked!==preview.unlinked||JSON.stringify(latest.employees)!==JSON.stringify(employees)){
    for(const choice of workPayrollChoices.values())choice.reviewed=false;
    workPayrollPreview={...preview,...latest};
    workPayrollRender();
-   $('workPayrollStatus').textContent='Time records changed since the preview. Review the updated hours and flags before downloading.';
+   $('workPayrollStatus').textContent='Time records changed since the preview. Review the updated hours and flags before exporting.';
    return;
   }
  }catch(err){
   if(user===signedIn&&version===workVersion)$('workPayrollStatus').textContent=err.message;
   return;
- }finally{button.disabled=false;}
+ }finally{for(const button of buttons)button.disabled=false;}
+ const rows=employees.filter(employee=>workPayrollChoices.get(employee.account)?.included).map(employee=>({
+  name:employee.name,...workPayrollTotals(employee,workPayrollChoices.get(employee.account).treatment)
+ }));
+ if(format==='print')workPayrollPrint(preview,rows);
+ else workPayrollCsv(start,end,rows);
+}
+$('workPayrollDownload').onclick=()=>workPayrollExport('csv');
+$('workPayrollPrint').onclick=()=>workPayrollExport('print');
+function workPayrollCsv(start,end,rows){
  const lines=[['Employee','Pay Period Start','Pay Period End','Regular Hours','Overtime Hours']];
- for(const employee of employees){
-  const choice=workPayrollChoices.get(employee.account);
-  if(!choice?.included)continue;
-  const totals=workPayrollTotals(employee,choice.treatment);
-  lines.push([employee.name,start,end,totals.regular,totals.overtime]);
- }
+ for(const row of rows)lines.push([row.name,start,end,row.regular,row.overtime]);
  const file=new Blob([lines.map(line=>line.map(workPayrollCsvCell).join(',')).join('\r\n')+'\r\n'],{type:'text/csv;charset=utf-8'});
  const url=URL.createObjectURL(file),link=document.createElement('a');
  link.href=url;
- link.download=`quickbooks-payroll-${start}.csv`;
+ link.download=`quickbooks-payroll-${start}-to-${end}.csv`;
  link.click();
  setTimeout(()=>URL.revokeObjectURL(url),1000);
-};
+}
+function workPayrollPrint({start,end,breaks},rows){
+ workPayrollPrintReport.innerHTML=`<h1>Payroll Hours Report</h1>
+  <p>MGC YFC Operations · ${esc(dateLabel(start))} through ${esc(dateLabel(end))}</p>
+  <p>Hours are shown in decimal format. Recorded breaks ${breaks==='include'?'included':'excluded'}.</p>
+  <table>
+   <thead><tr><th scope="col">Employee</th><th scope="col">Regular Hours</th><th scope="col">Overtime Hours</th><th scope="col">Total Hours</th></tr></thead>
+   <tbody>${rows.map(row=>`<tr><th scope="row">${esc(row.name)}</th><td>${row.regular}</td><td>${row.overtime}</td><td>${row.total}</td></tr>`).join('')}</tbody>
+  </table>`;
+ document.body.classList.add('printingPayroll');
+ window.print();
+}
 
 let workTimeCards=[],workCardPeople=[],workEditingCard=null,workAuditNext=0;
 function workCardReset(){
