@@ -144,7 +144,7 @@ def run():
                 employee.locator('#login button').click()
                 employee.locator('#sectionChooserForm button').click()
                 expect(employee.locator('#jobs')).to_contain_text('Phone customer')
-                expect(employee.locator('#settingsTab')).to_be_hidden()
+                expect(employee.locator('#settingsTab')).to_be_visible()  # Appearance is available to every user.
                 employee.locator('[data-edit]').click()
                 employee.locator('#jobForm [name=notes]').fill('Call before arrival')
                 employee.locator('#save').click()

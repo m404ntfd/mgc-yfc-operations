@@ -91,3 +91,17 @@ body[data-section="receipts"] .primary{background:#067a06;color:white}
 :root[data-theme=dark] .primary{background:#ac2835;color:white}
 :root[data-theme=dark] #appearanceStatus{color:#9fe1b0}
 @media print{:root[data-theme=dark],:root[data-theme=dark] body,:root[data-theme=dark] #reportOutput,:root[data-theme=dark] #reportOutput *{background:white!important;color:black!important;color-scheme:light}}
+
+/* Live store connection and guest identity remain separate. */
+.statusDot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:7px;background:#299e55;vertical-align:middle;flex:none}
+#connectionDot[data-connection-state=online]{animation:serverPulse 2.4s ease-in-out infinite}
+#connectionDot[data-connection-state=offline]{background:#ed4245;animation:serverPulse 2.4s ease-in-out infinite}
+#connectionDot[data-connection-state=update]{animation:serverUpdate 2.4s steps(1,end) infinite}
+#loggedOutStatus{font-size:12px;margin-top:8px}.signedOutDot{background:#359bf4}
+@keyframes serverPulse{50%{opacity:.3}}@keyframes serverUpdate{0%,100%{background:#299e55}50%{background:#ffc83d}}
+.loginShowcase #desktopFallback{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+.loginShowcase #pauseVideo{left:50%;bottom:9%;transform:translateX(-50%);opacity:0;pointer-events:none;transition:opacity .2s}
+.loginShowcase:hover #pauseVideo,.loginShowcase:focus-within #pauseVideo{opacity:1;pointer-events:auto}
+@media(hover:none){.loginShowcase #pauseVideo{opacity:1;pointer-events:auto}}
+@media(max-width:740px){body[data-section=signin] .connectionInfo{display:block;width:100%;max-width:none}body[data-section=signin] #connection{max-width:none}}
+@media(prefers-reduced-motion:reduce){#connectionDot[data-connection-state]{animation:none}#connectionDot[data-connection-state=update]{background:#ffc83d}}

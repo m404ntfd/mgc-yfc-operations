@@ -1,9 +1,10 @@
-# MGC YFC Operations 0.23.0
+# MGC YFC Operations 0.24.0
 
-- Adds a Receipt Upload page from the login button and Receipts & Accounting.
-- Supports mobile camera/photo selection and desktop file upload, with Settings-managed categories/codes.
-- Adds Submit, Submit & Start New, Reset and Return to Dashboard. Signed-in users return to their chosen starting page; guests return to sign-in. Public uploads do not grant dashboard access.
-- Stores receipts and categories in the server database, included in existing database backups. Administrators can review submitted files in Settings > Receipts.
-- Email delivery remains pending the requested recipient list and email layout; confirmations explicitly report server storage, not sent mail.
+- Adds Settings > Appearance: Light mode, Dark mode, or Use system settings. Available to all signed-in users; saved per browser/device and follows live system changes.
+- Fixes desktop login autoplay with muted playback, and replaces blocked or failed video with its static ministry image.
+- Centers the video pause/play control in the lower section; reveals it on hover or keyboard focus.
+- Adds a slowly flashing green connection dot, alternating yellow/green when a server update is available, and flashing red when the application cannot reach the store server.
+- Shows a blue dot and “No User Currently Logged In” below the server status while signed out, including on mobile.
+- Retains receipt uploads, daily starting-page preferences, account security, Dispatch Journal, and compatible backups from previous releases.
 
-Use Check for Updates on the host server, install and restart, then reload browsers. The Windows installer is also provided for desktop installations. Existing data paths and installation identity are preserved.
+Install using Check for Updates on the host server, restart, then reload browsers. Existing installation identity, customer data paths, and update ZIP format are preserved.
