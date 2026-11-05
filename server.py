@@ -910,7 +910,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send({'permissions':PERMISSIONS,'users':[{'name':r['name'],'grants':json.loads(r['body'])} for r in c.execute('SELECT * FROM user_grants')]})
                 if self.path=='/api/admin/users':
                     if not any(has_permission(u, permission) for permission in ('manage_users','reset_passwords','rename_users')):
-                        raise Problem('User management permission required.',403)
+                        raise Problem('Administrator access required.',403)
                     return self.send({'users':[dict(r) for r in c.execute('SELECT users.name,admin,COALESCE(permissions.can_create,1) AS can_create,COALESCE(permissions.see_requests,admin) AS see_requests FROM users LEFT JOIN permissions ON users.name=permissions.name ORDER BY users.name')]})
                 if self.path=='/api/admin/backup-settings':
                     if not route_allowed(u,self.path): raise Problem('Administrator access required.',403)
