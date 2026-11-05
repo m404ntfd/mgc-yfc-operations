@@ -1317,9 +1317,10 @@ workPanel.innerHTML = `
  </form></dialog>
  <section data-work-panel="payroll" hidden>
   <h3>QuickBooks Online Payroll</h3>
-  <p>Preview a completed seven-day workweek using recorded punches. Select employees on one QuickBooks pay schedule and confirm their overtime treatment before downloading.</p>
+  <p>Preview recorded punches for a completed Sunday-to-Saturday pay period. Select employees on one QuickBooks pay schedule and confirm their overtime treatment before downloading.</p>
   <form id="workPayrollForm" class="workForm">
-   <label>First day of payroll workweek<input name="start" type="date" required></label>
+   <label>Pay period start (Sunday)<input name="start" type="date" min="2000-01-02" max="2100-12-31" step="7" aria-describedby="workPayrollRange" required></label>
+   <p id="workPayrollRange" role="status">Choose the Sunday that starts the pay period.</p>
    <label>Weekly overtime threshold (hours)<input name="threshold" type="number" min="1" max="168" step="0.25" value="40" required></label>
    <label>Flag no recorded break at this many hours<input name="break_after" type="number" min="0" max="48" step="0.25" value="5.5" required></label>
    <p>Use 0 to review all worked shifts with no break recorded. A flag does not mean a break was required.</p>
@@ -2419,7 +2420,13 @@ $('workPayrollRows').onchange=e=>{
  workPayrollChoices.set(row.dataset.payrollAccount,{included:row.querySelector('[data-payroll-include]').checked,treatment:row.querySelector('select').value,reviewed:row.querySelector('[data-payroll-reviewed]')?.checked??false});
  workPayrollSelection();
 };
-workPayrollForm.oninput=()=>{
+workPayrollForm.oninput=e=>{
+ if(e.target.name==='start'){
+  const start=e.target;
+  $('workPayrollRange').textContent=start.value&&start.validity.valid
+   ? `${dateLabel(start.value)} through ${dateLabel(shiftDate(start.value,6))}`
+   : 'Choose the Sunday that starts the pay period.';
+ }
  workPayrollPreview=null;
  $('workPayrollRows').replaceChildren();
  $('workPayrollDownload').hidden=true;

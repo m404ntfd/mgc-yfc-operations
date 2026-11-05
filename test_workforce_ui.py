@@ -198,7 +198,12 @@ def run():
                              {'account':'open','name':'Incomplete','gross':1800,'net':1800,'open_punch':True}]
             }))
             payroll=manager.locator('#workPayrollForm')
-            payroll.locator('[name=start]').fill('2025-01-05')
+            pay_start=payroll.locator('[name=start]')
+            pay_start.fill('2025-01-06')
+            assert pay_start.evaluate('(input)=>input.validity.stepMismatch')
+            pay_start.fill('2025-01-05')
+            expect(payroll.locator('#workPayrollRange')).to_contain_text('Sunday')
+            expect(payroll.locator('#workPayrollRange')).to_contain_text('Saturday')
             expect(payroll.locator('[name=threshold]')).to_have_value('40')
             expect(payroll.locator('[name=break_after]')).to_have_value('5.5')
             expect(payroll.locator('[name=breaks]')).to_have_value('exclude')
@@ -220,6 +225,7 @@ def run():
             with exported.value.path().open(newline='',encoding='utf-8') as file:
                 rows=list(csv.DictReader(file))
             assert len(rows)==1 and rows[0]['Employee']=='Staff'
+            assert rows[0]['Pay Period Start']=='2025-01-05' and rows[0]['Pay Period End']=='2025-01-11'
             assert rows[0]['Regular Hours']=='40.00' and rows[0]['Overtime Hours']=='3.00'
             payroll.locator('[name=threshold]').fill('41')
             payroll.locator('[name=break_after]').fill('6')

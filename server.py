@@ -985,10 +985,10 @@ def work_payroll_preview(c,start_value,break_after=DEFAULT_PAYROLL_BREAK_HOURS):
     try:
         start=dt.date.fromisoformat(start_value)
         end=start+dt.timedelta(days=6)
-        if not 2000<=start.year<=2100 or end>=dt.date.today():
+        if not 2000<=start.year<=2100 or start.weekday()!=6 or end>=dt.date.today():
             raise ValueError()
     except (TypeError,ValueError,OverflowError):
-        raise Problem('Choose the first day of a completed seven-day payroll workweek.')
+        raise Problem('Choose the Sunday that starts a completed payroll week.')
     try:
         break_threshold=float(break_after)
         if not 0<=break_threshold<=48: raise ValueError()
