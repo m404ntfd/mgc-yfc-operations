@@ -103,7 +103,25 @@ def section_options(u):
     if has_permission(u,'view_schedule'): options.append({'id':'dispatch','label':'Thrift Mart Dispatch'})
     if has_permission(u,'send_pages') or has_permission(u,'receive_pages'): options.append({'id':'paging','label':'Store Associate Paging'})
     options.append({'id':'receipts','label':'Receipts & Accounting'})
+    options.append({'id':'print','label':'Print with a Purpose'})
     return options
+
+SESSION_MAX_SECONDS=24*60*60
+SESSION_ACTIVE_SECONDS=5*60
+
+def new_session(name,admin,now=None):
+    now=time.time() if now is None else now
+    tomorrow=dt.datetime.fromtimestamp(now).date()+dt.timedelta(days=1)
+    midnight=dt.datetime.combine(tomorrow,dt.time()).timestamp()
+    return {'name':name,'admin':bool(admin),'expires':now+SESSION_MAX_SECONDS,
+            'midnight':midnight,'last_activity':now}
+
+def session_valid(session,now=None):
+    now=time.time() if now is None else now
+    if not session or now>=session['expires']: return False
+    if now>=session.get('midnight',0):
+        return now-session.get('last_activity',0)<SESSION_ACTIVE_SECONDS
+    return True
 
 def valid_credential(p): return 8<=len(p)<=256 or (len(p)==4 and all(c in '0123456789' for c in p))
 def password(p,s): return hashlib.pbkdf2_hmac('sha256',p.encode(),bytes.fromhex(s),200000).hex()
@@ -326,7 +344,9 @@ class Handler(BaseHTTPRequestHandler):
         cookie=SimpleCookie(); cookie.load(self.headers.get('Cookie',''))
         token=cookie.get('session'); token=token.value if token else ''
         session=SESSIONS.get(token)
-        if not session or session['expires']<time.time(): raise Problem('Please sign in again.',401)
+        if not session_valid(session):
+            SESSIONS.pop(token,None)
+            raise Problem('Your session has ended. Please sign in again.',401)
         with connect() as c:
             permission=c.execute('SELECT * FROM permissions WHERE name=?',(session['name'],)).fetchone()
         with connect() as c:
@@ -360,6 +380,7 @@ class Handler(BaseHTTPRequestHandler):
                 if self.path=='/api/receipt-categories':
                     return self.send({'categories':[r[0] for r in c.execute('SELECT code FROM receipt_categories ORDER BY code')]})
                 u=self.user()
+                if self.path=='/api/account/lease': return self.send({'ok':True})
                 if self.path=='/api/admin/receipts':
                     if not u['admin']: raise Problem('Administrator access required.',403)
                     return self.send({'receipts':[dict(r) for r in c.execute('SELECT id,at,actor,category,filename FROM receipts ORDER BY at DESC LIMIT 200')]})
@@ -474,8 +495,8 @@ class Handler(BaseHTTPRequestHandler):
                         if locked_at: raise Problem('Account locked. Ask an administrator or authorized employee to unlock it.',423)
                         raise Problem('Incorrect name or password.',401)
                     c.execute('DELETE FROM account_lockouts WHERE name=?',(r['name'],))
-                    token=secrets.token_urlsafe(32); SESSIONS[token]={'name':r['name'],'admin':bool(r['admin']),'expires':time.time()+43200}
-                    return self.send({'ok':True},cookie=f'session={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200')
+                    token=secrets.token_urlsafe(32); SESSIONS[token]=new_session(r['name'],r['admin'])
+                    return self.send({'ok':True},cookie=f'session={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=86400')
                 if self.path=='/api/receipt-submit':
                     # This is intentionally public. Never grants a session or schedule access.
                     category=d.get('category'); ident=d.get('id'); filename=d.get('filename')
@@ -501,6 +522,9 @@ class Handler(BaseHTTPRequestHandler):
                     c.execute('INSERT INTO receipts VALUES(?,?,?,?,?,?,?,?)',(ident,time.time(),actor,category,filename,mime,body,source))
                     return self.send({'ok':True,'id':ident,'email_pending':True})
                 u=self.user()
+                if self.path=='/api/account/activity':
+                    u['last_activity']=time.time()
+                    return self.send({'ok':True})
                 if self.path=='/api/account/appearance':
                     mode=d.get('mode')
                     if mode not in ('light','dark','system'):raise Problem('Choose Light, Dark or Use system settings.')

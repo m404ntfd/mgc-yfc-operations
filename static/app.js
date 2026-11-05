@@ -28,10 +28,10 @@ async function pollServerConnection(){try{const r=await api('connection-status')
 setServerConnection(true);setInterval(pollServerConnection,15000);pollServerConnection();
 const localDate=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 $('date').value=localDate(new Date());
-$('mobileLink').href=location.origin+'/mobile';$('mobileLink').textContent=location.origin+'/mobile';
-async function api(path,data){let r;try{r=await fetch('/api/'+path,{method:data?'POST':'GET',headers:data?{'Content-Type':'application/json','X-Dispatch':'1'}:{},body:data?JSON.stringify(data):undefined,signal:AbortSignal.timeout(20000)});if(r.status>=500)throw Error('Server unavailable');setServerConnection(true);}catch(e){setServerConnection(false);throw e;}const v=await r.json();if(!r.ok){if(r.status===401&&user){user=null;updateSignedInUser();clearInterval(timer);$('app').hidden=true;$('paging').hidden=true;$('receipts').hidden=true;setSectionHeader('Sign in','signin');$('auth').hidden=false;$('editor').close();$('passwordDialog').close();$('statusDialog').close();}throw Error(v.error||'Request failed');}return v;}
+
+async function api(path,data){let r;try{r=await fetch('/api/'+path,{method:data?'POST':'GET',headers:data?{'Content-Type':'application/json','X-Dispatch':'1'}:{},body:data?JSON.stringify(data):undefined,signal:AbortSignal.timeout(20000)});if(r.status>=500)throw Error('Server unavailable');setServerConnection(true);}catch(e){setServerConnection(false);throw e;}const v=await r.json();if(!r.ok){if(r.status===401&&user){user=null;stopPaging();document.body.classList.remove('settingsView');document.querySelectorAll('dialog[open]').forEach(d=>d.close());$('storeMenu').hidden=true;$('receiptUpload').hidden=true;updateSignedInUser();clearInterval(timer);$('app').hidden=true;$('paging').hidden=true;$('receipts').hidden=true;$('print').hidden=true;setSectionHeader('Sign in','signin');$('auth').hidden=false;$('editor').close();$('passwordDialog').close();$('statusDialog').close();}throw Error(v.error||'Request failed');}return v;}
 function toast(s){$('toast').textContent=s;$('toast').hidden=false;setTimeout(()=>$('toast').hidden=true,5000);}
-async function boot(){try{const s=await api('session');if(location.hash==='#login'){if(s.user){await api('logout',{});s.user=null;}history.replaceState(null,'',location.pathname+location.search);}setup=s.setup;user=s.user;if(user){const pref=await api('account/appearance');window.appAppearance.set(pref.mode);$('appearanceMode').value=pref.mode;}lockRepository();if(!user){if(typeof stopPaging==='function')stopPaging();$('paging').hidden=true;$('receipts').hidden=true;setSectionHeader('Sign in','signin');$('sectionChooser').close();expandedAppointments.clear();$('requestsList').hidden=true;}updateSignedInUser();$('authTitle').textContent=setup?'Set up your store':'Welcome back';$('authHelp').textContent=setup?(s.local?'Create the administrator account. Then add your vehicles and employees.':'Open http://localhost:8080 on the server computer to create the first account.'):'Sign in to your operations workspace.';$('auth').hidden=!!user;$('app').hidden=!user;$('connection').textContent=user?'Connected to store':'Store server online';if(user){$('settingsTab').hidden=false;$('serverUpdateButton').hidden=!user.admin;if(!user.admin)tab('day');if(can('view_schedule'))await refresh();else applyPermissions();clearInterval(timer);timer=setInterval(()=>{if(can('view_schedule'))refresh().catch(()=>{});},10000);if(location.hash==='#settings'){tab('settings');if(can('check_updates'))settingsSection(2);history.replaceState(null,'',location.pathname+location.search);}else await chooseLanding();}}catch(e){$('connection').textContent='Server unavailable';$('offline').hidden=false;toast(e.message);}}
+async function boot(){try{const s=await api('session');if(location.hash==='#login'){if(s.user){await api('logout',{});s.user=null;}history.replaceState(null,'',location.pathname+location.search);}setup=s.setup;user=s.user;if(user){const pref=await api('account/appearance');window.appAppearance.set(pref.mode);$('appearanceMode').value=pref.mode;}lockRepository();if(!user){if(typeof stopPaging==='function')stopPaging();$('paging').hidden=true;$('receipts').hidden=true;$('print').hidden=true;setSectionHeader('Sign in','signin');$('sectionChooser').close();expandedAppointments.clear();$('requestsList').hidden=true;}updateSignedInUser();$('authTitle').textContent=setup?'Set up your store':'Welcome back';$('authHelp').textContent=setup?(s.local?'Create the administrator account. Then add your vehicles and employees.':'Open http://localhost:8080 on the server computer to create the first account.'):'Sign in to your operations workspace.';$('auth').hidden=!!user;$('app').hidden=!user;$('connection').textContent=user?'Connected to store':'Store server online';if(user){$('settingsTab').hidden=false;$('serverUpdateButton').hidden=!user.admin;if(!user.admin)tab('day');if(can('view_schedule'))await refresh();else applyPermissions();clearInterval(timer);timer=setInterval(()=>{if(can('view_schedule'))refresh().catch(()=>{});},10000);if(location.hash==='#settings'){tab('settings');if(can('check_updates'))settingsSection(1);history.replaceState(null,'',location.pathname+location.search);}else await chooseLanding();}}catch(e){$('connection').textContent='Server unavailable';$('offline').hidden=false;toast(e.message);}}
 async function refresh(){try{state=await api('state');user.can_create=state.permissions.can_create;user.see_requests=state.permissions.see_requests;user.grants=state.permissions.grants;renderRequests();$('connection').textContent='Connected · '+new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});$('offline').hidden=true;const value=$('filter').value;$('filter').innerHTML='<option value="">All vehicles</option>'+state.vehicles.map(v=>`<option>${esc(v)}</option>`).join('');$('filter').value=value;render();applyPermissions();checkUpdateNotice();$('vehicles').innerHTML=state.vehicles.map(v=>`<div class="listRow">${esc(v)}</div>`).join('')||'<p>No vehicles yet.</p>';$('users').innerHTML=state.users.map(v=>`<div class="listRow">${esc(v.name)}${v.admin?' · Administrator':''} <button type="button" data-password="${esc(v.name)}">Edit user / permissions</button></div>`).join('');}catch(e){if(e.message.includes('Schedule access required')){$('connection').textContent='Connected · schedule permission required';$('offline').hidden=true;toast('Ask an administrator to enable View schedule, search and filter in your employee permissions.');}else{$('connection').textContent='Disconnected';$('offline').hidden=false;}throw e;}}
 function filtered(){const q=can('show_search')?$('search').value.toLowerCase():'';return state.jobs.filter(j=>(!$('statusFilter').value||j.status===$('statusFilter').value)&&(!can('show_vehicle_filter')||!$('filter').value||j.vehicle===$('filter').value)&&(!q||Object.values(j).join(' ').toLowerCase().includes(q)));}
 function timeLabel(s){return new Date(s).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});}
@@ -75,7 +75,7 @@ function render(){
  for(const [id,selected]of [['dayTab',mode==='day'&&day===today],['weekTab',weekly&&from===weekStart(today)],['nextWeekTab',weekly&&from===shiftDate(weekStart(today),7)],['settingsTab',mode==='settings']]){$(id).classList.toggle('selected',selected);$(id).setAttribute('aria-pressed',String(selected));}
  $('prev').setAttribute('aria-label',weekly?'Previous week':'Previous day');$('next').setAttribute('aria-label',weekly?'Next week':'Next day');
 }
-function tab(t){mode=t;document.body.classList.toggle('settingsView',t==='settings');if(t==='settings'){setSectionHeader('Settings','settings');$('app').hidden=false;$('paging').hidden=true;$('receipts').hidden=true;$('receiptUpload').hidden=true;}else if(user)setSectionHeader('Thrift Mart Dispatch','dispatch');if(t==='settings'){if(can('check_updates'))loadUpdates();if(can('backup_settings')||can('create_backups'))loadBackups();if(can('unlock_users'))loadLoginSecurity();if(user.admin)loadReceiptSettings();settingsSection(8);}$('schedule').hidden=['settings','reports'].includes(t);$('settings').hidden=t!=='settings';$('reports').hidden=t!=='reports';if(t==='reports')loadReport();render();}
+function tab(t){mode=t;document.body.classList.toggle('settingsView',t==='settings');if(t==='settings'){setSectionHeader('Settings','settings');$('app').hidden=false;$('paging').hidden=true;$('receipts').hidden=true;$('print').hidden=true;$('receiptUpload').hidden=true;}else if(user)setSectionHeader('Thrift Mart Dispatch','dispatch');if(t==='settings'){if(can('check_updates'))loadUpdates();if(can('backup_settings')||can('create_backups'))loadBackups();if(can('unlock_users'))loadLoginSecurity();if(user.admin)loadReceiptSettings();settingsSection(7);}$('schedule').hidden=['settings','reports'].includes(t);$('settings').hidden=t!=='settings';$('reports').hidden=t!=='reports';if(t==='reports')loadReport();render();}
 function quickView(offset){const today=localDate(new Date());$('date').value=offset===null?today:shiftDate(weekStart(today),offset);tab(offset===null?'day':'week');}
 function openJob(id,type){if(user.can_create&&!state.vehicles.length){toast('Add a vehicle in Settings first.');if(user.admin)tab('settings');return;}editing=id?[...state.jobs,...(state.requests||[])].find(j=>j.id===id):null;$('jobForm').reset();$('jobForm').elements.status.innerHTML=(user.can_create?['Scheduled','In Route / In Progress','Completed','Canceled']:['Requested','Canceled']).map(v=>`<option value="${v}">${v==='Canceled'?'Cancelled':v}</option>`).join('');$('jobVehicle').innerHTML=state.vehicles.map(v=>`<option>${esc(v)}</option>`).join('');const j=editing||{state:'MS',type:type||'Pickup',status:user.can_create?'Scheduled':'Requested',start:$('date').value+'T09:00',end:$('date').value+'T10:00'};for(const [k,v]of Object.entries(j))if($('jobForm').elements[k])$('jobForm').elements[k].value=v;
 $('jobForm').elements.street.value=Object.hasOwn(j,'street')?j.street:(j.address||'');$('legacyAddress').hidden=!editing||!!j.street;
@@ -84,7 +84,7 @@ for(const name of ['end','vehicle']){form.elements[name].closest('label').hidden
 $('employeeDropdown').closest('.employeeField').hidden=!user.can_create;
 if(!user.can_create){form.elements.start.value='';form.elements.end.value='';}
 layoutRequestForm();renderReviewPhotos();$('editor').showModal();}
-$('login').onsubmit=async e=>{e.preventDefault();try{const wasSetup=setup;await api(setup?'setup':'login',Object.fromEntries(new FormData(e.target)));e.target.reset();await boot();if(wasSetup){tab('settings');settingsSection(3);}}catch(err){$('authError').textContent=err.message;}};
+$('login').onsubmit=async e=>{e.preventDefault();try{const wasSetup=setup;await api(setup?'setup':'login',Object.fromEntries(new FormData(e.target)));e.target.reset();await boot();if(wasSetup){tab('settings');settingsSection(2);}}catch(err){$('authError').textContent=err.message;}};
 $('logout').onclick=async()=>{try{await api('logout',{});clearInterval(timer);await boot();}catch(e){toast(e.message);}};
 $('dayTab').onclick=()=>quickView(null);$('weekTab').onclick=()=>quickView(0);$('nextWeekTab').onclick=()=>quickView(7);$('settingsTab').onclick=()=>tab('settings');$('addPickup').onclick=()=>openJob(null,'Pickup');$('addDelivery').onclick=()=>openJob(null,'Delivery');$('close').onclick=()=>$('editor').close();$('date').onchange=()=>{if(!$('date').value)$('date').value=localDate(new Date());tab('day');};$('filter').onchange=render;$('statusFilter').onchange=render;$('search').oninput=render;
 for(const [id,step]of [['prev',-1],['next',1]])$(id).onclick=()=>{$('date').value=shiftDate($('date').value,step*(mode==='week'?7:1));render();};
@@ -113,7 +113,7 @@ async function loadBackups(){try{const r=await api('admin/backup-settings');$('b
 $('backupConfig').onsubmit=async e=>{e.preventDefault();try{await api('admin/backup-settings',{folder:$('backupFolder').value,enabled:$('backupEnabled').checked,journal_enabled:$('journalEnabled').checked,journal_days:Number($('journalDays').value)});$('backupStatus').textContent='Settings saved. Use Back up now to verify the destination.';}catch(err){$('backupStatus').textContent=err.message;}};
 $('cloudBackup').onclick=async()=>{$('cloudBackup').disabled=true;$('backupStatus').textContent='Creating a complete backup…';try{const r=await api('admin/backup-now',{});await loadBackups();}catch(e){$('backupStatus').textContent=e.message;}finally{$('cloudBackup').disabled=false;}};
 
-$('serverUpdateButton').onclick=()=>{tab('settings');settingsSection(2);$('updatePanel').scrollIntoView({behavior:'smooth',block:'start'});$('checkUpdate').click();};
+$('serverUpdateButton').onclick=()=>{tab('settings');settingsSection(1);$('updatePanel').scrollIntoView({behavior:'smooth',block:'start'});$('checkUpdate').click();};
 $('users').onclick=e=>{const b=e.target.closest('[data-password]');if(!b)return;$('passwordForm').reset();$('passwordUser').value=b.dataset.password;$('passwordError').textContent='';const person=state.users.find(u=>u.name===b.dataset.password);$('canCreate').checked=!!person.can_create;$('seeRequests').checked=!!person.see_requests;$('canCreate').disabled=!!person.admin;$('permissionMessage').textContent='';loadPermissionList(b.dataset.password);$('passwordDialog').showModal();};
 function closePassword(){$('passwordForm').reset();$('passwordDialog').close();}
 $('passwordClose').onclick=closePassword;
@@ -145,7 +145,7 @@ $('statusForm').onsubmit=async e=>{
  finally{$('statusSave').disabled=false;}
 };
 
-$('accountButton').onclick=()=>{$('accountForm').reset();$('accountError').textContent='';$('accountDialog').showModal();};
+$('accountButton').onclick=()=>chooseLanding().catch(e=>toast(e.message));
 $('accountClose').onclick=()=>$('accountDialog').close();
 $('accountForm').onsubmit=async e=>{e.preventDefault();const button=e.target.querySelector('button.primary');button.disabled=true;try{await api('account/password',Object.fromEntries(new FormData(e.target)));$('accountDialog').close();e.target.reset();await boot();toast('Login updated. Sign in with your new password or passcode.');}catch(err){$('accountError').textContent=err.message;}finally{button.disabled=false;}};
 
@@ -180,11 +180,11 @@ $('appearanceMode').value=window.appAppearance.preference;
 $('appearanceMode').onchange=async()=>{const select=$('appearanceMode'),previous=window.appAppearance.preference;select.disabled=true;try{const r=await api('account/appearance',{mode:select.value});window.appAppearance.set(r.mode);$('appearanceStatus').textContent='Appearance saved to your account.';}catch(e){select.value=previous;$('appearanceStatus').textContent=e.message;}finally{select.disabled=false;}};
 const settingsPanels=[...$('settings').children];
 const settingsTabs=document.createElement('nav');settingsTabs.className='settingsTabs';settingsTabs.setAttribute('aria-label','Settings sections');
-const settingsNames=['Phone Access','Backups','Updates','Vehicles','Employees','Recent Changes','Login Security','Receipts','Appearance'];
-function settingsAllowed(i){return i===0||i===8||!!user?.admin||([[],['backup_settings','create_backups'],['check_updates','configure_updates','install_updates'],['manage_vehicles'],['manage_users','reset_passwords'],['view_audit'],['unlock_users'],[],[]][i]||[]).some(can);}
+const settingsNames=['Backups','Updates','Vehicles','Employees','Recent Changes','Login Security','Receipts','Appearance'];
+function settingsAllowed(i){return i===7||!!user?.admin||([['backup_settings','create_backups'],['check_updates','configure_updates','install_updates'],['manage_vehicles'],['manage_users','reset_passwords'],['view_audit'],['unlock_users'],[],[]][i]||[]).some(can);}
 function settingsSection(index){settingsPanels.forEach((panel,i)=>panel.hidden=i!==index||!settingsAllowed(i));[...settingsTabs.children].forEach((button,i)=>{button.hidden=!settingsAllowed(i);button.classList.toggle('selected',i===index);button.setAttribute('aria-pressed',String(i===index));});}
 settingsPanels.forEach((panel,i)=>{const button=document.createElement('button');button.type='button';button.textContent=settingsNames[i];button.onclick=()=>settingsSection(i);settingsTabs.append(button);});
-$('settings').prepend(settingsTabs);settingsSection(0);
+$('settings').prepend(settingsTabs);settingsSection(7);
 
 function updateSignedInUser(){ $('loggedOutStatus').hidden=!!user; $('signedInUser').textContent=user?'Signed in as '+user.name:'';$('signedInUser').hidden=!user; }
 
@@ -204,7 +204,7 @@ function applyPermissions(){
  $('settingsTab').hidden=false;
  $('serverUpdateButton').hidden=!can('check_updates');
  $('reportsTab').hidden=!can('view_reports');
- $('accountButton').hidden=!can('change_own_password');$('remove').hidden=!editing||!can('delete_appointments');
+ $('accountButton').hidden=false;$('remove').hidden=!editing||!can('delete_appointments');
  $('addPickup').hidden=$('addDelivery').hidden=!(can('create_appointments')||can('submit_requests'));
 }
 
@@ -286,20 +286,21 @@ $('photoPreviewDialog').addEventListener('close',()=>{$('largePhoto').removeAttr
 $('jobs').addEventListener('keydown',e=>{const header=e.target.closest('[data-toggle-appointment]');if(header&&(e.key==='Enter'||e.key===' ')){e.preventDefault();const id=header.dataset.toggleAppointment;header.click();document.querySelector(`[data-toggle-appointment="${id}"]`)?.focus();}});
 
 let pagingEnabled=false,pagingTimer=null,lastPageId=0,pagingBusy=false;
-const appearanceMenu=document.createElement('button');appearanceMenu.type='button';appearanceMenu.id='appearanceMenu';appearanceMenu.textContent='Settings / Appearance';appearanceMenu.onclick=()=>{storeSection('dispatch');tab('settings');};$('storeMenu').append(appearanceMenu);
+const appearanceMenu=document.createElement('button');appearanceMenu.type='button';appearanceMenu.id='appearanceMenu';appearanceMenu.textContent='Settings';appearanceMenu.onclick=()=>{$('storeMenu').hidden=true;$('storeMenuButton').setAttribute('aria-expanded','false');tab('settings');};$('storeMenu').append(appearanceMenu);
 $('storeMenuButton').onclick=()=>{const open=$('storeMenu').hidden;$('storeMenu').hidden=!open;$('storeMenuButton').setAttribute('aria-expanded',String(open));};
 function storeSection(section){
  section=section===true?'paging':section===false?'dispatch':section;document.body.classList.remove('settingsView');$('settings').hidden=true;
  $('receiptUpload').hidden=true;
  $('storeMenu').hidden=true;$('storeMenuButton').setAttribute('aria-expanded','false');
  if(!user){toast('Sign in first.');return;}
- if(!['dispatch','paging','receipts'].includes(section))section='dispatch';
+ if(!['dispatch','paging','receipts','print'].includes(section))section='dispatch';
  if(section==='paging'&&!can('send_pages')&&!can('receive_pages')){toast('Ask an administrator for paging permission.');return;}
- $('paging').hidden=section!=='paging';$('app').hidden=section!=='dispatch';$('receipts').hidden=section!=='receipts';
+ $('paging').hidden=section!=='paging';$('app').hidden=section!=='dispatch';$('receipts').hidden=section!=='receipts';$('print').hidden=section!=='print';
  if(section==='dispatch')quickView(null);
- setSectionHeader({dispatch:'Thrift Mart Dispatch',paging:'Store Associate Paging',receipts:'Receipts & Accounting'}[section],section);
+ setSectionHeader({dispatch:'Thrift Mart Dispatch',paging:'Store Associate Paging',receipts:'Receipts & Accounting',print:'Print with a Purpose'}[section],section);
  $('pagingForm').hidden=!can('send_pages');$('enablePaging').disabled=!can('receive_pages')||pagingEnabled;
 }
+$('printSection').onclick=()=>storeSection('print');
 $('receiptsSection').onclick=()=>storeSection('receipts');
 $('pagingSection').onclick=()=>storeSection(true);$('dispatchSection').onclick=()=>storeSection(false);$('backDispatch').onclick=()=>storeSection(false);
 function sayPage(text){const speech=new SpeechSynthesisUtterance(text);speech.rate=.9;speech.onerror=()=>{$('pageReceiverStatus').textContent='Audio playback failed. Enable the speaker again and test the volume.';};window.speechSynthesis.speak(speech);}
@@ -312,12 +313,12 @@ async function pollPages(){if(!pagingEnabled||pagingBusy||!user)return;pagingBus
 function setSectionHeader(title,section){
  section=section===true?'dispatch':section===false?'signin':section;
  $('currentSection').textContent=title;document.body.dataset.section=section;
- document.querySelector('meta[name="theme-color"]').content=({dispatch:'#b51f2b',paging:'#7a1520',receipts:'#067a06'})[section]||'#215baa';
+ document.querySelector('meta[name="theme-color"]').content=({dispatch:'#b51f2b',paging:'#7a1520',receipts:'#067a06',print:'#00ffff'})[section]||'#215baa';
 }
 let requestedReceipts=false;
 function populateDailySections(preference){
  const choices=$('sectionChoices');choices.replaceChildren();
- for(const id of ['dispatch','paging','receipts'])$(id+'Section').hidden=!preference.options.some(o=>o.id===id);
+ for(const id of ['dispatch','paging','receipts','print'])$(id+'Section').hidden=!preference.options.some(o=>o.id===id);
  for(const option of preference.options){const label=document.createElement('label');label.className='sectionChoice';const input=document.createElement('input');input.type='radio';input.name='section';input.value=option.id;input.required=true;input.checked=option.id===(requestedReceipts?'receipts':preference.section||preference.options[0].id);label.append(input,document.createTextNode(option.label));choices.append(label);}
  $('sectionChoiceError').textContent='';$('sectionDay').textContent=preference.date+' (server calendar day)';
 }
@@ -369,13 +370,14 @@ function pickReceipt(input){receiptFile=input.files[0]||null;receiptId=null;$('r
 $('receiptFile').onchange=()=>pickReceipt($('receiptFile'));$('receiptCamera').onchange=()=>pickReceipt($('receiptCamera'));
 $('receiptCameraButton').onclick=()=>$('receiptCamera').click();$('receiptGalleryButton').onclick=()=>$('receiptFile').click();
 async function openReceiptUpload(){
- $('receiptForm').reset();$('auth').hidden=true;$('app').hidden=true;$('paging').hidden=true;$('receipts').hidden=true;$('storeMenu').hidden=true;$('receiptUpload').hidden=false;
+ $('receiptForm').reset();$('auth').hidden=true;$('app').hidden=true;$('paging').hidden=true;$('receipts').hidden=true;$('print').hidden=true;$('storeMenu').hidden=true;$('receiptUpload').hidden=false;
  setSectionHeader('Receipt Upload','receipts');$('receiptCategory').replaceChildren(new Option('Select a category / code',''));$('receiptCategoryHelp').textContent='Loading categories…';
  try{const r=await api('receipt-categories');for(const code of r.categories)$('receiptCategory').add(new Option(code,code));$('receiptCategoryHelp').textContent=r.categories.length?'':'An administrator needs to add receipt categories in Settings before you can submit.';}
  catch(e){$('receiptCategoryHelp').textContent=e.message;}
 }
 $('openReceiptUpload').onclick=openReceiptUpload;
 $('receiptForm').onreset=resetReceipt;
+$('receiptReset').onclick=()=>{if(receiptBusy)return;if(confirm('Reset this receipt form? Your selected file and entered information will be cleared.')){$('receiptForm').reset();toast('Receipt form reset.');}else toast('No changes have been made.');};
 $('receiptReturn').onclick=async()=>{if(receiptBusy)return;$('receiptUpload').hidden=true;await boot();};
 $('receiptForm').onsubmit=async e=>{
  e.preventDefault();if(receiptBusy)return;
@@ -411,3 +413,12 @@ $('shareYfcButton').onclick=()=>{shareDialog.showModal();$('shareResult').textCo
 $('shareNative').onclick=async()=>{try{await navigator.share({title:'Mississippi Gulf Coast Youth for Christ',text:'Share YFC with Someone',url:shareUrl});shareDialog.close();}catch(e){if(e.name!=='AbortError')$('shareResult').textContent='Sharing was unavailable. Please use text or email.';}};
 
 window.addEventListener("hashchange",()=>{if(["#login","#settings"].includes(location.hash))boot();});
+
+// Only real foreground interaction renews activity; background polling does not.
+let lastActivitySent=0;
+function reportActivity(event){
+ if(!event.isTrusted||!user||document.visibilityState!=='visible'||Date.now()-lastActivitySent<30000)return;
+ lastActivitySent=Date.now();api('account/activity',{}).catch(e=>toast(e.message));
+}
+for(const event of ['pointerdown','keydown','input','wheel','touchstart'])document.addEventListener(event,reportActivity,{passive:true});
+setInterval(()=>{if(user)api('account/lease').catch(e=>toast(e.message));},15000);

@@ -126,3 +126,6 @@ input[type=checkbox]{width:18px;height:18px;min-height:0;flex:none;vertical-alig
 @media(prefers-reduced-motion:reduce){.settingsTabs button.selected,#loggedOutStatus .statusDot{animation:none}}
 
 #unlockRepository{margin-top:10px}
+
+body[data-section=print]>header,#storeMenu #printSection{background:#00ffff;color:#000}
+body[data-section=print] #storeMenuButton{color:#000;border-color:#006666}
