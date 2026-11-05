@@ -17,11 +17,17 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self,*args,**kwargs):return None
 
 class Client:
-    def __init__(self,address):
+    def __init__(self,address,local_control=None,session_path=None):
         self.address=normalize_address(address)
-        self.opener=urllib.request.build_opener(urllib.request.ProxyHandler({}),NoRedirect(),urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+        if local_control and urllib.parse.urlsplit(self.address).hostname not in ('localhost','127.0.0.1','::1'):raise ValueError('Local sign-in requires the server computer.')
+        self.local_control=local_control;self.session_path=session_path;self.session_token=None
+        self.cookies=http.cookiejar.CookieJar()
+        self.opener=urllib.request.build_opener(urllib.request.ProxyHandler({}),NoRedirect(),urllib.request.HTTPCookieProcessor(self.cookies))
     def request(self,path,data=None):
-        req=urllib.request.Request(self.address+'/api/'+path,data=None if data is None else json.dumps(data).encode(),headers={'X-Dispatch':'1','X-Dispatch-Activity':'1','Content-Type':'application/json'})
+        headers={'X-Dispatch':'1','X-Dispatch-Activity':'1','Content-Type':'application/json'}
+        if self.local_control:headers['X-Local-Control']=self.local_control
+        if self.session_token:headers['Cookie']='session='+self.session_token
+        req=urllib.request.Request(self.address+'/api/'+path,data=None if data is None else json.dumps(data).encode(),headers=headers)
         try:
             with self.opener.open(req,timeout=60 if path=='update-install' else 30) as r:return json.loads(r.read(1024*1024))
         except urllib.error.HTTPError as e:
@@ -36,9 +42,29 @@ class Client:
         if r.get('application')!='thrift-mart-dispatch':raise ValueError('This is not a compatible MGC YFC Operations Server. Install server version 0.3.0 or newer.')
         return r
     def login(self,name,password):
-        self.probe();self.request('login',{'name':name,'password':password})
+        self.session_token=None
+        payload={'name':name,'password':password}
+        if self.local_control:payload.update(local_admin=True,local_control_token=self.local_control)
+        self.probe();self.request('login',payload)
         s=self.request('session')
         if not s.get('user',{}).get('admin'):
             self.request('logout',{})
             raise ValueError('Remote management requires an administrator account. Employees can use Open schedule in browser.')
-        return self.request('admin/status')
+        result=self.request('admin/status')
+        if self.local_control and self.session_path:
+            from native_auth import save_token
+            token=next(cookie.value for cookie in self.cookies if cookie.name=='session')
+            save_token(self.session_path,token)
+        return result
+
+    def restore_local_session(self):
+        if not self.local_control or not self.session_path:return None
+        from native_auth import load_token
+        self.session_token=load_token(self.session_path)
+        if not self.session_token:return None
+        session=self.probe()
+        if session.get('user') and session['user'].get('admin'):return self.request('admin/status')
+        self.session_token=None
+        from pathlib import Path
+        Path(self.session_path).unlink(missing_ok=True)
+        return None
