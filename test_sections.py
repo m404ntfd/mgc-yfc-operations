@@ -9,7 +9,7 @@ def run():
   Fixture.call('setup',{'name':'Admin','password':'testpassword'})
   with sync_playwright() as p:
    browser=p.chromium.launch();page=browser.new_page(viewport={'width':390,'height':844});errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
-   page.goto(f'http://127.0.0.1:{Fixture.port}')
+   page.emulate_media(reduced_motion='reduce');page.goto(f'http://127.0.0.1:{Fixture.port}')
    page.locator('#login [name=name]').fill('Admin');page.locator('#login [name=password]').fill('testpassword');page.locator('#login button').click()
    page.locator('[name=section][value=receipts]').check();page.locator('#sectionChooserForm button').click()
    expect(page.locator('#receipts')).to_be_visible();expect(page.locator('#storeMenuButton')).to_contain_text('MGC YFC Operations');expect(page.locator('#currentSection')).to_have_text('Receipts & Accounting')

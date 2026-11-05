@@ -14,7 +14,7 @@ def run():
    browser=p.chromium.launch();page=browser.new_page(viewport={'width':390,'height':844});errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
    base=f'http://127.0.0.1:{Fixture.port}'
    def login(name,password):
-    page.goto(base);page.locator('#login [name=name]').fill(name);page.locator('#login [name=password]').fill(password);page.locator('#login button').click();page.locator('#sectionChooserForm button').click();page.locator('#settingsTab').click();page.get_by_role('button',name='Login Security',exact=True).click()
+    page.emulate_media(reduced_motion='reduce');page.goto(base);page.locator('#login [name=name]').fill(name);page.locator('#login [name=password]').fill(password);page.locator('#login button').click();page.locator('#sectionChooserForm button').click();page.locator('#settingsTab').click();page.get_by_role('button',name='Login Security',exact=True).click()
    login('Admin','testpassword');expect(page.locator('#maxLoginAttempts')).to_have_value('5');page.locator('#maxLoginAttempts').fill('2');page.locator('#loginSecurityForm button').click();expect(page.locator('#loginSecurityMessage')).to_have_text('Login attempt limit saved.')
    for _ in range(2):Fixture.call('login',{'name':'Brad','password':'bad'})
    page.locator('#refreshLockouts').click();expect(page.locator('#lockedAccounts')).to_contain_text('Brad')
