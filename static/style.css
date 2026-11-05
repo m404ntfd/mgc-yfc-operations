@@ -69,3 +69,25 @@ body[data-section=paging]>header{background:#7a1520}body[data-section=receipts]>
 .receiptUploadPanel{max-width:720px;margin:24px auto}.receiptActions,.receiptFileButtons{display:flex;flex-wrap:wrap;gap:12px;margin:18px 0}.receiptActions button{min-height:48px}#receiptResult{overflow-wrap:anywhere}#receiptShortcut{background:#067a06;color:white;padding:12px 22px;border-radius:8px;text-decoration:none}#receiptCodes{width:100%}@media(min-width:900px){#receiptCameraButton{display:none}}
 
 body[data-section="receipts"] .primary{background:#067a06;color:white}
+
+/* Device appearance; brand headers and dispatch status colors retain their meaning. */
+:root[data-theme=dark]{background:#111821;color:#e6edf5;color-scheme:dark}
+:root[data-theme=dark] :is(.panel,.job,dialog,#storeMenu,.receiptShortcut,.cell,.empty,.totalCard,.reportRecord){background:#1c2734;color:#e6edf5;border-color:#46576b}
+:root[data-theme=dark] :is(input,select,textarea,button){background:#263547;color:#e6edf5;border-color:#52657c}
+:root[data-theme=dark] button:hover{background:#34485f}
+:root[data-theme=dark] :is(p,.muted,.summary,.weekday,.time,.job .meta,.job p,.cell span,.totalDates,.totalNumbers span,#authHelp,.receiptShortcut p,#replayIntro){color:#bccbda}
+:root[data-theme=dark] a{color:#9ccaff}
+:root[data-theme=dark] :is(.actions,.receiptUploadPanel,#reportOutput){background:#1c2734;color:#e6edf5}
+:root[data-theme=dark] :is(nav .selected,.sectionChoice:has(input:checked),.cell.chosen){background:#294661;color:#fff;border-color:#9ccaff}
+:root[data-theme=dark] :is(nav button,.eyebrow,#auth .eyebrow){color:#bfd8f5}
+:root[data-theme=dark] :is(.tag,.delivery .tag){background:#44516a;color:#fff}
+:root[data-theme=dark] #pendingOverview{background:#332d1b;color:#ffdf8c;border-color:#88733a}
+:root[data-theme=dark] :is(.pendingBreakdown strong,.totalNumbers strong .pendingTotal){color:#ffdf8c}
+:root[data-theme=dark] :is(#auth .intro h1,#receipts h1){color:#8cdca5}
+:root[data-theme=dark] body[data-section=signin]>header{background:#1c2734;color:#e6edf5}
+:root[data-theme=dark] :is(#loginBrand,body[data-section=signin] .connectionInfo){color:#e6edf5}
+:root[data-theme=dark] #loginBrand img{background:white;border-radius:6px;padding:4px}
+:root[data-theme=dark] :is(#formError,#authError,#passwordError,#sectionChoiceError,.danger){color:#ffada9}
+:root[data-theme=dark] .primary{background:#ac2835;color:white}
+:root[data-theme=dark] #appearanceStatus{color:#9fe1b0}
+@media print{:root[data-theme=dark],:root[data-theme=dark] body,:root[data-theme=dark] #reportOutput,:root[data-theme=dark] #reportOutput *{background:white!important;color:black!important;color-scheme:light}}

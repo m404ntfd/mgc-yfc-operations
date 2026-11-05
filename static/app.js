@@ -1,3 +1,16 @@
+// Restore this device’s appearance before initializing the application.
+(()=>{
+ 'use strict';
+ const key='yfc-appearance', media=matchMedia('(prefers-color-scheme: dark)');
+ let preference='system';
+ try{const saved=localStorage.getItem(key);if(['light','dark','system'].includes(saved))preference=saved;}catch{}
+ function apply(){const mode=preference==='system'?(media.matches?'dark':'light'):preference;document.documentElement.dataset.theme=mode;document.documentElement.style.colorScheme=mode;}
+ window.appAppearance={get preference(){return preference;},set(value){preference=['light','dark','system'].includes(value)?value:'system';apply();try{localStorage.setItem(key,preference);return true;}catch{return false;}}};
+ media.addEventListener('change',apply);
+ window.addEventListener('storage',e=>{if(e.key===key||e.key===null){preference=['light','dark','system'].includes(e.newValue)?e.newValue:'system';apply();const select=document.getElementById('appearanceMode');if(select)select.value=preference;}});
+ apply();
+})();
+
 'use strict';
 const $=id=>document.getElementById(id), esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let state={jobs:[],vehicles:[],users:[]},user,setup=false,mode='day',editing=null,timer;
@@ -6,7 +19,7 @@ $('date').value=localDate(new Date());
 $('mobileLink').href=location.origin+'/mobile';$('mobileLink').textContent=location.origin+'/mobile';
 async function api(path,data){const r=await fetch('/api/'+path,{method:data?'POST':'GET',headers:data?{'Content-Type':'application/json','X-Dispatch':'1'}:{},body:data?JSON.stringify(data):undefined});const v=await r.json();if(!r.ok){if(r.status===401&&user){user=null;updateSignedInUser();clearInterval(timer);$('app').hidden=true;$('paging').hidden=true;$('receipts').hidden=true;setSectionHeader('Sign in','signin');$('auth').hidden=false;$('editor').close();$('passwordDialog').close();$('statusDialog').close();}throw Error(v.error||'Request failed');}return v;}
 function toast(s){$('toast').textContent=s;$('toast').hidden=false;setTimeout(()=>$('toast').hidden=true,5000);}
-async function boot(){try{const s=await api('session');setup=s.setup;user=s.user;if(!user){if(typeof stopPaging==='function')stopPaging();$('paging').hidden=true;$('receipts').hidden=true;setSectionHeader('Sign in','signin');$('sectionChooser').close();expandedAppointments.clear();$('requestsList').hidden=true;}updateSignedInUser();$('authTitle').textContent=setup?'Set up your store':'Welcome back';$('authHelp').textContent=setup?(s.local?'Create the administrator account. Then add your vehicles and employees.':'Open http://localhost:8080 on the server computer to create the first account.'):'Sign in to your operations workspace.';$('auth').hidden=!!user;$('app').hidden=!user;$('connection').textContent=user?'Connected to store':'Store server online';if(user){$('settingsTab').hidden=!user.admin;$('serverUpdateButton').hidden=!user.admin;if(!user.admin)tab('day');if(can('view_schedule'))await refresh();else applyPermissions();clearInterval(timer);timer=setInterval(()=>{if(can('view_schedule'))refresh().catch(()=>{});},10000);await chooseLanding();}}catch(e){$('connection').textContent='Server unavailable';$('offline').hidden=false;toast(e.message);}}
+async function boot(){try{const s=await api('session');setup=s.setup;user=s.user;if(!user){if(typeof stopPaging==='function')stopPaging();$('paging').hidden=true;$('receipts').hidden=true;setSectionHeader('Sign in','signin');$('sectionChooser').close();expandedAppointments.clear();$('requestsList').hidden=true;}updateSignedInUser();$('authTitle').textContent=setup?'Set up your store':'Welcome back';$('authHelp').textContent=setup?(s.local?'Create the administrator account. Then add your vehicles and employees.':'Open http://localhost:8080 on the server computer to create the first account.'):'Sign in to your operations workspace.';$('auth').hidden=!!user;$('app').hidden=!user;$('connection').textContent=user?'Connected to store':'Store server online';if(user){$('settingsTab').hidden=false;$('serverUpdateButton').hidden=!user.admin;if(!user.admin)tab('day');if(can('view_schedule'))await refresh();else applyPermissions();clearInterval(timer);timer=setInterval(()=>{if(can('view_schedule'))refresh().catch(()=>{});},10000);await chooseLanding();}}catch(e){$('connection').textContent='Server unavailable';$('offline').hidden=false;toast(e.message);}}
 async function refresh(){try{state=await api('state');user.can_create=state.permissions.can_create;user.see_requests=state.permissions.see_requests;user.grants=state.permissions.grants;renderRequests();$('connection').textContent='● Connected · '+new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});$('offline').hidden=true;const value=$('filter').value;$('filter').innerHTML='<option value="">All vehicles</option>'+state.vehicles.map(v=>`<option>${esc(v)}</option>`).join('');$('filter').value=value;render();applyPermissions();checkUpdateNotice();$('vehicles').innerHTML=state.vehicles.map(v=>`<div class="listRow">${esc(v)}</div>`).join('')||'<p>No vehicles yet.</p>';$('users').innerHTML=state.users.map(v=>`<div class="listRow">${esc(v.name)}${v.admin?' · Administrator':''} <button type="button" data-password="${esc(v.name)}">Edit user / permissions</button></div>`).join('');}catch(e){if(e.message.includes('Schedule access required')){$('connection').textContent='Connected · schedule permission required';$('offline').hidden=true;toast('Ask an administrator to enable View schedule, search and filter in your employee permissions.');}else{$('connection').textContent='Disconnected';$('offline').hidden=false;}throw e;}}
 function filtered(){const q=can('show_search')?$('search').value.toLowerCase():'';return state.jobs.filter(j=>(!$('statusFilter').value||j.status===$('statusFilter').value)&&(!can('show_vehicle_filter')||!$('filter').value||j.vehicle===$('filter').value)&&(!q||Object.values(j).join(' ').toLowerCase().includes(q)));}
 function timeLabel(s){return new Date(s).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});}
@@ -50,7 +63,7 @@ function render(){
  for(const [id,selected]of [['dayTab',mode==='day'&&day===today],['weekTab',weekly&&from===weekStart(today)],['nextWeekTab',weekly&&from===shiftDate(weekStart(today),7)],['settingsTab',mode==='settings']]){$(id).classList.toggle('selected',selected);$(id).setAttribute('aria-pressed',String(selected));}
  $('prev').setAttribute('aria-label',weekly?'Previous week':'Previous day');$('next').setAttribute('aria-label',weekly?'Next week':'Next day');
 }
-function tab(t){mode=t;if(t==='settings'){loadUpdates();loadBackups();loadLoginSecurity();loadReceiptSettings();}$('schedule').hidden=['settings','reports'].includes(t);$('settings').hidden=t!=='settings';$('reports').hidden=t!=='reports';if(t==='reports')loadReport();render();}
+function tab(t){mode=t;if(t==='settings'){if(can('check_updates'))loadUpdates();if(can('backup_settings')||can('create_backups'))loadBackups();if(can('unlock_users'))loadLoginSecurity();if(user.admin)loadReceiptSettings();settingsSection(8);}$('schedule').hidden=['settings','reports'].includes(t);$('settings').hidden=t!=='settings';$('reports').hidden=t!=='reports';if(t==='reports')loadReport();render();}
 function quickView(offset){const today=localDate(new Date());$('date').value=offset===null?today:shiftDate(weekStart(today),offset);tab(offset===null?'day':'week');}
 function openJob(id,type){if(user.can_create&&!state.vehicles.length){toast('Add a vehicle in Settings first.');if(user.admin)tab('settings');return;}editing=id?[...state.jobs,...(state.requests||[])].find(j=>j.id===id):null;$('jobForm').reset();$('jobForm').elements.status.innerHTML=(user.can_create?['Scheduled','In Route / In Progress','Completed','Canceled']:['Requested','Canceled']).map(v=>`<option value="${v}">${v==='Canceled'?'Cancelled':v}</option>`).join('');$('jobVehicle').innerHTML=state.vehicles.map(v=>`<option>${esc(v)}</option>`).join('');const j=editing||{state:'MS',type:type||'Pickup',status:user.can_create?'Scheduled':'Requested',start:$('date').value+'T09:00',end:$('date').value+'T10:00'};for(const [k,v]of Object.entries(j))if($('jobForm').elements[k])$('jobForm').elements[k].value=v;
 $('jobForm').elements.street.value=Object.hasOwn(j,'street')?j.street:(j.address||'');$('legacyAddress').hidden=!editing||!!j.street;
@@ -140,10 +153,16 @@ $('lockedAccounts').onclick=async e=>{const b=e.target.closest('[data-unlock]');
 const receiptSettings=document.createElement('div');receiptSettings.className='panel';receiptSettings.id='receiptSettings';
 receiptSettings.innerHTML='<h2>Receipt categories / codes</h2><form id="receiptCategoryForm"><label>One category or code per line<textarea id="receiptCodes" rows="8" maxlength="20200"></textarea></label><button>Save receipt categories</button></form><p id="receiptSettingsResult" role="status"></p><h3>Submitted receipts</h3><button id="refreshReceipts" type="button">Refresh receipts</button><div id="receiptList"></div>';
 $('settings').append(receiptSettings);
+const appearancePanel=document.createElement('div');appearancePanel.className='panel';appearancePanel.id='appearanceSettings';
+appearancePanel.innerHTML='<h2>Appearance</h2><label for="appearanceMode">Color mode</label><select id="appearanceMode"><option value="light">Light mode</option><option value="dark">Dark mode</option><option value="system">Use system settings</option></select><p>Applies to this browser on this device. Your choice is remembered when you return.</p><p id="appearanceStatus" role="status"></p>';
+$('settings').append(appearancePanel);
+$('appearanceMode').value=window.appAppearance.preference;
+$('appearanceMode').onchange=()=>{const saved=window.appAppearance.set($('appearanceMode').value);$('appearanceStatus').textContent=saved?'Appearance saved.':'Appearance applied for this visit. Browser storage is unavailable.';};
 const settingsPanels=[...$('settings').children];
 const settingsTabs=document.createElement('nav');settingsTabs.className='settingsTabs';settingsTabs.setAttribute('aria-label','Settings sections');
-const settingsNames=['Phone Access','Backups','Updates','Vehicles','Employees','Recent Changes','Login Security','Receipts'];
-function settingsSection(index){settingsPanels.forEach((panel,i)=>panel.hidden=i!==index||(panel.id==='receiptSettings'&&!user?.admin));[...settingsTabs.children].forEach((button,i)=>{button.classList.toggle('selected',i===index);button.setAttribute('aria-pressed',String(i===index));});}
+const settingsNames=['Phone Access','Backups','Updates','Vehicles','Employees','Recent Changes','Login Security','Receipts','Appearance'];
+function settingsAllowed(i){return i===0||i===8||!!user?.admin||([[],['backup_settings','create_backups'],['check_updates','configure_updates','install_updates'],['manage_vehicles'],['manage_users','reset_passwords'],['view_audit'],['unlock_users'],[],[]][i]||[]).some(can);}
+function settingsSection(index){settingsPanels.forEach((panel,i)=>panel.hidden=i!==index||!settingsAllowed(i));[...settingsTabs.children].forEach((button,i)=>{button.hidden=!settingsAllowed(i);button.classList.toggle('selected',i===index);button.setAttribute('aria-pressed',String(i===index));});}
 settingsPanels.forEach((panel,i)=>{const button=document.createElement('button');button.type='button';button.textContent=settingsNames[i];button.onclick=()=>settingsSection(i);settingsTabs.append(button);});
 $('settings').prepend(settingsTabs);settingsSection(0);
 
@@ -162,7 +181,7 @@ function applyPermissions(){
  document.querySelectorAll('#jobs .editIcon').forEach(b=>b.hidden=!can('edit_appointments'));
  document.querySelectorAll('#jobs .statusUpdate').forEach(b=>b.hidden=!(can('update_status')||can('cancel_appointments')));
  for(const [selector,key] of [['.textCustomer','text_contacts'],['a[href^="tel:"]','call_contacts'],['a[aria-label^="Navigate"]','navigate']])document.querySelectorAll(selector).forEach(el=>el.hidden=!can(key));
- $('settingsTab').hidden=!user.admin&&!['backup_settings','create_backups','check_updates','configure_updates','install_updates','manage_vehicles','manage_users','reset_passwords','view_audit','unlock_users'].some(can);
+ $('settingsTab').hidden=false;
  $('serverUpdateButton').hidden=!can('check_updates');
  $('reportsTab').hidden=!can('view_reports');
  $('accountButton').hidden=!can('change_own_password');$('remove').hidden=!editing||!can('delete_appointments');
@@ -247,6 +266,7 @@ $('photoPreviewDialog').addEventListener('close',()=>{$('largePhoto').removeAttr
 $('jobs').addEventListener('keydown',e=>{const header=e.target.closest('[data-toggle-appointment]');if(header&&(e.key==='Enter'||e.key===' ')){e.preventDefault();const id=header.dataset.toggleAppointment;header.click();document.querySelector(`[data-toggle-appointment="${id}"]`)?.focus();}});
 
 let pagingEnabled=false,pagingTimer=null,lastPageId=0,pagingBusy=false;
+const appearanceMenu=document.createElement('button');appearanceMenu.type='button';appearanceMenu.id='appearanceMenu';appearanceMenu.textContent='Settings / Appearance';appearanceMenu.onclick=()=>{storeSection('dispatch');tab('settings');};$('storeMenu').append(appearanceMenu);
 $('storeMenuButton').onclick=()=>{const open=$('storeMenu').hidden;$('storeMenu').hidden=!open;$('storeMenuButton').setAttribute('aria-expanded',String(open));};
 function storeSection(section){
  section=section===true?'paging':section===false?'dispatch':section;
