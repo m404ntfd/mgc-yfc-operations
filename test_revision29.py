@@ -21,6 +21,9 @@ class Revision29Tests(unittest.TestCase):
   call('admin/permissions',{'name':'Accounting','grants':{'view_all_receipts':True}})
   for i,name in enumerate(('Alice','Bob','Guest',None)):
    payload={'id':str(i)*32,'category':'Office','filename':('office' if name=='Alice' else 'other')+'.pdf','body':base64.b64encode(b'%PDF-1.4 test').decode()}
+   if name is None:
+    self.assertEqual(call('receipt-submit',payload,urllib.request.build_opener())[0],400)
+    payload['assignee']=next(person['id'] for person in call('receipt-users')[1]['users'] if person['name']=='Admin')
    self.assertEqual(call('receipt-submit',payload,clients[name] if name else urllib.request.build_opener())[0],200)
   for name in ('Alice','Bob','Guest'):
    code,r=call('receipts',client=clients[name]);self.assertEqual(code,200);self.assertEqual(r['total'],1);self.assertEqual(r['receipts'][0]['actor'],name)
