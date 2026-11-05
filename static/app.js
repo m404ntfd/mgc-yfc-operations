@@ -35,7 +35,7 @@ $('mobileLink').href=location.origin+'/mobile';$('mobileLink').textContent=locat
 async function api(path,data){let r;try{r=await fetch('/api/'+path,{method:data?'POST':'GET',headers:data?{'Content-Type':'application/json','X-Dispatch':'1'}:{},body:data?JSON.stringify(data):undefined,signal:AbortSignal.timeout(20000)});if(r.status>=500)throw Error('Server unavailable');setServerConnection(true);}catch(e){setServerConnection(false);throw e;}const v=await r.json();if(!r.ok){if(r.status===401&&user){user=null;updateSignedInUser();clearInterval(timer);$('app').hidden=true;$('paging').hidden=true;$('receipts').hidden=true;$('receiptHistory')?.setAttribute('hidden','');$('printPurpose')?.setAttribute('hidden','');setSectionHeader('Sign in','signin');$('auth').hidden=false;$('editor').close();$('passwordDialog').close();$('statusDialog').close();}throw Object.assign(Error(v.error||'Request failed'),{attemptsRemaining:v.attempts_remaining});}return v;}
 function toast(s){$('toast').textContent=s;$('toast').hidden=false;setTimeout(()=>$('toast').hidden=true,5000);}
 async function boot(){try{const s=await api('session');if(location.hash==='#login'){if(s.user){await api('logout',{pushDevice:commPushId()});s.user=null;}history.replaceState(null,'',location.pathname+location.search);}setup=s.setup;user=s.user;if(user){const pref=await api('account/appearance');window.appAppearance.set(pref.mode);$('appearanceMode').value=pref.mode;}lockRepository();if(!user){if(typeof stopPaging==='function')stopPaging();$('paging').hidden=true;$('receipts').hidden=true;$('receiptHistory')?.setAttribute('hidden','');$('printPurpose')?.setAttribute('hidden','');setSectionHeader('Sign in','signin');$('sectionChooser').close();expandedAppointments.clear();$('requestsList').hidden=true;}updateSignedInUser();$('authTitle').textContent=setup?'Set up your store':'Welcome back';$('authHelp').textContent=setup?(s.local?'Create the administrator account. Then add your vehicles and employees.':'Open http://localhost:8080 on the server computer to create the first account.'):'Sign in to your operations workspace.';$('auth').hidden=!!user;$('app').hidden=!user;$('connection').textContent=user?'Connected to store':'Store server online';if(user){$('settingsTab').hidden=false;$('serverUpdateButton').hidden=!user.admin;if(!user.admin)tab('day');if(can('view_schedule'))await refresh();else applyPermissions();clearInterval(timer);timer=setInterval(()=>{if(can('view_schedule'))refresh().catch(()=>{});},10000);if(location.hash==='#settings'){tab('settings');if(can('check_updates'))settingsSection(2);history.replaceState(null,'',location.pathname+location.search);}else if(location.hash==='#comms'){history.replaceState(null,'',location.pathname+location.search);await commOpen();}else await chooseLanding();}}catch(e){$('connection').textContent='Server unavailable';$('offline').hidden=false;toast(e.message);}}
-async function refresh(){try{state=await api('state');user.can_create=state.permissions.can_create;user.see_requests=state.permissions.see_requests;user.grants=state.permissions.grants;renderRequests();$('connection').textContent='Connected · '+new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});$('offline').hidden=true;const value=$('filter').value;$('filter').innerHTML='<option value="">All vehicles</option>'+state.vehicles.map(v=>`<option>${esc(v)}</option>`).join('');$('filter').value=value;render();applyPermissions();checkUpdateNotice();$('vehicles').innerHTML=state.vehicles.map(v=>`<div class="listRow">${esc(v)}</div>`).join('')||'<p>No vehicles yet.</p>';$('users').innerHTML=state.users.map(v=>`<div class="listRow">${esc(v.name)}${v.admin?' · Administrator':''} <button type="button" data-password="${esc(v.name)}">Edit user / permissions</button></div>`).join('');}catch(e){if(e.message.includes('Schedule access required')){$('connection').textContent='Connected · schedule permission required';$('offline').hidden=true;toast('Ask an administrator to enable View schedule, search and filter in your employee permissions.');}else{$('connection').textContent='Disconnected';$('offline').hidden=false;}throw e;}}
+async function refresh(){try{state=await api('state');user.can_create=state.permissions.can_create;user.see_requests=state.permissions.see_requests;user.grants=state.permissions.grants;renderRequests();$('connection').textContent='Connected · '+new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});$('offline').hidden=true;const value=$('filter').value;$('filter').innerHTML='<option value="">All vehicles</option>'+state.vehicles.map(v=>`<option>${esc(v)}</option>`).join('');$('filter').value=value;render();applyPermissions();checkUpdateNotice();$('vehicles').innerHTML=state.vehicles.map(v=>`<div class="listRow">${esc(v)}</div>`).join('')||'<p>No vehicles yet.</p>';renderUserList();}catch(e){if(e.message.includes('Schedule access required')){$('connection').textContent='Connected · schedule permission required';$('offline').hidden=true;toast('Ask an administrator to enable View schedule, search and filter in your employee permissions.');}else{$('connection').textContent='Disconnected';$('offline').hidden=false;}throw e;}}
 function filtered(){const q=can('show_search')?$('search').value.toLowerCase():'';return state.jobs.filter(j=>(!$('statusFilter').value||j.status===$('statusFilter').value)&&(!can('show_vehicle_filter')||!$('filter').value||j.vehicle===$('filter').value)&&(!q||Object.values(j).join(' ').toLowerCase().includes(q)));}
 function timeLabel(s){return new Date(s).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});}
 function shiftDate(date,days){const d=new Date(date+'T12:00');d.setDate(d.getDate()+days);return localDate(d);}
@@ -200,7 +200,7 @@ const settingsCategories=document.createElement('nav');settingsCategories.classN
 const settingsTabs=document.createElement('nav');settingsTabs.className='settingsTabs settingsSubcategories';settingsTabs.id='settingsSubcategories';settingsTabs.setAttribute('aria-label','Settings subcategories');
 const settingsEmpty=document.createElement('p');settingsEmpty.id='settingsEmpty';settingsEmpty.setAttribute('role','status');settingsEmpty.hidden=true;
 let selectedSettingsCategory=null;
-function settingsAllowed(i){return i!==0&&(i===8||i===9||!!user?.admin||([[],['backup_settings','create_backups'],['check_updates','configure_updates','install_updates'],['manage_vehicles'],['manage_users','reset_passwords','manage_roles'],['view_audit'],['unlock_users'],[],[],[]][i]||[]).some(can));}
+function settingsAllowed(i){return i!==0&&(i===8||i===9||!!user?.admin||([[],['backup_settings','create_backups'],['check_updates','configure_updates','install_updates'],['manage_vehicles'],['manage_users','reset_passwords','rename_users','manage_roles'],['view_audit'],['unlock_users'],[],[],[]][i]||[]).some(can));}
 function settingsCategory(index){selectedSettingsCategory=index;settingsPanels.forEach(panel=>panel.hidden=true);settingsTabs.replaceChildren();settingsEmpty.hidden=true;[...settingsCategories.children].forEach((button,i)=>{button.classList.toggle('selected',i===index);button.setAttribute('aria-pressed',String(i===index));});if(index===null)return;const panels=settingsGroups[index].panels.filter(settingsAllowed);for(const i of panels){const button=document.createElement('button');button.type='button';button.dataset.settingsPanel=i;button.textContent=settingsNames[i];button.onclick=()=>settingsSection(i);settingsTabs.append(button);}if(!panels.length){settingsEmpty.textContent='No settings are currently available in this category.';settingsEmpty.hidden=false;}}
 function settingsSection(index){if(!settingsAllowed(index))return;if(index===4)selectUserSettings();if(index===10)loadSharingSettings();if(index===11)loadPageColors(true);const group=settingsGroups.findIndex(g=>g.panels.includes(index));if(group!==selectedSettingsCategory)settingsCategory(group);settingsPanels.forEach((panel,i)=>panel.hidden=i!==index);[...settingsTabs.children].forEach(button=>{const selected=Number(button.dataset.settingsPanel)===index;button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected));});}
 settingsGroups.forEach((group,i)=>{const button=document.createElement('button');button.type='button';button.textContent=group.name;button.onclick=()=>settingsCategory(i);settingsCategories.append(button);});
@@ -521,8 +521,54 @@ for(const node of [...settingsPanels[4].childNodes])if(node!==openRoles&&node!==
 const heading=userSettingsPanel.querySelector('h2');if(heading)heading.textContent='Users';else userSettingsPanel.prepend(userSettingsHeading);
 userSettingsTabs.append(usersSettingsButton,openRoles);
 settingsPanels[4].prepend(userSettingsTabs,userSettingsPanel);
+function renderUserList(){
+ const edit=can('manage_users')||can('reset_passwords');
+ $('users').innerHTML=state.users.map(person=>{
+  const name=esc(person.name);
+  const rename=can('rename_users')&&(!person.admin||user.admin);
+  return `<div class="listRow"><span>${name}${person.admin?' · Administrator':''}</span>
+   <span>${rename?`<button type="button" data-rename-user="${name}">Edit name</button>`:''}
+   ${edit?`<button type="button" data-password="${name}">Edit user / permissions</button>`:''}</span></div>`;
+ }).join('');
+}
+async function loadUserList(){
+ const signedIn=user;
+ const {users}=await api('admin/users');
+ if(user===signedIn){state.users=users;renderUserList();}
+}
+const renameUserDialog=document.createElement('dialog');
+renameUserDialog.innerHTML='<form id="renameUserForm"><h2>Edit user name</h2><label>User name<input id="renameUserName" maxlength="80" required></label><p id="renameUserError" role="alert"></p><div class="actions"><button type="button" id="renameUserCancel">Cancel</button><button class="primary">Save name</button></div></form>';
+document.body.append(renameUserDialog);
+let renameUserTarget;
+$('users').addEventListener('click',e=>{
+ const button=e.target.closest('[data-rename-user]');
+ if(!button)return;
+ renameUserTarget=button.dataset.renameUser;
+ $('renameUserName').value=renameUserTarget;
+ $('renameUserError').textContent='';
+ renameUserDialog.showModal();
+});
+$('renameUserCancel').onclick=()=>renameUserDialog.close();
+$('renameUserForm').onsubmit=async e=>{
+ e.preventDefault();
+ const submit=e.submitter,signedIn=user;
+ submit.disabled=true;
+ $('renameUserError').textContent='';
+ try{
+  const result=await api('admin/rename-user',{name:renameUserTarget,new_name:$('renameUserName').value});
+  if(!user||user!==signedIn)return;
+  user.name=result.signed_in_name;
+  $('signedInUser').textContent='Signed in as '+user.name;
+  renameUserDialog.close();
+  toast('User name updated.');
+  if(can('view_schedule'))await refresh();else await loadUserList();
+ }catch(err){
+  if(renameUserDialog.open)$('renameUserError').textContent=err.message;else toast(err.message);
+ }finally{submit.disabled=false;}
+};
+
 function selectUserSettings(target){
- const usersAllowed=can('manage_users')||can('reset_passwords'),rolesAllowed=can('manage_roles');
+ const usersAllowed=can('manage_users')||can('reset_passwords')||can('rename_users'),rolesAllowed=can('manage_roles');
  const roles=rolesAllowed&&(target==='roles'||!usersAllowed);
  usersSettingsButton.hidden=!usersAllowed;openRoles.hidden=!rolesAllowed;
  userSettingsPanel.hidden=roles||!usersAllowed;rolesArea.hidden=!roles;
@@ -530,6 +576,10 @@ function selectUserSettings(target){
   button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected));
  }
  if(roles)loadRoles();
+ else if(usersAllowed){
+  $('userForm').hidden=!can('manage_users');
+  loadUserList().catch(e=>toast(e.message));
+ }
 }
 usersSettingsButton.onclick=()=>selectUserSettings('users');openRoles.onclick=()=>selectUserSettings('roles');$('roleSelect').onchange=showRole;
 $('roleForm').onsubmit=async e=>{e.preventDefault();const grants=Object.fromEntries([...$('rolePermissions').querySelectorAll('[data-role-grant]')].map(input=>[input.dataset.roleGrant,input.checked]));try{const payload={name:$('roleName').value,grants};if($('roleSelect').value)payload.id=Number($('roleSelect').value);const result=await api('roles',payload);await loadRoles(result.id);$('roleStatus').textContent='Role saved. Assigned users receive its updated permissions.';}catch(err){$('roleStatus').textContent=err.message;}};

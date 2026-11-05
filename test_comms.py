@@ -66,6 +66,18 @@ class CommunicationTests(unittest.TestCase):
         self.assertEqual(call('comms/status', client=blair)[1]['alerts'], False)
         self.assertEqual(call('comms/status', client=casey)[1]['unread'][0]['id'], group)
         self.assertEqual(call(f'comms/messages?thread={group}')[0], 404)
+        rename = dict(name='Blair', new_name='Blair Morgan')
+        self.assertEqual(call('admin/rename-user', rename, alex)[0], 403)
+        role = call('roles', dict(name='Name editor', grants={'rename_users': True}))[1]['id']
+        self.assertEqual(call('admin/user-role', dict(name='Alex', role_id=role))[0], 200)
+        self.assertEqual(call('admin/users', client=alex)[0], 200)
+        self.assertEqual(call('admin/rename-user', dict(name='Admin', new_name='Admin 2'), alex)[0], 403)
+        self.assertEqual(call('admin/rename-user', dict(name='Blair', new_name='Casey'), alex)[0], 409)
+        self.assertEqual(call('admin/rename-user', rename, alex)[0], 200)
+        self.assertEqual(call('session', client=blair)[1]['user']['name'], 'Blair Morgan')
+        self.assertEqual(call('comms/inbox', client=login('Blair Morgan'))[1]['account'], people['Blair'])
+        self.assertEqual(call('comms/saved', client=blair)[1]['messages'][0]['id'], message)
+        self.assertEqual(call('comms/inbox', client=blair)[1]['preferences'], prefs)
         # A reused name does not inherit the old account's conversations.
         self.assertEqual(call('admin/remove-user', dict(name='Casey'))[0], 200)
         self.assertEqual(call('user', dict(name='Casey', password=password))[0], 200)

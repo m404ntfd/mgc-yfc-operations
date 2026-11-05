@@ -488,7 +488,7 @@ PERMISSIONS={
  'text_contacts':'Show On Our Way text button', 'navigate':'Show navigation button',
  'manage_roles':'Create and edit permission roles',
  'manage_vehicles':'Add vehicles', 'manage_users':'Add/remove employees and edit permissions',
- 'unlock_users':'Unlock employee accounts after failed logins',
+ 'rename_users':'Edit user names', 'unlock_users':'Unlock employee accounts after failed logins',
  'reset_passwords':'Reset employee passwords/passcodes', 'change_own_password':'Change own password/passcode',
  'view_audit':'View recent changes', 'backup_settings':'Manage backup settings',
  'create_backups':'Create backups', 'check_updates':'Check server updates',
@@ -909,7 +909,8 @@ class Handler(BaseHTTPRequestHandler):
                     if not has_permission(u,'manage_users'): raise Problem('Administrator access required.',403)
                     return self.send({'permissions':PERMISSIONS,'users':[{'name':r['name'],'grants':json.loads(r['body'])} for r in c.execute('SELECT * FROM user_grants')]})
                 if self.path=='/api/admin/users':
-                    if not route_allowed(u,self.path): raise Problem('Administrator access required.',403)
+                    if not any(has_permission(u, permission) for permission in ('manage_users','reset_passwords','rename_users')):
+                        raise Problem('User management permission required.',403)
                     return self.send({'users':[dict(r) for r in c.execute('SELECT users.name,admin,COALESCE(permissions.can_create,1) AS can_create,COALESCE(permissions.see_requests,admin) AS see_requests FROM users LEFT JOIN permissions ON users.name=permissions.name ORDER BY users.name')]})
                 if self.path=='/api/admin/backup-settings':
                     if not route_allowed(u,self.path): raise Problem('Administrator access required.',403)
@@ -1259,6 +1260,48 @@ class Handler(BaseHTTPRequestHandler):
                 elif self.path=='/api/user':
                     if not route_allowed(u,self.path): raise Problem('Administrator access required.',403)
                     self.add_user(c,str(d.get('name','')).strip(),str(d.get('password','')),False)
+                elif self.path=='/api/admin/rename-user':
+                    if not has_permission(u,'rename_users'):
+                        raise Problem('Edit user names permission required.',403)
+                    previous,new_name=d.get('name'),d.get('new_name')
+                    if not isinstance(previous,str) or not isinstance(new_name,str):
+                        raise Problem('Enter a valid user name.')
+                    new_name=new_name.strip()
+                    if not 1<=len(new_name)<=80 or not new_name.isprintable() or new_name.casefold()=='guest':
+                        raise Problem('Enter a user name of 1–80 characters. Guest is reserved.')
+                    target=c.execute('SELECT name,admin FROM users WHERE name=?',(previous,)).fetchone()
+                    if not target: raise Problem('User not found.',404)
+                    if target['admin'] and not u['admin']:
+                        raise Problem('Only an administrator can rename an administrator account.',403)
+                    old_name=target['name']
+                    if old_name!=new_name:
+                        # Move the account's name keys together. Its profile ID and credentials stay the same.
+                        for table in ('users','permissions','daily_home','landing_preferences','account_lockouts',
+                                      'local_admin_sessions','user_roles','receipt_profiles','appearance_preferences','user_grants'):
+                            c.execute(f'UPDATE {table} SET name=? WHERE name=?',(new_name,old_name))
+                        for row in c.execute('SELECT id,body FROM jobs').fetchall():
+                            job=json.loads(row['body'])
+                            changed=False
+                            if job.get('requestedBy')==old_name:
+                                job['requestedBy']=new_name
+                                changed=True
+                            names=job.get('staffNames')
+                            if isinstance(names,list) and old_name in names:
+                                job['staffNames']=[new_name if name==old_name else name for name in names]
+                                job['staff']=', '.join(job['staffNames'])
+                                changed=True
+                            elif not names and job.get('staff')==old_name:
+                                job['staff']=new_name
+                                changed=True
+                            if changed:
+                                c.execute('UPDATE jobs SET body=?,revision=revision+1 WHERE id=?',(json.dumps(job),row['id']))
+                        actor=u['name']
+                        c.execute('INSERT INTO audit VALUES(?,?,?,?)',(dt.datetime.now().isoformat(timespec='seconds'),actor,
+                                  f'Renamed user: {old_name} → {new_name}',''))
+                        c.commit()
+                        for session in SESSIONS.values():
+                            if session['name']==old_name: session['name']=new_name
+                    return self.send({'name':new_name,'signed_in_name':u['name']})
                 elif self.path=='/api/admin/remove-user':
                     if not route_allowed(u,self.path): raise Problem('Administrator access required.',403)
                     target=c.execute('SELECT name,admin FROM users WHERE name=?',(str(d.get('name','')).strip(),)).fetchone()
