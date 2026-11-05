@@ -19,7 +19,7 @@ def run():
     if width==390:
      page.locator('[name=section][value=print]').check();page.locator('#sectionChooserForm button').click()
     expect(page.locator('#printPurpose')).to_be_visible()
-    assert page.locator('body>header').evaluate('(e)=>getComputedStyle(e).backgroundColor')=='rgb(0, 255, 255)'
+    assert page.locator('body>header').evaluate('(e)=>getComputedStyle(e).backgroundColor')=='rgb(7, 62, 166)'
     page.locator('#storeMenuButton').click();page.locator('#appearanceMenu').click()
     expect(page.locator('#printPurpose')).to_be_hidden();expect(page.locator('#currentSection')).to_have_text('Settings')
     expect(page.get_by_role('button',name='Phone Access',exact=True)).to_be_hidden()
