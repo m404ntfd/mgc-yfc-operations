@@ -43,6 +43,8 @@ def run():
                 page.locator('#userForm [name=name]').fill('Alex')
                 page.locator('#userForm [name=password]').fill('testpassword')
                 page.locator('#userForm button').click()
+                expect(page.locator('#addUserMessage')).to_have_text('User added successfully.')
+                page.locator('#addUserDone').click()
                 expect(page.locator('#users')).to_contain_text('Alex')
                 page.locator('#storeMenuButton').click();page.locator('#dispatchSection').click()
                 assert page.evaluate("weekStart('2026-10-31')") == '2026-10-25'
