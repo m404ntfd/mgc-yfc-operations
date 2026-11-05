@@ -11,7 +11,7 @@ class RemoteTests(test_server.Tests):
   self.assertEqual(self.call('setup',{'name':'RemoteAdmin','password':'testpassword'})[0],200)
   client=Client(f'127.0.0.1:{self.port}')
   self.assertEqual(client.probe()['application'],'thrift-mart-dispatch')
-  self.assertEqual(client.login('RemoteAdmin','testpassword')['name'],'Thrift Mart Dispatch Server')
+  self.assertEqual(client.login('RemoteAdmin','testpassword')['name'],'MGC YFC Operations Server')
   self.assertEqual(self.call('admin/restart',{})[0],400)  # direct server: no supervisor
   self.assertEqual(self.call('admin/backup-now',{})[0],400)
   with tempfile.TemporaryDirectory() as folder, tempfile.TemporaryDirectory() as dest:

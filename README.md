@@ -1,16 +1,16 @@
-# Thrift Mart Dispatch
+# MGC YFC Operations
 
-[Download the single Windows installer](https://github.com/m404ntfd/thriftmart_scheduling/releases/latest)
+[Download the single Windows installer](https://github.com/m404ntfd/mgc-yfc-operations/releases/latest)
 
 The installer offers **Server**, **Remote Manager**, or **Both**, with the required runtime bundled. Windows x64; no separate Python installation needed. It installs for the current Windows user.
 
 ## Store computer: Server
 
-Choose **Thrift Mart Dispatch Server**, then open its white-truck Start-menu shortcut. The server runs in a desktop window and can be minimized to the system tray. On that PC visit `http://localhost:8080` to create the first administrator. Add vehicles and employees in Settings. Phones use the staff-network address printed in the server window.
+Choose **MGC YFC Operations Server**, then open its white-truck Start-menu shortcut. The server runs in a desktop window and can be minimized to the system tray. On that PC visit `http://localhost:8080` to create the first administrator. Add vehicles and employees in Settings. Phones use the staff-network address printed in the server window.
 
 ## Other computer: Remote Manager
 
-Run the same installer and select **Thrift Mart Dispatch Remote Manager**. Enter the server IP/computer name and port (for example `192.168.1.50:8080`), test the connection, and sign in with a server administrator account. The native panel manages status, complete backups, restart and GitHub server updates. Schedule/account editing opens in the default browser and requires a separate browser sign-in.
+Run the same installer and select **MGC YFC Operations Remote Manager**. Enter the server IP/computer name and port (for example `192.168.1.50:8080`), test the connection, and sign in with a server administrator account. The native panel manages status, complete backups, restart and GitHub server updates. Schedule/account editing opens in the default browser and requires a separate browser sign-in.
 
 ## OneDrive backup
 
@@ -22,7 +22,7 @@ Each ZIP contains the schedule database (appointments, accounts, vehicles and au
 
 1. Install the Server with the same installer and sign into OneDrive.
 2. Download a complete backup ZIP locally from OneDrive.
-3. Choose **Exit server** from the truck tray menu. Open **Restore Thrift Mart Dispatch Server** in the Start menu.
+3. Choose **Exit server** from the truck tray menu. Open **Restore MGC YFC Operations Server** in the Start menu.
 4. Select the ZIP and confirm replacement. Current data is kept in a local safety folder first.
 5. Start the server and sign in using an account from the backup. Reconnect and enable the new PC's OneDrive folder in Settings.
 
@@ -42,7 +42,7 @@ Run `python -m unittest test_server test_updater test_remote` for API, update, a
 
 Server interface: **Settings → Employee accounts → Change password**. Remote Manager: **Change a user’s password**. Select the user and enter/confirm the new password. This signs the affected user out on all devices; administrators changing their own password sign in again too. Passwords are never shown in the activity log.
 
-The server navigation includes **Update server**, which checks GitHub and offers installation when a newer release is available. The Server install also adds a **Manage or Update Thrift Mart Dispatch Server** Start-menu shortcut with native update controls pointed at localhost. If using a custom port, edit the address before connecting.
+The server navigation includes **Update server**, which checks GitHub and offers installation when a newer release is available. The Server install also adds a **Manage or Update MGC YFC Operations Server** Start-menu shortcut with native update controls pointed at localhost. If using a custom port, edit the address before connecting.
 
 Use the unified installer to update Remote Manager itself; the server-update action updates server code only.
 
@@ -54,9 +54,9 @@ Install the full 0.6 installer once to add the tray executable. The code-only up
 
 ## Command-window tray support (0.7)
 
-Use **Thrift Mart Dispatch Server Console** in the Start menu, or the existing startup batch file. This opens a dedicated command window with the white truck icon. Minimizing it sends it to the system tray without stopping the server; double-click the tray icon to restore it. The console X is disabled; use the tray's **Exit server** command for safe shutdown.
+Use **MGC YFC Operations Server Console** in the Start menu, or the existing startup batch file. This opens a dedicated command window with the white truck icon. Minimizing it sends it to the system tray without stopping the server; double-click the tray icon to restore it. The console X is disabled; use the tray's **Exit server** command for safe shutdown.
 
-The graphical **Thrift Mart Dispatch Server** shortcut remains an alternative. Only one server mode can run at a time. The Console shortcut uses classic Windows Console Host without changing the system-wide Windows Terminal preference. A raw developer command such as `python server.py` does not use the tray host.
+The graphical **MGC YFC Operations Server** shortcut remains an alternative. Only one server mode can run at a time. The Console shortcut uses classic Windows Console Host without changing the system-wide Windows Terminal preference. A raw developer command such as `python server.py` does not use the tray host.
 
 
 PHONE / MOBILE SCHEDULE

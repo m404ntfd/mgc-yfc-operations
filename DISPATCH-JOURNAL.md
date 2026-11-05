@@ -1,6 +1,6 @@
 # Daily starting page and Dispatch Journal
 
-This change is staged under the existing program and repository names. Do not perform the rename until the host's current pickup/delivery backup is verified and OneDrive has finished syncing it.
+The owner confirmed the host backup before authorizing the MGC YFC Operations rename. The verification procedure below remains available for future backups.
 
 ## Verify the current host before renaming
 

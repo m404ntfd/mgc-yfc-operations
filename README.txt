@@ -1,8 +1,8 @@
 THRIFT MART DISPATCH SERVER — 0.7.0
 
-Use Thrift-Mart-Dispatch-Setup-v0.7.0.exe for a normal installation. Choose Server,
+Use MGC-YFC-Operations-Setup-v0.7.0.exe for a normal installation. Choose Server,
 Remote Manager or Both. The installer includes the required Python runtime.
-Open Thrift Mart Dispatch Server from the Start menu. Minimize or click X to keep it running in the system tray.
+Open MGC YFC Operations Server from the Start menu. Minimize or click X to keep it running in the system tray.
 First setup: http://localhost:8080 on the server PC. Create the administrator,
 then add vehicles and employees. Phones use the staff-network address printed
 in the server window. Allow the server on a trusted PRIVATE Windows network.
@@ -20,7 +20,7 @@ Do not place the live data folder itself in OneDrive.
 
 RESTORE
 On a replacement PC install Server, download a backup ZIP from OneDrive, and
-choose Exit server from the truck tray menu. Open Restore Thrift Mart Dispatch Server from the
+choose Exit server from the truck tray menu. Open Restore MGC YFC Operations Server from the
 Start menu. Select the ZIP. Existing data is preserved in data/restore-safety.
 Start the server, sign in using an account from the backup, then reconnect and
 enable the new OneDrive backup folder. Restore disables automatic cloud backup
@@ -52,7 +52,7 @@ The selected user is signed out everywhere. No password is recorded in the log.
 
 UPDATE BUTTON
 Use Update server in the administrator navigation, or open Manage or Update
-Thrift Mart Dispatch Server from the Start menu for local administration.
+MGC YFC Operations Server from the Start menu for local administration.
 
 TRAY
 Double-click the white truck tray icon to show the server window. Right-click for
@@ -61,7 +61,7 @@ Exit server stops scheduling after confirmation. The installer must be run once
 to install this desktop host; code-only updates do not add executable files.
 
 COMMAND WINDOW
-Use Thrift Mart Dispatch Server Console from the Start menu or a startup .bat.
+Use MGC YFC Operations Server Console from the Start menu or a startup .bat.
 The real command window uses the truck icon. Minimize sends it to the tray;
 double-click the tray icon to restore. Its X is disabled; use tray Exit server.
 The normal graphical Server shortcut is still available as an alternative.

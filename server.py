@@ -1,4 +1,4 @@
-"""Thrift Mart Dispatch Server: trusted-local-network scheduling server. Python 3.11+."""
+"""MGC YFC Operations Server: trusted-local-network scheduling server. Python 3.11+."""
 import datetime as dt
 import hashlib, hmac, json, os, secrets, socket, sqlite3, threading, time
 import updater
@@ -339,7 +339,7 @@ class Handler(BaseHTTPRequestHandler):
                     setup=not c.execute('SELECT 1 FROM users').fetchone()
                     try: u=self.user()
                     except Problem: u=None
-                    return self.send({'application':'thrift-mart-dispatch','name':'Thrift Mart Dispatch Server','version':updater.current(),'setup':setup,'user':u and {'name':u['name'],'admin':u['admin'],'can_create':u['can_create'],'see_requests':u['see_requests'],'grants':u['grants']},'local':self.client_address[0] in ('127.0.0.1','::1')})
+                    return self.send({'application':'thrift-mart-dispatch','name':'MGC YFC Operations Server','version':updater.current(),'setup':setup,'user':u and {'name':u['name'],'admin':u['admin'],'can_create':u['can_create'],'see_requests':u['see_requests'],'grants':u['grants']},'local':self.client_address[0] in ('127.0.0.1','::1')})
                 u=self.user()
                 if self.path=='/api/admin/login-security':
                     if not u['admin']: raise Problem('Administrator access required.',403)
@@ -359,7 +359,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send({'config':backup_config(),'status':json.loads(p.read_text()) if p.exists() else None,'journal':{'status':json.loads((DATA/'journal-status.json').read_text()) if (DATA/'journal-status.json').exists() else None,'archives':c.execute('SELECT COUNT(*) FROM journal_archives').fetchone()[0],'records':c.execute('SELECT COALESCE(SUM(records),0) FROM journal_archives').fetchone()[0]}})
                 if self.path=='/api/admin/status':
                     if not route_allowed(u,self.path): raise Problem('Administrator access required.',403)
-                    return self.send({'name':'Thrift Mart Dispatch Server','version':updater.current(),'uptime_minutes':int((time.time()-STARTED)/60),'time':dt.datetime.now().isoformat(timespec='seconds'),'jobs':c.execute('SELECT COUNT(*) FROM jobs').fetchone()[0],'vehicles':c.execute('SELECT COUNT(*) FROM vehicles').fetchone()[0],'users':c.execute('SELECT COUNT(*) FROM users').fetchone()[0]})
+                    return self.send({'name':'MGC YFC Operations Server','version':updater.current(),'uptime_minutes':int((time.time()-STARTED)/60),'time':dt.datetime.now().isoformat(timespec='seconds'),'jobs':c.execute('SELECT COUNT(*) FROM jobs').fetchone()[0],'vehicles':c.execute('SELECT COUNT(*) FROM vehicles').fetchone()[0],'users':c.execute('SELECT COUNT(*) FROM users').fetchone()[0]})
                 if self.path=='/api/updates' and route_allowed(u,self.path):
                     last=DATA/'last-update.json'
                     return self.send({'current':updater.current(),'repository':updater.repo(),'launcher':os.environ.get('DISPATCH_LAUNCHER')=='1','last':json.loads(last.read_text()) if last.exists() else None})
@@ -683,11 +683,11 @@ if __name__=='__main__':
         kernel=ctypes.windll.kernel32
         kernel.CreateMutexW.restype=ctypes.c_void_p
         instance_mutex=kernel.CreateMutexW(None,False,'ThriftMartDispatchServer')
-        if kernel.GetLastError()==183: raise SystemExit('Thrift Mart Dispatch Server is already running.')
+        if kernel.GetLastError()==183: raise SystemExit('MGC YFC Operations Server is already running.')
     data_lock=hold_data_lock()
     init(); threading.Thread(target=background,daemon=True).start()
     port=int(os.environ.get('DISPATCH_PORT','8080'))
-    print('Thrift Mart Dispatch Server '+updater.current())
+    print('MGC YFC Operations Server '+updater.current())
     print(f'On this computer: http://localhost:{port}')
     for address in sorted(set(socket.gethostbyname_ex(socket.gethostname())[2])):
         if not address.startswith('127.'): print(f'On store Wi-Fi: http://{address}:{port}')
