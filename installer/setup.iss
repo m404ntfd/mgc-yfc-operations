@@ -24,7 +24,7 @@ DisableProgramGroupPage=yes
 [Types]
 Name: "server"; Description: "MGC YFC Operations Server (store computer)"
 Name: "remote"; Description: "MGC YFC Operations Remote Manager (another computer)"
-Name: "both"; Description: "Server and Remote Manager on this computer"
+Name: "both"; Description: "Combined Server plus optional standalone Remote Manager"
 [Components]
 Name: "server"; Description: "MGC YFC Operations Server"; Types: server both
 Name: "remote"; Description: "MGC YFC Operations Remote Manager"; Types: remote both
@@ -50,25 +50,31 @@ Source: "..\Start-Thrift-Mart-Dispatch-Server.bat"; DestDir: "{app}"; Components
 Source: "..\Start-Store-Dispatch.bat"; DestDir: "{app}"; Components: server; Flags: ignoreversion
 Source: "..\static\*"; DestDir: "{app}\static"; Components: server; Flags: ignoreversion recursesubdirs
 Source: "..\runtime\*"; DestDir: "{app}\runtime"; Components: server; Flags: ignoreversion recursesubdirs
-Source: "..\dist\MGC YFC Operations Remote Manager.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\remote\README.txt"; DestDir: "{app}"; DestName: "Remote-Manager-README.txt"; Flags: ignoreversion
+Source: "..\dist\MGC YFC Operations Remote Manager.exe"; DestDir: "{app}"; Components: remote; Flags: ignoreversion
+Source: "..\remote\README.txt"; DestDir: "{app}"; DestName: "Remote-Manager-README.txt"; Components: remote; Flags: ignoreversion
 Source: "..\dist\MGC YFC Operations Server.exe"; DestDir: "{app}"; DestName: "Thrift Mart Dispatch Server.exe"; Components: server; Flags: ignoreversion
 Source: "..\dist\MGC YFC Operations Server Console.exe"; DestDir: "{app}"; DestName: "Thrift Mart Dispatch Server Console.exe"; Components: server; Flags: ignoreversion
-Source: "..\dist\MGC YFC Operations Remote Manager.exe"; DestDir: "{app}"; DestName: "Thrift Mart Dispatch Remote Manager.exe"; Flags: ignoreversion
+Source: "..\dist\MGC YFC Operations Remote Manager.exe"; DestDir: "{app}"; DestName: "Thrift Mart Dispatch Remote Manager.exe"; Components: remote; Flags: ignoreversion
 [Icons]
 Name: "{group}\MGC YFC Operations Server Console"; Filename: "{sys}\conhost.exe"; Parameters: """{app}\MGC YFC Operations Server Console.exe"" --console"; WorkingDir: "{app}"; IconFilename: "{app}\assets\dispatch.ico"; Components: server
 Name: "{group}\Manage or Update MGC YFC Operations Server"; Filename: "http://127.0.0.1:8080/#settings"; IconFilename: "{app}\assets\dispatch.ico"; Components: server
 Name: "{group}\MGC YFC Operations Server"; Filename: "{app}\MGC YFC Operations Server.exe"; WorkingDir: "{app}"; Components: server
 Name: "{group}\MGC YFC Operations Remote Manager"; Filename: "{app}\MGC YFC Operations Remote Manager.exe"; Components: remote
-Name: "{group}\Restore MGC YFC Operations Server"; Filename: "{app}\MGC YFC Operations Remote Manager.exe"; Parameters: "--restore-dir ""{app}\data"""; Components: server
+Name: "{group}\Restore MGC YFC Operations Server"; Filename: "{app}\MGC YFC Operations Server.exe"; Parameters: "--restore-dir ""{app}\data"""; Components: server
 Name: "{userdesktop}\MGC YFC Operations Server"; Filename: "{app}\MGC YFC Operations Server.exe"; WorkingDir: "{app}"; Components: server; Tasks: desktop
 Name: "{userdesktop}\MGC YFC Operations Remote Manager"; Filename: "{app}\MGC YFC Operations Remote Manager.exe"; Components: remote; Tasks: desktop
 Name: "{userstartup}\MGC YFC Operations Server"; Filename: "{app}\MGC YFC Operations Server.exe"; WorkingDir: "{app}"; Components: server; Tasks: startup
 [Run]
-Filename: "{app}\MGC YFC Operations Server.exe"; Description: "Start MGC YFC Operations Server"; WorkingDir: "{app}"; Components: server; Flags: postinstall nowait skipifsilent shellexec unchecked
+Filename: "{app}\MGC YFC Operations Server.exe"; Description: "Start MGC YFC Operations Server"; WorkingDir: "{app}"; Components: server; Flags: postinstall nowait skipifsilent shellexec
 Filename: "{app}\MGC YFC Operations Remote Manager.exe"; Description: "Open MGC YFC Operations Remote Manager"; Components: remote; Flags: postinstall nowait skipifsilent unchecked
 
 [Code]
+var HadStandaloneManager: Boolean;
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  HadStandaloneManager := FileExists(ExpandConstant('{app}\MGC YFC Operations Remote Manager.exe')) or FileExists(ExpandConstant('{app}\Thrift Mart Dispatch Remote Manager.exe'));
+  Result := '';
+end;
 procedure MigrateShortcut(OldName, NewName: String);
 begin
   if FileExists(OldName) then begin
@@ -81,6 +87,7 @@ procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then begin
     if WizardIsComponentSelected('server') then begin
+      if HadStandaloneManager then SaveStringToFile(ExpandConstant('{app}\remove-standalone-manager.pending'), 'Remove standalone manager after the combined server starts.', False);
       MigrateShortcut(ExpandConstant('{userstartup}\Thrift Mart Dispatch Server.lnk'), ExpandConstant('{userstartup}\MGC YFC Operations Server.lnk'));
       MigrateShortcut(ExpandConstant('{userdesktop}\Thrift Mart Dispatch Server.lnk'), ExpandConstant('{userdesktop}\MGC YFC Operations Server.lnk'));
     end;
