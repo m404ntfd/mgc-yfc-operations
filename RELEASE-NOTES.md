@@ -1,10 +1,12 @@
-# MGC YFC Operations 0.31.0
+# MGC YFC Operations 0.32.0
 
-- Requires a current eligible user to be selected when uploading a receipt without signing in. Guest submissions are assigned to that user's profile and are searchable in their receipt history and authorized all-user reports.
-- Clearly labels guest assignments so they are distinct from authenticated user submissions. Selecting a user does not sign in or expose receipt files.
-- Adds Reimbursement Required to both guest and signed-in receipt forms. The flag is saved and displayed in receipt history, receipt reports and administrative receipt review.
-- Adds Submit receipts and appear in guest receipt assignment to employee permissions. Existing users retain receipt submission by default; administrators can disable it for individual employees. Administrators can always submit.
-- Validates selected users and reimbursement values on the server, rejects stale selections, and keeps the existing receipt storage compatible with older server versions.
+- Adds reusable permission Roles in Application Settings > Employees > Roles. Permissions are grouped into the same page/Application Settings categories as Settings. Assign a role in the employee's permission editor; role changes apply to assigned users on their next request.
+- Adds Create and edit permission roles as a permission. Delegated role editors cannot add permissions they do not hold. Administrators retain all permissions, and existing individual employee permissions are preserved until a role is assigned.
+- Return to Home follows the current starting page selected for that server calendar day, including changes made through Choose today's starting page.
+- Separates the mobile receipt-reset buttons with full-width spacing and wrapped labels.
+- Replaces the yellow disconnected banner with a transparent red overlay, the supplied animated Plug.gif, and centered NO INTERNET CONNECTION OR SERVER IS OFFLINE / PLEASE TRY AGAIN LATER text. It clears automatically after reconnecting and includes Try again.
+- Adds the rings/building Apple touch icon and Android web-app manifest icons for home-screen shortcuts. Existing shortcuts may need to be removed and added again to refresh their cached icon.
+- Embeds offline graphics and icons into the server during release packaging so the existing in-app updater delivers them too. Customer data and the legacy update file allowlist are preserved.
 
 Use Check for Updates on the server, install and restart, then refresh browsers. The full Windows installer is also available for reinstalling over the existing location; do not uninstall first.
 
