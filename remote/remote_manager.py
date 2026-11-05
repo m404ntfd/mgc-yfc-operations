@@ -8,13 +8,13 @@ try:
 except ImportError:
     from client import Client
 NAME='MGC YFC Operations Remote Manager'
-VERSION='0.28.0'
+VERSION='0.29.0'
 CONFIG=Path(os.environ.get('APPDATA',Path.home()))/'ThriftMartDispatchRemoteManager'/'config.json'
 
 class App:
-    def __init__(self,root,local=False,container=None,address=None):
+    def __init__(self,root,local=False,container=None,address=None,local_control=None,session_path=None):
         self.root=root;self.client=None;self.release=None;self.busy=False;self.results=queue.Queue()
-        self.local=local
+        self.local=local;self.local_control=local_control;self.session_path=session_path
         if container is None:
             root.title('MGC YFC Operations Server — Administration' if local else NAME);root.geometry('800x830');root.minsize(720,760)
             icon=Path(getattr(sys,'_MEIPASS',Path(__file__).resolve().parents[1]))/'assets'/('dispatch.ico' if local else 'remote.ico')
@@ -50,6 +50,12 @@ class App:
         ttk.Label(frame,text='Manage employee accounts here; open the browser for schedules and vehicles.\nThe browser requires its own sign-in. Closing this app does not stop the server.',wraplength=690).pack(anchor='w')
         ttk.Button(frame,text='Remote Manager downloads / updates',command=lambda:webbrowser.open('https://github.com/m404ntfd/mgc-yfc-operations/releases/latest')).pack(anchor='w',pady=(8,0))
         root.after(100,self.deliver)
+        if local_control and session_path:
+            client=self.new_client()
+            def restored(result):
+                if result:self.client=client;self.show_status(result)
+                else:self.status.set('Sign in with an administrator account. Local sign-in is kept until an application update or sign-out.')
+            self.run(client.restore_local_session,restored)
     def run(self,work,done):
         if self.busy:return
         self.busy=True;self.status.set('Working…')
@@ -66,7 +72,7 @@ class App:
                 if self.root.grab_current():messagebox.showerror(NAME,value,parent=self.root.grab_current())
         except queue.Empty:pass
         self.root.after(100,self.deliver)
-    def new_client(self):return Client(self.address.get())
+    def new_client(self):return Client(self.address.get(),local_control=self.local_control,session_path=self.session_path)
     def probe(self):
         if self.busy:return
         try:c=self.new_client()
@@ -88,6 +94,7 @@ class App:
     def disconnect(self):
         if self.busy:return
         c=self.client;self.client=None;self.release=None;self.install.config(state='disabled');self.details.set('Not connected')
+        if self.session_path:Path(self.session_path).unlink(missing_ok=True)
         if c:self.run(lambda:c.request('logout',{}),lambda _:self.status.set('Disconnected.'))
         else:self.status.set('Disconnected.')
     def require(self):
