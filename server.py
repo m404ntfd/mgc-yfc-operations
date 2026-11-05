@@ -306,8 +306,10 @@ def hold_data_lock():
         f.close();raise SystemExit('Another server or restore process is using this data folder.')
     return f
 
+FAVICON_SVG='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><g fill="none" stroke="white" stroke-width="50"><ellipse cx="154" cy="290" rx="118" ry="118"/><ellipse cx="268" cy="386" rx="104" ry="104"/><ellipse cx="260" cy="152" rx="128" ry="128"/></g><g fill="none" stroke="#ea4520" stroke-width="34"><ellipse cx="154" cy="290" rx="112" ry="112"/><ellipse cx="268" cy="386" rx="98" ry="98"/><ellipse cx="260" cy="152" rx="122" ry="122"/></g><rect x="278" y="216" width="216" height="276" rx="9" fill="#b8c7d2" stroke="white" stroke-width="8"/><path fill="#8fa5b5" d="M430 228h50v252h-50z"/><path fill="#667e90" d="M305 204h159v26H305z"/><g fill="#286584"><rect x="306" y="248" width="25" height="29"/><rect x="350" y="248" width="25" height="29"/><rect x="394" y="248" width="25" height="29"/><rect x="438" y="248" width="25" height="29"/><rect x="306" y="295" width="25" height="29"/><rect x="350" y="295" width="25" height="29"/><rect x="394" y="295" width="25" height="29"/><rect x="438" y="295" width="25" height="29"/><rect x="306" y="342" width="25" height="29"/><rect x="350" y="342" width="25" height="29"/><rect x="394" y="342" width="25" height="29"/><rect x="438" y="342" width="25" height="29"/><rect x="306" y="389" width="25" height="29"/><rect x="350" y="389" width="25" height="29"/><rect x="394" y="389" width="25" height="29"/><rect x="438" y="389" width="25" height="29"/></g><path fill="#334c60" d="M365 437h46v43h-46z"/><rect x="270" y="480" width="231" height="21" rx="5" fill="#536e82"/></svg>'
+
 class Problem(Exception):
-    def __init__(self,message,status=400): self.message=message; self.status=status
+    def __init__(self,message,status=400,**details): self.message=message; self.status=status; self.details=details
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self,fmt,*args): pass
@@ -336,6 +338,7 @@ class Handler(BaseHTTPRequestHandler):
         if not session or session_expired(session, time.time()):
             SESSIONS.pop(token, None)
             raise Problem('Please sign in again.',401)
+        if self.headers.get('X-Dispatch-Activity')=='1':session['last_active']=time.time()
         with connect() as c:
             permission=c.execute('SELECT * FROM permissions WHERE name=?',(session['name'],)).fetchone()
         with connect() as c:
@@ -354,10 +357,14 @@ class Handler(BaseHTTPRequestHandler):
         return session
     def do_GET(self):
         try:
+            if self.path in ('/favicon.svg','/favicon.ico'):
+                return self.send(FAVICON_SVG.encode(),kind='image/svg+xml')
             if self.path in ('/','/mobile','/mobile/','/app.js','/style.css'):
                 filename={'/':'index.html','/mobile':'index.html','/mobile/':'index.html','/app.js':'app.js','/style.css':'style.css'}[self.path]
                 kind={'/':'text/html; charset=utf-8','/mobile':'text/html; charset=utf-8','/mobile/':'text/html; charset=utf-8','/app.js':'text/javascript','/style.css':'text/css'}[self.path]
-                return self.send((ROOT/'static'/filename).read_bytes(),kind=kind)
+                body=(ROOT/'static'/filename).read_bytes()
+                if filename=='index.html':body=body.replace(b'</head>',b'<link rel="icon" type="image/svg+xml" href="/favicon.svg"></head>')
+                return self.send(body,kind=kind)
             with LOCK, connect() as c:
                 if self.path=='/api/connection-status':
                     return self.send({'online':True,'update_available':UPDATE_STATUS['available']})
@@ -440,7 +447,7 @@ class Handler(BaseHTTPRequestHandler):
                 if self.path=='/api/audit' and route_allowed(u,self.path):
                     return self.send([dict(r) for r in c.execute('SELECT * FROM audit ORDER BY rowid DESC LIMIT 100')])
                 raise Problem('Not found',404)
-        except Problem as e: self.send({'error':e.message},e.status)
+        except Problem as e: self.send({'error':e.message,**e.details},e.status)
     def do_POST(self):
         global RESTART, STOPPING
         try:
@@ -473,7 +480,7 @@ class Handler(BaseHTTPRequestHandler):
                         ATTEMPTS[key]=attempts+[time.time()]
                         raise Problem('Incorrect name or password.',401)
                     lockout=c.execute('SELECT * FROM account_lockouts WHERE name=?',(r['name'],)).fetchone()
-                    if lockout and lockout['locked_at']: raise Problem('Account locked. Ask an administrator or authorized employee to unlock it.',423)
+                    if lockout and lockout['locked_at']: raise Problem('Account locked. Ask an administrator or authorized employee to unlock it.',423,attempts_remaining=0)
                     if not hmac.compare_digest(r['hash'],password(p,r['salt'])):
                         failures=(lockout['failures'] if lockout else 0)+1
                         limit=c.execute('SELECT max_attempts FROM login_security WHERE id=1').fetchone()[0]
@@ -481,8 +488,8 @@ class Handler(BaseHTTPRequestHandler):
                         c.execute('INSERT OR REPLACE INTO account_lockouts VALUES(?,?,?)',(r['name'],failures,locked_at))
                         if locked_at: c.execute('INSERT INTO audit VALUES(?,?,?,?)',(locked_at,r['name'],'Account locked after failed login attempts',''))
                         c.commit() # Persist failures even though the response below raises an error.
-                        if locked_at: raise Problem('Account locked. Ask an administrator or authorized employee to unlock it.',423)
-                        raise Problem('Incorrect name or password.',401)
+                        if locked_at: raise Problem('Account locked. Ask an administrator or authorized employee to unlock it.',423,attempts_remaining=0)
+                        raise Problem('Incorrect name or password.',401,attempts_remaining=max(0,limit-failures))
                     c.execute('DELETE FROM account_lockouts WHERE name=?',(r['name'],))
                     token=secrets.token_urlsafe(32); SESSIONS[token]={'name':r['name'],'admin':bool(r['admin']),'expires':time.time()+86400,'login_day':dt.date.today().isoformat(),'last_active':time.time()}
                     return self.send({'ok':True},cookie=f'session={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=86400')
@@ -775,7 +782,7 @@ class Handler(BaseHTTPRequestHandler):
                     c.execute('INSERT INTO audit VALUES(?,?,?,?)',(dt.datetime.now().isoformat(timespec='seconds'),u['name'],action,jid))
                 else: raise Problem('Not found',404)
             self.send({'ok':True})
-        except Problem as e: self.send({'error':e.message},e.status)
+        except Problem as e: self.send({'error':e.message,**e.details},e.status)
         except sqlite3.IntegrityError: self.send({'error':'That name already exists.'},409)
         except (ValueError,TypeError): self.send({'error':'Invalid request.'},400)
         except Exception as e:
