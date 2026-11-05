@@ -364,7 +364,7 @@ $('userUpdateDialog').addEventListener('cancel',()=>{updateReminderAfter=Date.no
 (()=>{
  const media=JSON.parse($('splashMedia').textContent),desktop=$('desktopVideo'),phone=$('mobileVideo'),intro=$('mobileIntro');
  const mobile=matchMedia('(max-width:740px)'),reduce=matchMedia('(prefers-reduced-motion:reduce)');
- const format=desktop.canPlayType('video/mp4; codecs="avc1.42E01E"')?'mp4':'webm';let timeout,started=false;
+ const format=desktop.canPlayType('video/mp4; codecs="avc1.42E01E"')?'mp4':'webm';let timeout,started=false,introFrame=null,fadeTimer=null,fading=false;const introEnd=5.5,introFadeMs=700;
  desktop.poster=media.desktopposter;phone.poster=media.mobileposter;
  const fallback=document.createElement('img');fallback.id='desktopFallback';fallback.alt='Mississippi Gulf Coast Youth for Christ ministries and stores';fallback.src=media.desktopposter;fallback.hidden=true;desktop.after(fallback);
  desktop.muted=true;desktop.defaultMuted=true;desktop.autoplay=true;desktop.playsInline=true;
@@ -375,14 +375,16 @@ $('userUpdateDialog').addEventListener('cancel',()=>{updateReminderAfter=Date.no
  desktop.addEventListener('playing',()=>{if(failed)return;clearTimeout(desktopTimeout);desktop.hidden=false;fallback.hidden=true;$('pauseVideo').hidden=false;});
  desktop.addEventListener('waiting',waitForPlayback);
 
- function seen(){try{return sessionStorage.getItem('yfc-intro-v3')==='1'}catch{return false}}
- function finish(){clearTimeout(timeout);phone.pause();intro.hidden=true;try{sessionStorage.setItem('yfc-intro-v3','1')}catch{}}
- function playIntro(){if(reduce.matches||$('auth').hidden)return;intro.hidden=false;phone.src=media['mobile'+format];phone.currentTime=0;phone.play().catch(finish);timeout=setTimeout(finish,27000)}
+ function seen(){try{return sessionStorage.getItem('yfc-intro-v4')==='1'}catch{return false}}
+ function finish(){clearTimeout(timeout);clearTimeout(fadeTimer);cancelAnimationFrame(introFrame);phone.pause();intro.hidden=true;intro.classList.remove('introFading');fading=false;try{sessionStorage.setItem('yfc-intro-v4','1')}catch{}}
+ function fadeIntro(){if(intro.hidden||fading)return;fading=true;clearTimeout(timeout);cancelAnimationFrame(introFrame);phone.pause();intro.classList.add('introFading');fadeTimer=setTimeout(finish,introFadeMs);}
+ function watchIntro(){if(intro.hidden||fading)return;if(phone.currentTime>=introEnd){fadeIntro();return;}introFrame=requestAnimationFrame(watchIntro);}
+ function playIntro(){if(reduce.matches||$('auth').hidden)return;clearTimeout(timeout);clearTimeout(fadeTimer);cancelAnimationFrame(introFrame);fading=false;intro.classList.remove('introFading');intro.hidden=false;phone.src=media['mobile'+format]+'#t=0,'+introEnd;phone.currentTime=0;phone.play().catch(finish);introFrame=requestAnimationFrame(watchIntro);timeout=setTimeout(finish,10000)}
  function playDesktop(){const attempt=++playAttempt;failed=false;desktop.hidden=false;fallback.hidden=true;$('pauseVideo').hidden=false;if(!desktop.src)desktop.src=media['desktop'+format];waitForPlayback();desktop.play().then(()=>{if(attempt!==playAttempt)return;clearTimeout(desktopTimeout);if($('auth').hidden){desktop.pause();return;}$('pauseVideo').textContent='Pause video'}).catch(()=>{if(attempt===playAttempt&&!$('auth').hidden)showFallback();})}
- function sync(){if($('auth').hidden){++playAttempt;clearTimeout(desktopTimeout);desktop.pause();started=false;if(!intro.hidden)finish();return;}if(!started){started=true;if(mobile.matches){if(!seen())playIntro()}else if(!reduce.matches)playDesktop();else showFallback();}}
- $('skipVideo').onclick=finish;phone.onended=finish;phone.onerror=finish;
+ function sync(){if($('auth').hidden){++playAttempt;clearTimeout(desktopTimeout);desktop.pause();started=false;if(!intro.hidden)finish();return;}if(!started){started=true;if(isMobileView()){if(!seen())playIntro()}else if(!reduce.matches)playDesktop();else showFallback();}}
+ $('skipVideo').onclick=finish;phone.onended=fadeIntro;phone.onerror=finish;phone.addEventListener('timeupdate',()=>{if(!intro.hidden&&phone.currentTime>=introEnd)fadeIntro();});document.addEventListener('visibilitychange',()=>{if(document.hidden&&!intro.hidden)finish();});
  $('pauseVideo').onclick=()=>{if(desktop.paused)playDesktop();else{clearTimeout(desktopTimeout);desktop.pause();$('pauseVideo').textContent='Play video'}};
- $('replayIntro').onclick=()=>{if(mobile.matches)playIntro();else{desktop.currentTime=0;playDesktop()}};
+ $('replayIntro').onclick=()=>{if(isMobileView())playIntro();else{desktop.currentTime=0;playDesktop()}};
  $('receiptShortcut').onclick=openReceiptUpload;
  new MutationObserver(sync).observe($('auth'),{attributes:true,attributeFilter:['hidden']});
  mobile.addEventListener('change',()=>{finish();desktop.pause();if(!mobile.matches&&!reduce.matches&&!$('auth').hidden)playDesktop()});
