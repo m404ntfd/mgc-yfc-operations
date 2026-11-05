@@ -63,9 +63,8 @@ CREATE TABLE IF NOT EXISTS audit(at TEXT, actor TEXT, action TEXT, job TEXT);'''
         c.execute('CREATE TABLE IF NOT EXISTS sharing_settings(id INTEGER PRIMARY KEY CHECK(id=1),body TEXT)')
         c.execute('CREATE TABLE IF NOT EXISTS receipt_profiles(name TEXT PRIMARY KEY COLLATE NOCASE,profile_id TEXT UNIQUE)')
         for person in c.execute('SELECT name FROM users').fetchall():c.execute('INSERT OR IGNORE INTO receipt_profiles VALUES(?,?)',(person['name'],secrets.token_hex(16)))
-        if 'owner' not in {r[1] for r in c.execute('PRAGMA table_info(receipts)')}:
-            c.execute('ALTER TABLE receipts ADD COLUMN owner TEXT COLLATE NOCASE')
-            c.execute("UPDATE receipts SET owner=(SELECT profile_id FROM receipt_profiles WHERE name=actor) WHERE actor!='Guest' AND actor IN (SELECT name FROM users)")
+        c.execute('CREATE TABLE IF NOT EXISTS receipt_ownership(receipt_id TEXT PRIMARY KEY,profile_id TEXT)')
+        c.execute("INSERT OR IGNORE INTO receipt_ownership SELECT r.id,p.profile_id FROM receipts r LEFT JOIN receipt_profiles p ON p.name=r.actor AND r.actor!='Guest'")
         c.execute("CREATE TABLE IF NOT EXISTS appearance_preferences(name TEXT PRIMARY KEY COLLATE NOCASE, mode TEXT NOT NULL)")
         c.execute('CREATE TABLE IF NOT EXISTS journal_archives(file TEXT PRIMARY KEY, sha256 TEXT NOT NULL, records INTEGER NOT NULL, archived_at TEXT NOT NULL)')
         c.execute('CREATE TABLE IF NOT EXISTS user_grants(name TEXT PRIMARY KEY COLLATE NOCASE, body TEXT)')
@@ -401,7 +400,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send({'categories':[r[0] for r in c.execute('SELECT code FROM receipt_categories ORDER BY code')]})
                 u=self.user()
                 if self.path.startswith('/api/receipt-file/'):
-                    row=c.execute('SELECT body,mime,owner FROM receipts WHERE id=?',(self.path.rsplit('/',1)[1],)).fetchone()
+                    row=c.execute('SELECT r.body,r.mime,o.profile_id AS owner FROM receipts r LEFT JOIN receipt_ownership o ON o.receipt_id=r.id WHERE r.id=?',(self.path.rsplit('/',1)[1],)).fetchone()
                     if not row or not (has_permission(u,'view_all_receipts') or row['owner'] and row['owner']==u.get('receipt_owner')):raise Problem('Receipt not found.',404)
                     return self.send(bytes(row['body']),kind=row['mime'])
                 if urlsplit(self.path).path=='/api/receipts':
@@ -409,7 +408,7 @@ class Handler(BaseHTTPRequestHandler):
                     all_users=value('scope')=='all'
                     if all_users and not has_permission(u,'view_all_receipts'):raise Problem('All-receipt access required.',403)
                     clauses=[];args=[]
-                    if not all_users:clauses.append('owner=?');args.append(u.get('receipt_owner'))
+                    if not all_users:clauses.append('id IN (SELECT receipt_id FROM receipt_ownership WHERE profile_id=?)');args.append(u.get('receipt_owner'))
                     if value('search'):
                         clauses.append('(instr(lower(filename),lower(?))>0 OR instr(lower(category),lower(?))>0 OR instr(lower(actor),lower(?))>0)');args.extend([value('search')[:200]]*3)
                     if value('category'):clauses.append('category=?');args.append(value('category'))
@@ -573,7 +572,8 @@ class Handler(BaseHTTPRequestHandler):
                     except Problem:
                         if d.get('account_upload'):raise Problem('Sign in again before saving this receipt to your profile.',401)
                         owner=None;actor='Guest'
-                    c.execute('INSERT INTO receipts(id,at,actor,category,filename,mime,body,source,owner) VALUES(?,?,?,?,?,?,?,?,?)',(ident,time.time(),actor,category,filename,mime,body,source,owner))
+                    c.execute('INSERT INTO receipts VALUES(?,?,?,?,?,?,?,?)',(ident,time.time(),actor,category,filename,mime,body,source))
+                    c.execute('INSERT INTO receipt_ownership VALUES(?,?)',(ident,owner))
                     return self.send({'ok':True,'id':ident,'email_pending':True})
                 u=self.user()
                 if self.path=='/api/sharing':
