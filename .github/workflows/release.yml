@@ -23,7 +23,7 @@ jobs:
       - run: python -m unittest test_server test_updater test_remote test_lockout test_journal test_receipts test_daily_session test_native_revision test_login_counts test_revision29 test_page_colors test_receipt_assignment test_roles test_comms test_workforce test_web_push test_web_assets test_mobile_media
       - run: node --check static/app.js
   mobile-browser:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
