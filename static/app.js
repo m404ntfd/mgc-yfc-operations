@@ -50,7 +50,7 @@ function render(){
  for(const [id,selected]of [['dayTab',mode==='day'&&day===today],['weekTab',weekly&&from===weekStart(today)],['nextWeekTab',weekly&&from===shiftDate(weekStart(today),7)],['settingsTab',mode==='settings']]){$(id).classList.toggle('selected',selected);$(id).setAttribute('aria-pressed',String(selected));}
  $('prev').setAttribute('aria-label',weekly?'Previous week':'Previous day');$('next').setAttribute('aria-label',weekly?'Next week':'Next day');
 }
-function tab(t){mode=t;if(t==='settings'){loadUpdates();loadBackups();}$('schedule').hidden=['settings','reports'].includes(t);$('settings').hidden=t!=='settings';$('reports').hidden=t!=='reports';if(t==='reports')loadReport();render();}
+function tab(t){mode=t;if(t==='settings'){loadUpdates();loadBackups();loadLoginSecurity();}$('schedule').hidden=['settings','reports'].includes(t);$('settings').hidden=t!=='settings';$('reports').hidden=t!=='reports';if(t==='reports')loadReport();render();}
 function quickView(offset){const today=localDate(new Date());$('date').value=offset===null?today:shiftDate(weekStart(today),offset);tab(offset===null?'day':'week');}
 function openJob(id,type){if(user.can_create&&!state.vehicles.length){toast('Add a vehicle in Settings first.');if(user.admin)tab('settings');return;}editing=id?[...state.jobs,...(state.requests||[])].find(j=>j.id===id):null;$('jobForm').reset();$('jobForm').elements.status.innerHTML=(user.can_create?['Scheduled','In Route / In Progress','Completed','Canceled']:['Requested','Canceled']).map(v=>`<option value="${v}">${v==='Canceled'?'Cancelled':v}</option>`).join('');$('jobVehicle').innerHTML=state.vehicles.map(v=>`<option>${esc(v)}</option>`).join('');const j=editing||{state:'MS',type:type||'Pickup',status:user.can_create?'Scheduled':'Requested',start:$('date').value+'T09:00',end:$('date').value+'T10:00'};for(const [k,v]of Object.entries(j))if($('jobForm').elements[k])$('jobForm').elements[k].value=v;
 $('jobForm').elements.street.value=Object.hasOwn(j,'street')?j.street:(j.address||'');$('legacyAddress').hidden=!editing||!!j.street;
@@ -126,9 +126,20 @@ $('requestsButton').onclick=()=>$('requestsList').hidden=!$('requestsList').hidd
 $('requestsList').onclick=e=>{const status=e.target.closest('[data-request-status]');if(status){openStatus(status.dataset.requestStatus);return;}const b=e.target.closest('[data-review]');if(!b)return;const request=state.requests.find(j=>j.id===b.dataset.review);openJob(request.id);};
 $('savePermissions').onclick=async()=>{try{await api('admin/permissions',{name:$('passwordUser').value,can_create:$('canCreate').checked,see_requests:$('seeRequests').checked});$('permissionMessage').textContent='Permissions saved.';await refresh();}catch(e){$('permissionMessage').textContent=e.message;}};
 
+const securityPanel=document.createElement('section');securityPanel.className='card';securityPanel.innerHTML=`<h2>Login security</h2><form id="loginSecurityForm"><label>Failed login attempts before lockout <input id="maxLoginAttempts" type="number" min="1" max="100" step="1" required value="5"></label><button type="submit">Save login limit</button><p>Default: 5. A successful login resets the count. Locked accounts stay locked until an authorized employee unlocks them. Changing the limit does not unlock existing accounts.</p></form><div id="accountUnlockControls"><h3>Locked accounts</h3><button type="button" id="refreshLockouts">Refresh locked accounts</button><div id="lockedAccounts"></div></div><p id="loginSecurityMessage" role="status"></p>`;
+$('settings').append(securityPanel);
+async function loadLoginSecurity(){
+ $('loginSecurityForm').hidden=!user?.admin;$('accountUnlockControls').hidden=!can('unlock_users');$('loginSecurityMessage').textContent='';
+ try{if(user?.admin){const data=await api('admin/login-security');$('maxLoginAttempts').value=data.max_attempts;}
+ if(can('unlock_users')){const data=await api('admin/lockouts');$('lockedAccounts').innerHTML=data.users.map(u=>`<div class="listRow"><span>${esc(u.name)} · ${u.failures} failed attempts · ${esc(u.locked_at)}</span><button type="button" data-unlock="${esc(u.name)}">Unlock user</button></div>`).join('')||'<p>No locked accounts.</p>';}}
+ catch(e){$('loginSecurityMessage').textContent=e.message;}
+}
+$('loginSecurityForm').onsubmit=async e=>{e.preventDefault();try{await api('admin/login-security',{max_attempts:Number($('maxLoginAttempts').value)});$('loginSecurityMessage').textContent='Login attempt limit saved.';}catch(e){$('loginSecurityMessage').textContent=e.message;}};
+$('refreshLockouts').onclick=loadLoginSecurity;
+$('lockedAccounts').onclick=async e=>{const b=e.target.closest('[data-unlock]');if(!b)return;b.disabled=true;try{await api('admin/unlock-user',{name:b.dataset.unlock});await loadLoginSecurity();$('loginSecurityMessage').textContent=b.dataset.unlock+' unlocked.';}catch(e){$('loginSecurityMessage').textContent=e.message;}finally{b.disabled=false;}};
 const settingsPanels=[...$('settings').children];
 const settingsTabs=document.createElement('nav');settingsTabs.className='settingsTabs';settingsTabs.setAttribute('aria-label','Settings sections');
-const settingsNames=['Phone Access','Backups','Updates','Vehicles','Employees','Recent Changes'];
+const settingsNames=['Phone Access','Backups','Updates','Vehicles','Employees','Recent Changes','Login Security'];
 function settingsSection(index){settingsPanels.forEach((panel,i)=>panel.hidden=i!==index);[...settingsTabs.children].forEach((button,i)=>{button.classList.toggle('selected',i===index);button.setAttribute('aria-pressed',String(i===index));});}
 settingsPanels.forEach((panel,i)=>{const button=document.createElement('button');button.type='button';button.textContent=settingsNames[i];button.onclick=()=>settingsSection(i);settingsTabs.append(button);});
 $('settings').prepend(settingsTabs);settingsSection(0);
@@ -148,7 +159,7 @@ function applyPermissions(){
  document.querySelectorAll('#jobs .editIcon').forEach(b=>b.hidden=!can('edit_appointments'));
  document.querySelectorAll('#jobs .statusUpdate').forEach(b=>b.hidden=!(can('update_status')||can('cancel_appointments')));
  for(const [selector,key] of [['.textCustomer','text_contacts'],['a[href^="tel:"]','call_contacts'],['a[aria-label^="Navigate"]','navigate']])document.querySelectorAll(selector).forEach(el=>el.hidden=!can(key));
- $('settingsTab').hidden=!user.admin&&!['backup_settings','create_backups','check_updates','configure_updates','install_updates','manage_vehicles','manage_users','reset_passwords','view_audit'].some(can);
+ $('settingsTab').hidden=!user.admin&&!['backup_settings','create_backups','check_updates','configure_updates','install_updates','manage_vehicles','manage_users','reset_passwords','view_audit','unlock_users'].some(can);
  $('serverUpdateButton').hidden=!can('check_updates');
  $('reportsTab').hidden=!can('view_reports');
  $('accountButton').hidden=!can('change_own_password');$('remove').hidden=!editing||!can('delete_appointments');
