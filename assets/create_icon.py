@@ -1,19 +1,25 @@
-"""Deterministic, high-contrast white box-truck application icon."""
+"""Build the native YFC rings + office-building application icon at tray sizes."""
 from pathlib import Path
 from PIL import Image,ImageDraw
 root=Path(__file__).parent
 im=Image.new('RGBA',(512,512));d=ImageDraw.Draw(im)
-d.rounded_rectangle((12,12,500,500),radius=108,fill='#164D43')
-# Box, cab and chassis; broad shapes survive 16px tray rendering.
-d.rounded_rectangle((68,125,310,335),radius=10,fill='white')
-d.polygon([(324,192),(390,192),(444,253),(444,334),(324,334)],fill='white')
-d.polygon([(342,209),(382,209),(418,252),(342,252)],fill='#70ABBE')
-d.rounded_rectangle((62,322,453,352),radius=8,fill='#BBCED0')
-d.rectangle((339,275,367,283),fill='#164D43')
-d.rectangle((423,299,444,314),fill='#F2C86A')
-for x in (144,376):
- d.ellipse((x-47,311,x+47,405),fill='#102D30')
- d.ellipse((x-24,334,x+24,382),fill='#E6F1F0')
- d.ellipse((x-10,348,x+10,368),fill='#688B8A')
+red='#ea4520'
+# Linked YFC circles, laid out top / lower-left / lower-right.
+for box in [(36,172,272,408),(164,282,372,490),(132,24,388,280)]:
+ d.ellipse(box,outline='white',width=50)
+ inner=tuple(v+6 if i<2 else v-6 for i,v in enumerate(box))
+ d.ellipse(inner,outline=red,width=34)
+# The office-building glyph is in front of the rings on the right, like 🏢.
+d.rounded_rectangle((278,216,494,492),radius=9,fill='#334c60',outline='white',width=8)
+d.rectangle((290,228,480,480),fill='#b8c7d2')
+d.rectangle((430,228,480,480),fill='#8fa5b5')
+d.rectangle((305,204,464,230),fill='#667e90')
+for y in (248,295,342,389):
+ for x in (306,350,394,438):
+  d.rectangle((x,y,x+25,y+29),fill='#286584')
+  d.line((x+3,y+3,x+21,y+3),fill='#9ed9ef',width=3)
+d.rectangle((365,437,411,480),fill='#334c60')
+d.line((388,439,388,480),fill='#b8c7d2',width=3)
+d.rounded_rectangle((270,480,501,501),radius=5,fill='#536e82')
 im.save(root/'dispatch.png')
 im.save(root/'dispatch.ico',sizes=[(16,16),(20,20),(24,24),(32,32),(40,40),(48,48),(64,64),(128,128),(256,256)])

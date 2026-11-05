@@ -1,11 +1,11 @@
-# MGC YFC Operations 0.25.0
+# MGC YFC Operations 0.26.0
 
-- Locks repository editing by default and requires fresh administrator credentials for a single change, valid for five minutes.
-- Gives Settings its own black header and isolated workspace, with a fading yellow-green selected category border.
-- Opens Dispatch to Today when selected and makes the page dropdown clearer, with colored section buttons and a divider.
-- Aligns server status dots beside their labels and smooths their brightness animation; corrects checkbox sizing.
-- Saves Light, Dark, and system appearance preferences to each user's server account.
-- Adds configurable Dispatch Journal retention, defaulting to 30 days. All old pickups and deliveries are archived regardless of status after complete backup and verification; future and undated entries remain active.
-- Moves mobile sign-in content upward and adds Share YFC with Someone using the existing YFC logo, text/email links, and native sharing (including AirDrop where supported).
+- Changes Manage / Update Server to open authenticated browser settings instead of launching the separate Remote Manager executable that Windows Application Control blocked on the reported computer.
+- Renames Open schedule to Login to Operations in the server window and tray menu. It opens the application sign-in screen, ending an existing session in that browser when necessary.
+- Updates the server, tray, console, installer and shortcuts to a YFC rings icon with an office building in front at the right. The desktop title is MGC YFC Operations Server.
+- Updates the Start menu management shortcut to browser settings and verifies the desktop button destinations during Windows installer tests.
+- Includes all prior settings, journal, appearance, receipt and dispatch changes.
 
-Install through Check for Updates on the host server, restart, then refresh browsers. Existing data paths, backups, installation identity, and update ZIP format are preserved.
+IMPORTANT: Install MGC-YFC-Operations-Setup-v0.26.0.exe on the host computer to refresh desktop executables, shortcuts and icons. The in-app update ZIP updates server/web code only and cannot replace the running desktop launcher. Exit the server from its tray menu before installing; keep the existing installation location and select the Server component. Existing installation identity and data paths are preserved. Reopen MGC YFC Operations Server afterward and refresh browsers.
+
+This change removes the blocked Remote Manager dependency from the management button. It does not change Windows security policy or code-sign the application; a separate Windows policy block on the installer or server itself still requires trusted signing or administrator policy review.

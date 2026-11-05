@@ -57,7 +57,7 @@ Source: "..\dist\MGC YFC Operations Server Console.exe"; DestDir: "{app}"; DestN
 Source: "..\dist\MGC YFC Operations Remote Manager.exe"; DestDir: "{app}"; DestName: "Thrift Mart Dispatch Remote Manager.exe"; Flags: ignoreversion
 [Icons]
 Name: "{group}\MGC YFC Operations Server Console"; Filename: "{sys}\conhost.exe"; Parameters: """{app}\MGC YFC Operations Server Console.exe"" --console"; WorkingDir: "{app}"; IconFilename: "{app}\assets\dispatch.ico"; Components: server
-Name: "{group}\Manage or Update MGC YFC Operations Server"; Filename: "{app}\MGC YFC Operations Remote Manager.exe"; Parameters: "--local-server"; Components: server
+Name: "{group}\Manage or Update MGC YFC Operations Server"; Filename: "http://127.0.0.1:8080/#settings"; IconFilename: "{app}\assets\dispatch.ico"; Components: server
 Name: "{group}\MGC YFC Operations Server"; Filename: "{app}\MGC YFC Operations Server.exe"; WorkingDir: "{app}"; Components: server
 Name: "{group}\MGC YFC Operations Remote Manager"; Filename: "{app}\MGC YFC Operations Remote Manager.exe"; Components: remote
 Name: "{group}\Restore MGC YFC Operations Server"; Filename: "{app}\MGC YFC Operations Remote Manager.exe"; Parameters: "--restore-dir ""{app}\data"""; Components: server
