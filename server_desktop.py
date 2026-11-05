@@ -102,7 +102,7 @@ class ServerWindow:
     def manage(self):
         if self.admin_panel is None:
             from remote.remote_manager import App
-            self.admin_panel=App(self.root,local=True,container=self.admin_tab,address=URL)
+            self.admin_panel=App(self.root,local=True,container=self.admin_tab,address=URL,local_control=self.token,session_path=DATA/'native-admin-session.bin')
         self.root.geometry('820x900');self.tabs.select(self.admin_tab);self.root.deiconify();self.root.lift()
     def offer_remote_cleanup(self):
         marker=ROOT/'remove-standalone-manager.pending'
@@ -189,6 +189,8 @@ class ServerWindow:
                         admin.request('setup',{'name':'SmokeAdmin','password':'TestPasswordOnly'})
                         assert admin.login('SmokeAdmin','TestPasswordOnly')['name']==NAME
                         assert admin.request('admin/users')['users']
+                        restored_admin=self.admin_panel.new_client()
+                        assert restored_admin.restore_local_session()['name']==NAME
                         self.tabs.select(self.server_tab);self.root.geometry('820x580');self.root.update_idletasks()
                         assert self.exit_button.winfo_rooty()+self.exit_button.winfo_height() <= self.root.winfo_rooty()+self.root.winfo_height()
                         self.hide();self.root.update_idletasks()
