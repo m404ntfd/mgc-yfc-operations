@@ -1,8 +1,7 @@
-# MGC YFC Operations 0.36.0
+# MGC YFC Operations 0.36.1
 
-- Adds Scheduling & Time Clock with manager shift scheduling, personal schedules and weekly hours, a live daily clock, break punches, and configurable work-site geofences. A manager must configure an approved work site before staff can clock in or out with location checks enabled.
-- Adds Home and Time Clock shortcuts below connection status. The sign-in page accepts a unique six-digit Time Clock PIN for one punch. Assign a PIN from Users.
-- Adds Delete for me for direct messages and Hide group for group conversations. Hidden groups retain their history and can be restored. Grant Create and manage groups through Roles.
-- Adds profile pictures with an approval queue in Notifications. Pending pictures stay private to the uploader and reviewers. Grant Approve profile pictures through Roles.
+- Work sites can now be located by U.S. street address. Choose a match, verify or adjust the center pin, and preview the geofence boundary on the map.
+- Enter geofence radii in feet or meters. Switching units preserves the physical radius. Existing work sites retain their coordinates and radius.
+- The header shows a clickable profile picture beside the notification area on desktop and mobile. It opens My profile and shows initials until a picture is approved.
 
-Existing 0.35.2 servers can use Check for Updates. The full Windows installer can also be installed over an existing installation. Use the secure staff address for remote PIN access and geofenced punches.
+Use Check for Updates on an existing server, or install the full Windows installer over the current installation. Address lookup and map tiles require internet access. You can still enter coordinates directly.

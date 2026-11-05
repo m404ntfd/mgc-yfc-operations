@@ -1,4 +1,6 @@
 """Staff messaging and incoming alerts across separate browser sessions."""
+import re
+
 from playwright.sync_api import expect, sync_playwright
 from test_server import Tests as Fixture
 
@@ -29,8 +31,9 @@ def run():
 
             alex = session('Alex', 390)
             admin = session('Admin', 1280)
-            alex.locator('#storeMenuButton').click()
-            alex.get_by_role('button',name='My profile').click()
+            expect(alex.locator('#headerProfile')).to_be_visible()
+            expect(alex.locator('#headerProfile')).to_have_text('AL')
+            alex.get_by_role('button',name='Open my profile').click()
             png=alex.evaluate("""()=>{const canvas=document.createElement('canvas');canvas.width=canvas.height=24;
               const context=canvas.getContext('2d');context.fillStyle='green';context.fillRect(0,0,24,24);
               return Array.from(atob(canvas.toDataURL('image/png').split(',')[1]),c=>c.charCodeAt(0));}""")
@@ -53,6 +56,7 @@ def run():
             assert admin.request.get(base+pending).status==404
             admin.locator('#closePhotoQueue').click()
             alex.locator('#closeProfilePhoto').click()
+            expect(alex.locator('#headerProfile img')).to_have_attribute('src',re.compile(r'/api/profile/photo/'+photo_id+r'\?v='),timeout=10000)
             admin.locator('#storeMenuButton').click()
             admin.locator('#commsSection').click()
             admin.locator('#commNew').click()

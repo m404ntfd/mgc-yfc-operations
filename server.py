@@ -7,7 +7,8 @@ from contextlib import contextmanager, closing
 from pathlib import Path
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from http.cookies import SimpleCookie
-from urllib.parse import urlsplit,parse_qs
+from urllib.parse import urlsplit,parse_qs,urlencode
+from urllib.request import Request,urlopen
 
 try:
     import requests
@@ -276,7 +277,7 @@ def profile_post(handler,c,u,path,d):
             raise Problem('Invalid review decision.')
         if target==account: raise Problem('Another reviewer must approve or reject your photo.',403)
         if decision=='approve':
-            query="""UPDATE user_profile_photos SET approved=pending,pending=NULL,pending_revision=NULL,status='approved'
+            query="""UPDATE user_profile_photos SET approved=pending,approved_revision=pending_revision,pending=NULL,pending_revision=NULL,status='approved'
                      WHERE account=? AND pending_revision=?"""
         else:
             query="""UPDATE user_profile_photos SET pending=NULL,pending_revision=NULL,status='rejected'
@@ -329,6 +330,9 @@ def init_comms(c):
             account TEXT PRIMARY KEY, body TEXT NOT NULL
         );
     """)
+
+    if not any(row[1]=='approved_revision' for row in c.execute('PRAGMA table_info(user_profile_photos)')):
+        c.execute("ALTER TABLE user_profile_photos ADD COLUMN approved_revision TEXT")
 
 
 COMM_DEFAULTS = dict(direct=True, order='recent', dm='all', group='all', alerts=True)
@@ -383,7 +387,9 @@ def comm_get(handler, c, u, path, query):
         review=has_permission(u,'approve_profile_photos')
         pending=c.execute('SELECT COUNT(*) FROM user_profile_photos WHERE pending_revision IS NOT NULL AND account!=?',
                           (account,)).fetchone()[0] if review else 0
-        return handler.send({'unread': [dict(r) for r in rows], 'alerts': comm_preferences(c, account)['alerts'],
+        photo=c.execute('SELECT approved_revision FROM user_profile_photos WHERE account=? AND approved IS NOT NULL',
+                        (account,)).fetchone()
+        return handler.send({'profile_account':account,'profile_photo_revision':(photo[0] or 'existing') if photo else None,'unread': [dict(r) for r in rows], 'alerts': comm_preferences(c, account)['alerts'],
                              'photo_review':review,'pending_photos':pending})
     if path == 'inbox':
         threads = [dict(r) for r in c.execute("""SELECT t.id,t.kind,t.title,a.seen,
@@ -595,6 +601,31 @@ def init_workforce(c):
         );
         INSERT OR IGNORE INTO work_clock_settings VALUES(1,1);
     """)
+    if not any(row[1]=='address' for row in c.execute('PRAGMA table_info(work_sites)')):
+        c.execute("ALTER TABLE work_sites ADD COLUMN address TEXT NOT NULL DEFAULT ''")
+
+
+
+def work_geocode(address):
+    address=address.strip()
+    if not 5<=len(address)<=240 or not address.isprintable():
+        raise Problem('Enter a street address with a city and state or ZIP code.')
+    params=urlencode({'address':address,'benchmark':'Public_AR_Current','format':'json'})
+    request=Request('https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?'+params,
+                    headers={'User-Agent':'MGC-YFC-Operations','Accept':'application/json'})
+    try:
+        with urlopen(request,timeout=8) as response:
+            data=json.loads(response.read(262145))
+        matches=[]
+        for row in data['result']['addressMatches'][:8]:
+            coordinates=row['coordinates']
+            lat,lon=float(coordinates['y']),float(coordinates['x'])
+            label=row['matchedAddress']
+            if -90<=lat<=90 and -180<=lon<=180 and isinstance(label,str):
+                matches.append(dict(address=label[:240],latitude=lat,longitude=lon))
+        return matches
+    except (OSError,ValueError,TypeError,KeyError):
+        raise Problem('Address lookup is unavailable. Try again or enter the coordinates manually.',424)
 
 
 def clock_pin_hash(c, pin):
@@ -861,10 +892,13 @@ def work_post(handler,c,u,path,d,clock_only=False):
             else:
                 name=d.get('name')
                 if not isinstance(name,str) or not 1<=len(name.strip())<=80: raise Problem('Enter a work site name.')
+                address=d.get('address','')
+                if not isinstance(address,str) or len(address)>240:
+                    raise Problem('Use up to 240 characters for the work site address.')
                 fields=(name.strip(),work_number(d.get('latitude'),-90,90),
-                        work_number(d.get('longitude'),-180,180),work_number(d.get('radius'),30,2000))
-                if ident: c.execute('UPDATE work_sites SET name=?,latitude=?,longitude=?,radius=? WHERE id=?',fields+(ident,))
-                else: c.execute('INSERT INTO work_sites(name,latitude,longitude,radius) VALUES(?,?,?,?)',fields)
+                        work_number(d.get('longitude'),-180,180),work_number(d.get('radius'),30,2000),address.strip())
+                if ident: c.execute('UPDATE work_sites SET name=?,latitude=?,longitude=?,radius=?,address=? WHERE id=?',fields+(ident,))
+                else: c.execute('INSERT INTO work_sites(name,latitude,longitude,radius,address) VALUES(?,?,?,?,?)',fields)
         c.commit()
         return handler.send({'ok':True})
     raise Problem('Not found.',404)
@@ -1189,7 +1223,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Cache-Control','no-store')
         self.send_header('X-Content-Type-Options','nosniff')
         self.send_header('X-Frame-Options','DENY')
-        self.send_header('Content-Security-Policy',"default-src 'self'; img-src 'self' data: blob:; media-src 'self' data:; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'")
+        self.send_header('Content-Security-Policy',"default-src 'self'; img-src 'self' data: blob: https://tile.openstreetmap.org; media-src 'self' data:; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'")
         if attachment: self.send_header('Content-Disposition','attachment')
         if cookie: self.send_header('Set-Cookie',cookie+('; Secure' if self.external_scheme()=='https' else ''))
         self.end_headers(); self.wfile.write(raw)
@@ -1267,6 +1301,15 @@ class Handler(BaseHTTPRequestHandler):
         if not self.serve_mobile_media(True):self.send_error(404)
     def do_GET(self):
         try:
+            request=urlsplit(self.path)
+            if request.path=='/api/workforce/geocode':
+                with LOCK:
+                    user=self.user()
+                    if not has_permission(user,'manage_work_sites'):
+                        raise Problem('Work site management permission required.',403)
+                address=parse_qs(request.query).get('address',[''])[0]
+                return self.send({'matches':work_geocode(address)})
+
             if self.serve_mobile_media():return
             if self.path=='/offline.gif':return self.send(web_asset('gif'),kind='image/gif')
             if self.path in ('/app-icon-180.png','/app-icon-192.png','/app-icon-512.png'):return self.send(web_asset(self.path.split('-')[-1].split('.')[0]),kind='image/png')

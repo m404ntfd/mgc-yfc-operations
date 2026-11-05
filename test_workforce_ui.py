@@ -37,10 +37,30 @@ def run():
             expect(manager.locator('#workSiteList')).to_have_text('No work sites configured.')
             manager.locator('#workAddSite').click()
             form=manager.locator('#workSiteForm')
-            for field,value in dict(name='Main Office',latitude='30.69',longitude='-88.04',radius='150').items():
-                form.locator(f'[name={field}]').fill(value)
+            manager.route('https://tile.openstreetmap.org/**',lambda route:route.abort())
+            manager.route('**/api/workforce/geocode?*',lambda route:route.fulfill(json={
+                'matches':[{'address':'101 Main St, Mobile, AL','latitude':30.69,'longitude':-88.04}]
+            }))
+            form.locator('[name=name]').fill('Main Office')
+            form.locator('[name=address]').fill('101 Main St, Mobile, AL')
+            manager.locator('#workFindAddress').click()
+            manager.locator('#workAddressMatches button').click()
+            expect(manager.locator('#workSiteMap')).to_be_visible()
+            assert len(manager.locator('#workMapBoundary').get_attribute('points').split())==64
+            map_box=manager.locator('#workSiteMap').bounding_box()
+            manager.locator('#workSiteMap').click(position={'x':map_box['width']/2,'y':map_box['height']/2})
+            assert abs(float(form.locator('[name=longitude]').input_value())+88.04)<0.02
+            # Set an exact center again before testing the geofence.
+            form.locator('[name=latitude]').fill('30.69')
+            form.locator('[name=longitude]').fill('-88.04')
+            form.locator('[name=radius_unit]').select_option('ft')
+            assert abs(float(form.locator('[name=radius]').input_value())-150/0.3048)<0.001
+            form.locator('[name=radius]').fill('500')
             form.get_by_role('button',name='Save work site').click()
-            expect(manager.locator('#workSiteList')).to_contain_text('Main Office')
+            expect(manager.locator('#workSiteList')).to_contain_text('500 ft radius')
+            sites=manager.request.get(origin+'/api/workforce/sites').json()['sites']
+            assert abs(sites[0]['radius']-152.4)<0.001
+            assert sites[0]['address']=='101 Main St, Mobile, AL'
 
             manager.locator('[data-work-view=team]').click()
             expect(manager.locator('#workTeamShifts')).to_have_text('No shifts scheduled for this week.')

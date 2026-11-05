@@ -207,7 +207,7 @@ settingsGroups.forEach((group,i)=>{const button=document.createElement('button')
 $('settings').prepend(settingsCategories,settingsTabs,settingsEmpty);settingsCategory(null);
 
 const globalActions=document.querySelector('.bottomActions');document.querySelector('main').append(globalActions);globalActions.hidden=true;
-function updateSignedInUser(){if(!user){commReset();profileReset();}else {commPoll();if(isMobileView()||commIsIos())commPreparePush();}$('headerShortcuts').hidden=!user;globalActions.hidden=!user; $('loggedOutStatus').hidden=!!user; $('signedInUser').textContent=user?'Signed in as '+user.name:'';$('signedInUser').hidden=!user; }
+function updateSignedInUser(){if(!user){commReset();profileReset();}else {renderHeaderAvatar();commPoll();if(isMobileView()||commIsIos())commPreparePush();}$('headerShortcuts').hidden=!user;globalActions.hidden=!user; $('loggedOutStatus').hidden=!!user; $('signedInUser').textContent=user?'Signed in as '+user.name:'';$('signedInUser').hidden=!user; }
 
 let permissionCatalog={},savedUserGrants={};
 async function loadPermissionList(name){$('savePermissions').disabled=true;$('permissionChecklist').textContent='Loading permissions…';try{const data=await api('admin/permission-catalog');permissionCatalog=data.permissions;savedUserGrants=Object.fromEntries(data.users.map(u=>[u.name,u.grants]));const roleData=await api('roles');populateEmployeeRole(name,roleData);const person=state.users.find(u=>u.name===name);const defaults={view_schedule:true,submit_requests:true,cancel_appointments:true,call_contacts:true,text_contacts:true,navigate:true,change_own_password:true,submit_receipts:true};for(const key of ['create_appointments','edit_appointments','delete_appointments','update_status','review_requests'])defaults[key]=!!person.can_create;defaults.see_requests=!!person.see_requests;const grants={...defaults,...(savedUserGrants[name]||{})};employeeIndividualGrants={...grants};$('permissionChecklist').innerHTML=Object.entries(permissionCatalog).map(([key,label])=>`<label><input type="checkbox" data-grant="${key}" ${person.admin||grants[key]?'checked':''} ${person.admin?'disabled':''}> ${esc(label)}</label>`).join('');setEmployeeRoleMode();$('savePermissions').disabled=false;}catch(e){$('permissionMessage').textContent=e.message;}}
@@ -1236,9 +1236,18 @@ workPanel.innerHTML = `
   <form id="workSiteForm" class="workForm" hidden>
    <h3 id="workSiteTitle">Add work site</h3>
    <label>Site name<input name="name" maxlength="80" required></label>
+   <label>Street address<input name="address" maxlength="240" placeholder="Street, city, state ZIP"></label>
+   <button type="button" id="workFindAddress">Find address</button>
+   <div id="workAddressMatches" class="workAddressMatches"></div>
+   <p id="workMapStatus" role="status">Enter a U.S. work address or coordinates. Address lookup sends the address to the U.S. Census Geocoder.</p>
    <label>Latitude<input name="latitude" type="number" min="-90" max="90" step="any" required></label>
    <label>Longitude<input name="longitude" type="number" min="-180" max="180" step="any" required></label>
-   <label>Radius (meters)<input name="radius" type="number" min="30" max="2000" step="any" required value="150"></label>
+   <div class="workRadius"><label id="workRadiusLabel">Radius (meters)<input name="radius" type="number" min="30" max="2000" step="any" required value="150"></label>
+   <label>Radius unit<select name="radius_unit"><option value="m">Meters</option><option value="ft">Feet</option></select></label></div>
+   <div id="workMapPanel" hidden>
+    <svg id="workSiteMap" viewBox="0 0 560 300" role="img" aria-label="Work site map with center pin and clock-in radius"></svg>
+    <p class="workMapCaption">Tap or click the map to adjust the center. Verify the pin before saving. Map © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>.</p>
+   </div>
    <div class="actions"><button type="button" id="workUseLocation">Use my current location</button><button type="button" id="workCancelSite">Cancel</button><button class="primary">Save work site</button></div>
   </form>
  </section>`;
@@ -1320,7 +1329,7 @@ async function workLoad(version = workVersion) {
    $('workPolicyForm').querySelector('button').disabled=false;
    $('workPolicyForm').elements.required.checked=result.required;
    $('workSiteList').innerHTML=result.sites.map(site=>`<article class="workRow">
-    <div><strong>${esc(site.name)}</strong><p>${site.radius} m radius</p></div>
+    <div><strong>${esc(site.name)}</strong><p>${esc(workRadiusText(site.radius))} radius</p>${site.address?`<p>${esc(site.address)}</p>`:''}</div>
     <div class="actions"><button type="button" data-edit-site="${site.id}">Edit</button><button type="button" data-remove-site="${site.id}">Remove</button></div>
    </article>`).join('') || '<p>No work sites configured.</p>';
   }
@@ -1435,7 +1444,11 @@ function workEditSite(site) {
  form.reset();
  workEditingSite=site;
  $('workSiteTitle').textContent=site?'Edit work site':'Add work site';
- if (site) for (const key of ['name','latitude','longitude','radius']) form.elements.namedItem(key).value=site[key];
+ if (site) for (const key of ['name','latitude','longitude','address']) form.elements.namedItem(key).value=site[key]??'';
+ $('workAddressMatches').replaceChildren();
+ $('workMapStatus').textContent='Find a U.S. work address or enter coordinates. Address lookup uses the U.S. Census Geocoder.';
+ workSetRadiusUnit(workRadiusUnit(),site?.radius??150);
+ workRenderMap();
  form.hidden=false;
  form.elements.namedItem('name').focus();
 }
@@ -1463,6 +1476,7 @@ $('workUseLocation').onclick=async e=>{
   const position=await workPosition();
   if(version!==workVersion||form.hidden)return;
   for(const field of ['latitude','longitude'])form.elements[field].value=position[field].toFixed(7);
+  workRenderMap();
   workStatus('Location filled in. Review the site and radius, then save.');
  }catch(err){if(version===workVersion)workStatus(err.message);}
  finally{button.disabled=false;}
@@ -1476,7 +1490,11 @@ $('workShiftForm').onsubmit=e=>{
 $('workSiteForm').onsubmit=e=>{
  e.preventDefault();
  const data=Object.fromEntries(new FormData(e.currentTarget));
- for(const field of ['latitude','longitude','radius'])data[field]=Number(data[field]);
+ for(const field of ['latitude','longitude'])data[field]=Number(data[field]);
+ data.radius=workRadiusMeters(e.currentTarget);
+ if(Math.abs(data.radius-30)<1e-8)data.radius=30;
+ if(Math.abs(data.radius-2000)<1e-8)data.radius=2000;
+ delete data.radius_unit;
  if(workEditingSite)data.id=workEditingSite.id;
  workSave('site',data,e.submitter,e.currentTarget);
 };
@@ -1604,7 +1622,26 @@ photoNotifications.hidden=true;
 photoNotifications.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 5 2 7 2 7H4s2-2 2-7m4 10a2 2 0 0 0 4 0"/></svg><span id="photoReviewCount" hidden></span>';
 photoNotifications.title='Notifications';
 photoNotifications.setAttribute('aria-label','Notifications');
-headerShortcuts.append(photoNotifications);
+const headerProfile=document.createElement('button');
+headerProfile.type='button';
+headerProfile.id='headerProfile';
+headerProfile.title='My profile';
+headerProfile.setAttribute('aria-label','Open my profile');
+headerShortcuts.append(photoNotifications,headerProfile);
+headerProfile.onclick=()=>profileMenu.click();
+let headerAvatarKey='';
+
+function renderHeaderAvatar(account='',revision=null){
+ const name=user?.name||'';
+ const key=JSON.stringify([account,revision,name]);
+ if(key===headerAvatarKey)return;
+ headerAvatarKey=key;
+ headerProfile.innerHTML=commAvatar(account,name,!!revision,revision);
+ const picture=headerProfile.querySelector('img');
+ if(picture)picture.addEventListener('error',()=>{
+  if(headerAvatarKey===key)headerProfile.innerHTML=commAvatar('',name,false);
+ },{once:true});
+}
 
 const profileDialog=document.createElement('dialog');
 profileDialog.innerHTML=`<form id="profilePhotoForm">
@@ -1624,6 +1661,8 @@ let photoPendingCount=0;
 function profileReset(){
  photoNotifications.hidden=true;
  photoPendingCount=0;
+ headerAvatarKey='';
+ headerProfile.replaceChildren();
  profileDialog.close();
  photoQueueDialog.close();
  $('profilePhotos').replaceChildren();
@@ -1631,6 +1670,7 @@ function profileReset(){
  $('profilePhotoForm').reset();
 }
 function profileReviewStatus(result){
+ renderHeaderAvatar(result.profile_account,result.profile_photo_revision);
  const count=result.pending_photos||0;
  photoNotifications.hidden=!result.photo_review;
  $('photoReviewCount').hidden=!count;
@@ -1640,8 +1680,8 @@ function profileReviewStatus(result){
  if(result.photo_review&&count!==photoPendingCount&&photoQueueDialog.open)loadPhotoQueue();
  photoPendingCount=count;
 }
-function commAvatar(id,name,photo){
- if(photo)return `<img class="commInitial" src="/api/profile/photo/${encodeURIComponent(id)}" alt="" loading="lazy">`;
+function commAvatar(id,name,photo,revision=null){
+ if(photo)return `<img class="commInitial" src="/api/profile/photo/${encodeURIComponent(id)}${revision?'?v='+encodeURIComponent(revision):''}" alt="" loading="lazy">`;
  return `<span class="commInitial" aria-hidden="true">${esc(name.trim().slice(0,2).toUpperCase())}</span>`;
 }
 async function loadProfilePhoto(){
@@ -1739,3 +1779,122 @@ $('photoQueue').onclick=async e=>{
   if(user===signedIn){$('photoQueueStatus').textContent=err.message;await loadPhotoQueue();}
  }
 };
+
+const workFeet=0.3048;
+const workMapSize={width:560,height:300,tile:256};
+const workSiteFields=$('workSiteForm').elements;
+let workMapCenter=null,workMapFrame=null,workAddressSearch=0;
+function workRadiusUnit(){
+ try{return localStorage.getItem('yfc-work-radius-unit')==='ft'?'ft':'m';}catch{return 'm';}
+}
+function workRadiusText(meters){
+ const feet=workRadiusUnit()==='ft';
+ return `${new Intl.NumberFormat(undefined,{maximumFractionDigits:1}).format(feet?meters/workFeet:meters)} ${feet?'ft':'m'}`;
+}
+function workRadiusMeters(form){
+ const radius=form.elements.radius.valueAsNumber;
+ return form.elements.radius_unit.value==='ft'?radius*workFeet:radius;
+}
+function workSetRadiusUnit(unit,meters){
+ const factor=unit==='ft'?workFeet:1;
+ workSiteFields.radius_unit.value=unit;
+ $('workRadiusLabel').firstChild.textContent=unit==='ft'?'Radius (feet)':'Radius (meters)';
+ workSiteFields.radius.min=30/factor;
+ workSiteFields.radius.max=2000/factor;
+ if(Number.isFinite(meters))workSiteFields.radius.value=meters/factor;
+}
+workSiteFields.radius_unit.onchange=()=>{
+ const unit=workSiteFields.radius_unit.value;
+ const previous=unit==='ft'?'m':'ft';
+ const value=workSiteFields.radius.valueAsNumber;
+ workSetRadiusUnit(unit,previous==='ft'?value*workFeet:value);
+ try{localStorage.setItem('yfc-work-radius-unit',unit);}catch{}
+ workRenderMap();
+};
+function workProject(lat,lon,scale){
+ const angle=Math.max(-85.05112878,Math.min(85.05112878,lat))*Math.PI/180;
+ return [(lon+180)/360*scale,(1-Math.asinh(Math.tan(angle))/Math.PI)*scale/2];
+}
+function workBoundaryPoint(lat,lon,meters,bearing){
+ const rad=Math.PI/180, distance=meters/6371000;
+ const a=lat*rad;
+ const b=Math.asin(Math.sin(a)*Math.cos(distance)+Math.cos(a)*Math.sin(distance)*Math.cos(bearing));
+ const l=lon*rad+Math.atan2(Math.sin(bearing)*Math.sin(distance)*Math.cos(a),Math.cos(distance)-Math.sin(a)*Math.sin(b));
+ return [b/rad,l/rad];
+}
+function workRenderMap(){
+ const svg=$('workSiteMap'), lat=workSiteFields.latitude.valueAsNumber, lon=workSiteFields.longitude.valueAsNumber;
+ const radius=workRadiusMeters($('workSiteForm'));
+ const valid=Number.isFinite(lat)&&Math.abs(lat)<=85.05112878&&Number.isFinite(lon)&&Math.abs(lon)<=180;
+ $('workMapPanel').hidden=!valid;
+ workMapCenter=null;
+ if(!valid){svg.replaceChildren();workMapFrame=null;return;}
+ const {width,height,tile}=workMapSize;
+ const meters=Number.isFinite(radius)&&radius>=30-1e-8&&radius<=2000+1e-8?radius:0;
+ const zoom=Math.max(3,Math.min(19,Math.floor(Math.log2(height*0.35*2*Math.PI*6371000*Math.cos(lat*Math.PI/180)/(tile*Math.max(meters,30))))));
+ const tiles=2**zoom, scale=tile*tiles;
+ const [x,y]=workProject(lat,lon,scale);
+ const left=x-width/2, top=y-height/2;
+ const frame=[zoom,left,top].join(':');
+ const parts=[];
+ if(frame!==workMapFrame){
+  for(let ty=Math.max(0,Math.floor(top/tile));ty<=Math.min(tiles-1,Math.floor((top+height)/tile));ty++){
+   for(let tx=Math.floor(left/tile);tx<=Math.floor((left+width)/tile);tx++){
+    const wrapped=(tx%tiles+tiles)%tiles;
+    parts.push(`<image href="https://tile.openstreetmap.org/${zoom}/${wrapped}/${ty}.png" x="${tx*tile-left}" y="${ty*tile-top}" width="256" height="256"></image>`);
+   }
+  }
+  svg.innerHTML='<g id="workMapTiles">'+parts.join('')+'</g><polygon id="workMapBoundary"/><g class="workMapPin" transform="translate(280 150)"><path d="M0 0C-3-5-10-11-10-19a10 10 0 0 1 20 0C10-11 3-5 0 0Z"/><circle cx="0" cy="-19" r="3"/></g>';
+  workMapFrame=frame;
+ }
+ const points=meters?Array.from({length:64},(_,i)=>{
+  const p=workBoundaryPoint(lat,lon,meters,i*Math.PI/32);
+  const [px,py]=workProject(p[0],p[1],scale);
+  return `${(px-left).toFixed(2)},${(py-top).toFixed(2)}`;
+ }).join(' '):'';
+ $('workMapBoundary').setAttribute('points',points);
+ workMapCenter={left,top,scale};
+}
+for(const field of ['latitude','longitude','radius'])workSiteFields[field].addEventListener('input',workRenderMap);
+$('workSiteMap').onclick=e=>{
+ const svg=e.currentTarget, matrix=svg.getScreenCTM();
+ if(!workMapCenter||!matrix)return;
+ const point=new DOMPoint(e.clientX,e.clientY).matrixTransform(matrix.inverse());
+ const {left,top,scale}=workMapCenter;
+ const lon=(point.x+left)/scale*360;
+ const lat=Math.atan(Math.sinh(Math.PI*(1-2*(point.y+top)/scale)))*180/Math.PI;
+ workSiteFields.latitude.value=lat.toFixed(7);
+ workSiteFields.longitude.value=(((lon+360)%360)-180).toFixed(7);
+ workRenderMap();
+};
+$('workFindAddress').onclick=async e=>{
+ const button=e.currentTarget,address=workSiteFields.address.value.trim();
+ const version=workVersion,editing=workEditingSite,search=++workAddressSearch;
+ const current=()=>version===workVersion&&editing===workEditingSite&&search===workAddressSearch&&!$('workSiteForm').hidden;
+ const status=$('workMapStatus'), list=$('workAddressMatches');
+ list.replaceChildren();
+ if(address.length<5){status.textContent='Enter a street address with a city and state or ZIP code.';return;}
+ button.disabled=true;
+ status.textContent='Looking up the work address…';
+ try{
+  const {matches}=await workApi('geocode?address='+encodeURIComponent(address));
+  if(!current()||workSiteFields.address.value.trim()!==address)return;
+  status.textContent=matches.length?'Choose an address match, then verify the pin on the map.':'No matching address. Check the address or enter coordinates manually.';
+  for(const match of matches){
+   const choice=document.createElement('button');
+   choice.type='button';
+   choice.textContent=match.address;
+   choice.onclick=()=>{
+    workSiteFields.address.value=match.address;
+    workSiteFields.latitude.value=match.latitude.toFixed(7);
+    workSiteFields.longitude.value=match.longitude.toFixed(7);
+    list.replaceChildren();
+    status.textContent='Address placed on the map. Adjust the pin if needed before saving.';
+    workRenderMap();
+   };
+   list.append(choice);
+  }
+ }catch(err){if(current())status.textContent=err.message;}
+ finally{button.disabled=false;}
+};
+workSiteFields.address.addEventListener('input',()=>$('workAddressMatches').replaceChildren());
