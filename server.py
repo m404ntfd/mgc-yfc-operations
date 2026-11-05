@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS photos(job TEXT, position INTEGER, body BLOB, PRIMARY
 CREATE TABLE IF NOT EXISTS vehicles(name TEXT PRIMARY KEY COLLATE NOCASE);
 CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY, revision INTEGER, body TEXT);
 CREATE TABLE IF NOT EXISTS update_notices(id INTEGER PRIMARY KEY AUTOINCREMENT, version TEXT, actor TEXT, at TEXT);
+CREATE TABLE IF NOT EXISTS daily_home(name TEXT COLLATE NOCASE, day TEXT, section TEXT, PRIMARY KEY(name,day));
 CREATE TABLE IF NOT EXISTS landing_preferences(name TEXT PRIMARY KEY COLLATE NOCASE, section TEXT);
 CREATE TABLE IF NOT EXISTS pages(id INTEGER PRIMARY KEY AUTOINCREMENT, at REAL, actor TEXT, area TEXT);
 CREATE TABLE IF NOT EXISTS login_security(id INTEGER PRIMARY KEY CHECK(id=1), max_attempts INTEGER NOT NULL);
@@ -103,7 +104,13 @@ def section_options(u):
     if has_permission(u,'view_schedule'): options.append({'id':'dispatch','label':'Thrift Mart Dispatch'})
     if has_permission(u,'send_pages') or has_permission(u,'receive_pages'): options.append({'id':'paging','label':'Store Associate Paging'})
     options.append({'id':'receipts','label':'Receipts & Accounting'})
+    options.append({'id':'print','label':'Print with a Purpose'})
     return options
+
+def session_expired(session, now):
+    if now >= session['expires']: return True
+    login_day = session.get('login_day', dt.date.fromtimestamp(now).isoformat())
+    return dt.date.fromtimestamp(now).isoformat() != login_day and now-session.get('last_active',0) >= 300
 
 def valid_credential(p): return 8<=len(p)<=256 or (len(p)==4 and all(c in '0123456789' for c in p))
 def password(p,s): return hashlib.pbkdf2_hmac('sha256',p.encode(),bytes.fromhex(s),200000).hex()
@@ -326,7 +333,9 @@ class Handler(BaseHTTPRequestHandler):
         cookie=SimpleCookie(); cookie.load(self.headers.get('Cookie',''))
         token=cookie.get('session'); token=token.value if token else ''
         session=SESSIONS.get(token)
-        if not session or session['expires']<time.time(): raise Problem('Please sign in again.',401)
+        if not session or session_expired(session, time.time()):
+            SESSIONS.pop(token, None)
+            raise Problem('Please sign in again.',401)
         with connect() as c:
             permission=c.execute('SELECT * FROM permissions WHERE name=?',(session['name'],)).fetchone()
         with connect() as c:
@@ -407,7 +416,8 @@ class Handler(BaseHTTPRequestHandler):
                     preference=c.execute('SELECT section,chosen_on FROM landing_preferences WHERE name=?',(u['name'],)).fetchone()
                     today=dt.date.today().isoformat();options=section_options(u)
                     section=preference['section'] if preference and preference['chosen_on']==today and preference['section'] in {o['id'] for o in options} else None
-                    return self.send({'section':section,'date':today,'options':options})
+                    home=c.execute('SELECT section FROM daily_home WHERE name=? AND day=?',(u['name'],today)).fetchone()
+                    return self.send({'section':section,'home_section':home['section'] if home and home['section'] in {o['id'] for o in options} else section,'date':today,'options':options})
                 if self.path=='/api/paging':
                     if not has_permission(u,'send_pages') and not has_permission(u,'receive_pages'): raise Problem('Paging permission required.',403)
                     return self.send({'pages':[dict(r) for r in c.execute('SELECT * FROM pages WHERE at>? ORDER BY id',(time.time()-60,))],'latest':c.execute('SELECT COALESCE(MAX(id),0) FROM pages').fetchone()[0]})
@@ -474,8 +484,8 @@ class Handler(BaseHTTPRequestHandler):
                         if locked_at: raise Problem('Account locked. Ask an administrator or authorized employee to unlock it.',423)
                         raise Problem('Incorrect name or password.',401)
                     c.execute('DELETE FROM account_lockouts WHERE name=?',(r['name'],))
-                    token=secrets.token_urlsafe(32); SESSIONS[token]={'name':r['name'],'admin':bool(r['admin']),'expires':time.time()+43200}
-                    return self.send({'ok':True},cookie=f'session={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200')
+                    token=secrets.token_urlsafe(32); SESSIONS[token]={'name':r['name'],'admin':bool(r['admin']),'expires':time.time()+86400,'login_day':dt.date.today().isoformat(),'last_active':time.time()}
+                    return self.send({'ok':True},cookie=f'session={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=86400')
                 if self.path=='/api/receipt-submit':
                     # This is intentionally public. Never grants a session or schedule access.
                     category=d.get('category'); ident=d.get('id'); filename=d.get('filename')
@@ -501,6 +511,9 @@ class Handler(BaseHTTPRequestHandler):
                     c.execute('INSERT INTO receipts VALUES(?,?,?,?,?,?,?,?)',(ident,time.time(),actor,category,filename,mime,body,source))
                     return self.send({'ok':True,'id':ident,'email_pending':True})
                 u=self.user()
+                if self.path=='/api/account/activity':
+                    u['last_active']=time.time()
+                    return self.send({'ok':True})
                 if self.path=='/api/account/appearance':
                     mode=d.get('mode')
                     if mode not in ('light','dark','system'):raise Problem('Choose Light, Dark or Use system settings.')
@@ -561,6 +574,9 @@ class Handler(BaseHTTPRequestHandler):
                     section=d.get('section')
                     if section not in {o['id'] for o in section_options(u)}: raise Problem('Choose an available section.',403)
                     if section=='paging' and not has_permission(u,'send_pages') and not has_permission(u,'receive_pages'): raise Problem('Paging permission required.',403)
+                    previous=c.execute('SELECT section,chosen_on FROM landing_preferences WHERE name=?',(u['name'],)).fetchone()
+                    home=previous['section'] if previous and previous['chosen_on']==dt.date.today().isoformat() else section
+                    c.execute('INSERT OR IGNORE INTO daily_home VALUES(?,?,?)',(u['name'],dt.date.today().isoformat(),home))
                     c.execute('INSERT OR REPLACE INTO landing_preferences(name,section,chosen_on) VALUES(?,?,?)',(u['name'],section,dt.date.today().isoformat()))
                     return self.send({'ok':True})
                 if self.path=='/api/paging/send':
