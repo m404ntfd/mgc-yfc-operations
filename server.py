@@ -7,6 +7,7 @@ from contextlib import contextmanager, closing
 from pathlib import Path
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from http.cookies import SimpleCookie
+from urllib.parse import urlsplit,parse_qs
 
 ROOT=Path(__file__).resolve().parent
 DATA=Path(os.environ.get('DISPATCH_DATA', ROOT/'data'))
@@ -58,6 +59,13 @@ CREATE TABLE IF NOT EXISTS receipts(id TEXT PRIMARY KEY, at REAL, actor TEXT, ca
 CREATE TABLE IF NOT EXISTS audit(at TEXT, actor TEXT, action TEXT, job TEXT);''')
         if 'chosen_on' not in {r[1] for r in c.execute('PRAGMA table_info(landing_preferences)')}:
             c.execute('ALTER TABLE landing_preferences ADD COLUMN chosen_on TEXT')
+        c.execute('CREATE TABLE IF NOT EXISTS local_admin_sessions(token_hash TEXT PRIMARY KEY,name TEXT COLLATE NOCASE,version TEXT)')
+        c.execute('CREATE TABLE IF NOT EXISTS sharing_settings(id INTEGER PRIMARY KEY CHECK(id=1),body TEXT)')
+        c.execute('CREATE TABLE IF NOT EXISTS receipt_profiles(name TEXT PRIMARY KEY COLLATE NOCASE,profile_id TEXT UNIQUE)')
+        for person in c.execute('SELECT name FROM users').fetchall():c.execute('INSERT OR IGNORE INTO receipt_profiles VALUES(?,?)',(person['name'],secrets.token_hex(16)))
+        if 'owner' not in {r[1] for r in c.execute('PRAGMA table_info(receipts)')}:
+            c.execute('ALTER TABLE receipts ADD COLUMN owner TEXT COLLATE NOCASE')
+            c.execute("UPDATE receipts SET owner=(SELECT profile_id FROM receipt_profiles WHERE name=actor) WHERE actor!='Guest' AND actor IN (SELECT name FROM users)")
         c.execute("CREATE TABLE IF NOT EXISTS appearance_preferences(name TEXT PRIMARY KEY COLLATE NOCASE, mode TEXT NOT NULL)")
         c.execute('CREATE TABLE IF NOT EXISTS journal_archives(file TEXT PRIMARY KEY, sha256 TEXT NOT NULL, records INTEGER NOT NULL, archived_at TEXT NOT NULL)')
         c.execute('CREATE TABLE IF NOT EXISTS user_grants(name TEXT PRIMARY KEY COLLATE NOCASE, body TEXT)')
@@ -72,6 +80,7 @@ CREATE TABLE IF NOT EXISTS audit(at TEXT, actor TEXT, action TEXT, job TEXT);'''
 PERMISSIONS={
  'send_pages':'Page an associate to an area', 'receive_pages':'Use device as paging speaker',
  'show_vehicle_filter':'Show vehicle filter on main dashboard', 'show_search':'Show search bar on main dashboard',
+ 'view_all_receipts':'View all users’ receipts (manager/accounting)',
  'view_reports':'Open and print schedule/request reports',
  'view_schedule':'View schedule, search and filter', 'create_appointments':'Create pickups and deliveries',
  'edit_appointments':'Edit appointment details', 'delete_appointments':'Remove appointments',
@@ -89,6 +98,7 @@ PERMISSIONS={
 ROUTE_PERMISSIONS={'/api/admin/lockouts':'unlock_users','/api/admin/unlock-user':'unlock_users','/api/paging/send':'send_pages',
  'send_pages':'Page an associate to an area', 'receive_pages':'Use device as paging speaker',
  'show_vehicle_filter':'Show vehicle filter on main dashboard', 'show_search':'Show search bar on main dashboard',
+ 'view_all_receipts':'View all users’ receipts (manager/accounting)',
  'view_reports':'Open and print schedule/request reports','/api/admin/users':'manage_users','/api/admin/permissions':'manage_users',
  '/api/user':'manage_users','/api/admin/remove-user':'manage_users','/api/admin/password':'reset_passwords',
  '/api/account/password':'change_own_password','/api/vehicle':'manage_vehicles',
@@ -108,6 +118,7 @@ def section_options(u):
     return options
 
 def session_expired(session, now):
+    if session.get('local_admin'):return session.get('version')!=updater.current()
     if now >= session['expires']: return True
     login_day = session.get('login_day', dt.date.fromtimestamp(now).isoformat())
     return dt.date.fromtimestamp(now).isoformat() != login_day and now-session.get('last_active',0) >= 300
@@ -335,12 +346,22 @@ class Handler(BaseHTTPRequestHandler):
         cookie=SimpleCookie(); cookie.load(self.headers.get('Cookie',''))
         token=cookie.get('session'); token=token.value if token else ''
         session=SESSIONS.get(token)
+        local_control=os.environ.get('DISPATCH_CONTROL_TOKEN','')
+        trusted_local=self.client_address[0] in ('127.0.0.1','::1') and local_control and hmac.compare_digest(self.headers.get('X-Local-Control',''),local_control)
+        if trusted_local and token:
+            with connect() as c:
+                row=c.execute('SELECT s.name,s.version FROM local_admin_sessions s JOIN users u ON u.name=s.name WHERE s.token_hash=? AND u.admin=1',(hashlib.sha256(token.encode()).hexdigest(),)).fetchone()
+            if row and row['version']==updater.current():session={'name':row['name'],'admin':True,'local_admin':True,'version':row['version']};SESSIONS[token]=session
+            elif session and session.get('local_admin'):session=None
+        elif session and session.get('local_admin'):session=None
         if not session or session_expired(session, time.time()):
             SESSIONS.pop(token, None)
             raise Problem('Please sign in again.',401)
         if self.headers.get('X-Dispatch-Activity')=='1':session['last_active']=time.time()
         with connect() as c:
             permission=c.execute('SELECT * FROM permissions WHERE name=?',(session['name'],)).fetchone()
+            profile=c.execute('SELECT profile_id FROM receipt_profiles WHERE name=?',(session['name'],)).fetchone()
+            session['receipt_owner']=profile['profile_id'] if profile else None
         with connect() as c:
             c.execute('CREATE TABLE IF NOT EXISTS user_grants(name TEXT PRIMARY KEY COLLATE NOCASE, body TEXT)')
             saved=c.execute('SELECT body FROM user_grants WHERE name=?',(session['name'],)).fetchone()
@@ -366,6 +387,9 @@ class Handler(BaseHTTPRequestHandler):
                 if filename=='index.html':body=body.replace(b'</head>',b'<link rel="icon" type="image/svg+xml" href="/favicon.svg"></head>')
                 return self.send(body,kind=kind)
             with LOCK, connect() as c:
+                if self.path=='/api/sharing':
+                    row=c.execute('SELECT body FROM sharing_settings WHERE id=1').fetchone()
+                    return self.send(json.loads(row['body']) if row else {'mobile':{'text':True,'email':True,'native':True},'desktop':{'text':True,'email':True,'native':False}})
                 if self.path=='/api/connection-status':
                     return self.send({'online':True,'update_available':UPDATE_STATUS['available']})
                 if self.path=='/api/session':
@@ -376,6 +400,30 @@ class Handler(BaseHTTPRequestHandler):
                 if self.path=='/api/receipt-categories':
                     return self.send({'categories':[r[0] for r in c.execute('SELECT code FROM receipt_categories ORDER BY code')]})
                 u=self.user()
+                if self.path.startswith('/api/receipt-file/'):
+                    row=c.execute('SELECT body,mime,owner FROM receipts WHERE id=?',(self.path.rsplit('/',1)[1],)).fetchone()
+                    if not row or not (has_permission(u,'view_all_receipts') or row['owner'] and row['owner']==u.get('receipt_owner')):raise Problem('Receipt not found.',404)
+                    return self.send(bytes(row['body']),kind=row['mime'])
+                if urlsplit(self.path).path=='/api/receipts':
+                    query=parse_qs(urlsplit(self.path).query);value=lambda key:query.get(key,[''])[0]
+                    all_users=value('scope')=='all'
+                    if all_users and not has_permission(u,'view_all_receipts'):raise Problem('All-receipt access required.',403)
+                    clauses=[];args=[]
+                    if not all_users:clauses.append('owner=?');args.append(u.get('receipt_owner'))
+                    if value('search'):
+                        clauses.append('(instr(lower(filename),lower(?))>0 OR instr(lower(category),lower(?))>0 OR instr(lower(actor),lower(?))>0)');args.extend([value('search')[:200]]*3)
+                    if value('category'):clauses.append('category=?');args.append(value('category'))
+                    for key,op,days in [('from','>=',0),('to','<',1)]:
+                        if value(key):
+                            try:stamp=dt.datetime.combine(dt.date.fromisoformat(value(key))+dt.timedelta(days=days),dt.time()).timestamp()
+                            except ValueError:raise Problem('Choose valid receipt dates.')
+                            clauses.append('at'+op+'?');args.append(stamp)
+                    where=' WHERE '+' AND '.join(clauses) if clauses else ''
+                    try:offset=max(0,int(value('offset') or 0))
+                    except ValueError:raise Problem('Invalid page.')
+                    count=c.execute('SELECT COUNT(*) FROM receipts'+where,args).fetchone()[0]
+                    rows=c.execute('SELECT id,at,actor,category,filename FROM receipts'+where+' ORDER BY at DESC,id LIMIT 100 OFFSET ?',args+[offset]).fetchall()
+                    return self.send({'receipts':[dict(r) for r in rows],'total':count,'offset':offset,'can_view_all':has_permission(u,'view_all_receipts')})
                 if self.path=='/api/admin/receipts':
                     if not u['admin']: raise Problem('Administrator access required.',403)
                     return self.send({'receipts':[dict(r) for r in c.execute('SELECT id,at,actor,category,filename FROM receipts ORDER BY at DESC LIMIT 200')]})
@@ -491,8 +539,15 @@ class Handler(BaseHTTPRequestHandler):
                         if locked_at: raise Problem('Account locked. Ask an administrator or authorized employee to unlock it.',423,attempts_remaining=0)
                         raise Problem('Incorrect name or password.',401,attempts_remaining=max(0,limit-failures))
                     c.execute('DELETE FROM account_lockouts WHERE name=?',(r['name'],))
+                    local_admin=bool(d.get('local_admin'))
+                    if local_admin:
+                        control=os.environ.get('DISPATCH_CONTROL_TOKEN','')
+                        if not r['admin'] or self.client_address[0] not in ('127.0.0.1','::1') or not control or not hmac.compare_digest(str(d.get('local_control_token','')),control):raise Problem('Local server administration required.',403)
                     token=secrets.token_urlsafe(32); SESSIONS[token]={'name':r['name'],'admin':bool(r['admin']),'expires':time.time()+86400,'login_day':dt.date.today().isoformat(),'last_active':time.time()}
-                    return self.send({'ok':True},cookie=f'session={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=86400')
+                    if local_admin:
+                        c.execute('INSERT INTO local_admin_sessions VALUES(?,?,?)',(hashlib.sha256(token.encode()).hexdigest(),r['name'],updater.current()))
+                        SESSIONS[token].update(local_admin=True,version=updater.current())
+                    return self.send({'ok':True},cookie=f'session={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age={315360000 if local_admin else 86400}')
                 if self.path=='/api/receipt-submit':
                     # This is intentionally public. Never grants a session or schedule access.
                     category=d.get('category'); ident=d.get('id'); filename=d.get('filename')
@@ -513,11 +568,19 @@ class Handler(BaseHTTPRequestHandler):
                     elif len(body)>12 and body[4:8]==b'ftyp' and body[8:12] in (b'heic',b'heix',b'hevc',b'hevx',b'mif1'): mime='image/heic'
                     elif len(body)>12 and body[:4]==b'RIFF' and body[8:12]==b'WEBP': mime='image/webp'
                     if not mime: raise Problem('Choose a JPEG, PNG, HEIC, WebP or PDF receipt.')
-                    try: actor=self.user()['name']
-                    except Problem: actor='Guest'
-                    c.execute('INSERT INTO receipts VALUES(?,?,?,?,?,?,?,?)',(ident,time.time(),actor,category,filename,mime,body,source))
+                    try:
+                        uploader=self.user();owner=uploader['receipt_owner'];actor=uploader['name']
+                    except Problem:
+                        if d.get('account_upload'):raise Problem('Sign in again before saving this receipt to your profile.',401)
+                        owner=None;actor='Guest'
+                    c.execute('INSERT INTO receipts(id,at,actor,category,filename,mime,body,source,owner) VALUES(?,?,?,?,?,?,?,?,?)',(ident,time.time(),actor,category,filename,mime,body,source,owner))
                     return self.send({'ok':True,'id':ident,'email_pending':True})
                 u=self.user()
+                if self.path=='/api/sharing':
+                    if not u['admin']:raise Problem('Administrator access required.',403)
+                    if set(d)!={'mobile','desktop'} or any(not isinstance(d[k],dict) or set(d[k])!={'text','email','native'} or any(not isinstance(v,bool) for v in d[k].values()) for k in d):raise Problem('Invalid sharing options.')
+                    c.execute('INSERT OR REPLACE INTO sharing_settings VALUES(1,?)',(json.dumps(d),))
+                    return self.send(d)
                 if self.path=='/api/account/activity':
                     u['last_active']=time.time()
                     return self.send({'ok':True})
@@ -594,6 +657,7 @@ class Handler(BaseHTTPRequestHandler):
                     c.execute('DELETE FROM pages WHERE at<?',(time.time()-86400,))
                     return self.send({'ok':True})
                 if self.path=='/api/logout':
+                    if u.get('local_admin'):c.execute('DELETE FROM local_admin_sessions WHERE token_hash=?',(hashlib.sha256(SimpleCookie(self.headers.get('Cookie',''))['session'].value.encode()).hexdigest(),))
                     for k,v in list(SESSIONS.items()):
                         if v is u: del SESSIONS[k]
                     return self.send({'ok':True},cookie='session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0')
@@ -624,6 +688,7 @@ class Handler(BaseHTTPRequestHandler):
                     c.execute('UPDATE users SET salt=?,hash=? WHERE name=?',(salt,password(new_password,salt),target['name']))
                     c.execute('INSERT INTO audit VALUES(?,?,?,?)',(dt.datetime.now().isoformat(timespec='seconds'),u['name'],'Password changed for: '+target['name'],''))
                     c.commit()
+                    c.execute('DELETE FROM local_admin_sessions WHERE name=?',(target['name'],))
                     for token,session in list(SESSIONS.items()):
                         if session['name']==target['name']: del SESSIONS[token]
                     return self.send({'ok':True,'signed_out':u['name']==target['name']})
@@ -680,7 +745,9 @@ class Handler(BaseHTTPRequestHandler):
                     if not target: raise Problem('Employee not found.',404)
                     if target['admin']: raise Problem('Administrator accounts cannot be removed here.',403)
                     c.execute('DELETE FROM users WHERE name=?',(target['name'],))
+                    c.execute('DELETE FROM receipt_profiles WHERE name=?',(target['name'],))
                     c.execute('DELETE FROM account_lockouts WHERE name=?',(target['name'],))
+                    c.execute('DELETE FROM local_admin_sessions WHERE name=?',(target['name'],))
                     for token in list(SESSIONS):
                         if SESSIONS[token]['name'].casefold()==target['name'].casefold(): del SESSIONS[token]
                     c.execute('INSERT INTO audit VALUES(?,?,?,?)',(dt.datetime.now().isoformat(timespec='seconds'),u['name'],'Removed employee: '+target['name'],''))
@@ -791,6 +858,7 @@ class Handler(BaseHTTPRequestHandler):
         if not 1<=len(name)<=80 or not valid_credential(p): raise Problem('Enter a name and a password of 8–256 characters.')
         salt=secrets.token_hex(16)
         c.execute('INSERT INTO users VALUES(?,?,?,?)',(name,salt,password(p,salt),int(admin)))
+        c.execute('INSERT INTO receipt_profiles VALUES(?,?)',(name,secrets.token_hex(16)))
 
 if __name__=='__main__':
     if os.name=='nt':
