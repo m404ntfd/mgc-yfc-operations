@@ -1,5 +1,6 @@
-# MGC YFC Operations 0.35.0
+# MGC YFC Operations 0.35.1
 
+- Gives Communications Hub the #9fcf04 accent and uses ComHub as the short name.
 - Adds Communications Hub with direct and group messaging, a team directory, saved messages, and shared files.
 - Adds unread counts and desktop and mobile push notifications. Mobile notifications start on. At first sign-in, tap Allow notifications to open the device permission prompt.
 - Renames Employees settings to Users and separates Users and Roles into their own tabs.

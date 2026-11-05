@@ -340,7 +340,7 @@ function setSectionHeader(title,section){
  section=section===true?'dispatch':section===false?'signin':section;
  if(section!=='comms'&&!commPanel.hidden){commPanel.hidden=true;commVersion++;$('commPrefsDialog').close();}
  $('currentSection').textContent=title;document.body.dataset.section=section;
- document.querySelector('meta[name="theme-color"]').content=({dispatch:'#b51f2b',paging:'#7a1520',receipts:'#067a06',print:'#073ea6'})[section]||'#215baa';applyPageColors();
+ document.querySelector('meta[name="theme-color"]').content=({dispatch:'#b51f2b',paging:'#7a1520',receipts:'#067a06',print:'#073ea6',comms:'#9fcf04'})[section]||'#215baa';applyPageColors();
 }
 let requestedReceipts=false;
 function populateDailySections(preference){
@@ -551,7 +551,7 @@ commPanel.hidden = true;
 commPanel.innerHTML = `
  <div class="commLayout">
   <aside class="commSidebar" aria-label="Communications">
-   <div class="commSidebarHead"><h2>Comms Hub</h2><button type="button" id="commPreferences" aria-label="Preferences" title="Preferences">⚙</button><button class="primary" type="button" id="commNew" aria-label="New message" title="New message">✎</button></div>
+   <div class="commSidebarHead"><h2>ComHub</h2><button type="button" id="commPreferences" aria-label="Preferences" title="Preferences">⚙</button><button class="primary" type="button" id="commNew" aria-label="New message" title="New message">✎</button></div>
    <div class="commLinks">
     <button type="button" data-comm-view="files">Files</button>
     <button type="button" data-comm-view="saved">Saved messages</button>
@@ -1024,7 +1024,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('mess
 });
 
 function commNotify(thread) {
- commAlertThread = thread; commAlert.textContent = 'New message · Open Communications Hub'; commAlert.hidden = false;
+ commAlertThread = thread; commAlert.textContent = 'New message · Open ComHub'; commAlert.hidden = false;
  clearTimeout(commAlertTimer);
  commAlertTimer = setTimeout(() => commAlert.hidden = true, 12000);
 
