@@ -16,7 +16,8 @@ def run():
     expect(page.locator('html')).to_have_attribute('data-theme','dark')
     page.locator('#login [name=name]').fill('Employee');page.locator('#login [name=password]').fill('testpassword');page.locator('#login button').click()
     expect(page.locator('#app')).to_be_visible()
-    if page.locator('#sectionChooser').is_visible():
+    if width==390:
+     expect(page.locator('#sectionChooser')).to_be_visible()
      page.locator('[name=section][value=dispatch]').check();page.locator('#sectionChooserForm button').click()
     page.locator('#settingsTab').click();page.get_by_role('button',name='Application Settings',exact=True).click();page.get_by_role('button',name='Appearance',exact=True).click()
     expect(page.locator('#appearanceMode')).to_be_visible()
