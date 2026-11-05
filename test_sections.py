@@ -8,7 +8,25 @@ def run():
  try:
   Fixture.call('setup',{'name':'Admin','password':'testpassword'})
   with sync_playwright() as p:
-   browser=p.chromium.launch();page=browser.new_page(viewport={'width':390,'height':844});errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
+   browser=p.chromium.launch();errors=[]
+   for width,path in [(390,'/mobile'),(1280,'/')]:
+    guest=browser.new_page(viewport={'width':width,'height':844},reduced_motion='reduce')
+    guest.on('pageerror',lambda e:errors.append(str(e)))
+    guest.goto(f'http://127.0.0.1:{Fixture.port}{path}')
+    for section in ('dispatchSection','pagingSection','receiptsSection','printSection','commsSection','workforceSection','appearanceMenu','chooseStartSection'):
+     guest.locator('#receiptShortcut').click()
+     expect(guest.locator('#receiptUpload')).to_be_visible()
+     guest.locator('#storeMenuButton').click()
+     guest.locator('#'+section).click()
+     prompt=guest.get_by_role('button',name='Log in first',exact=True)
+     expect(prompt).to_be_visible()
+     expect(guest.locator('#receiptUpload')).to_be_visible()
+     prompt.click()
+     expect(guest.locator('#receiptUpload')).to_be_hidden()
+     expect(guest.locator('#currentSection')).to_have_text('Sign in')
+     expect(guest.locator('#login [name=name]')).to_be_focused()
+    guest.close()
+   page=browser.new_page(viewport={'width':390,'height':844});page.on('pageerror',lambda e:errors.append(str(e)))
    page.emulate_media(reduced_motion='reduce');page.goto(f'http://127.0.0.1:{Fixture.port}')
    page.locator('#login [name=name]').fill('Admin');page.locator('#login [name=password]').fill('testpassword');page.locator('#login button').click()
    page.locator('[name=section][value=receipts]').check();page.locator('#sectionChooserForm button').click()

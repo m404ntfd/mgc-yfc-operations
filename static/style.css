@@ -335,6 +335,8 @@ body{background:var(--page-background,#faf6f5);min-height:100vh;color:var(--page
 .workPayrollTable th,.workPayrollTable td {text-align:left;padding:8px;border-bottom:1px solid var(--work-border)}
 .workPayrollTable small {color:inherit}
 #workPayrollActions {margin-top:12px}
+#toast:has(>button) {padding:0}
+#toast>button {background:transparent;color:white;border:0;padding:12px 24px}
 @media print {
  body.printingPayroll > :not(#workPayrollPrintReport) {display:none!important}
  body.printingPayroll > #workPayrollPrintReport {display:block!important;background:white;color:black;font-size:11pt}

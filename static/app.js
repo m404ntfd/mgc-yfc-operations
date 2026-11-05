@@ -34,8 +34,37 @@ const localDate=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}
 $('date').value=localDate(new Date());
 $('mobileLink').href=location.origin+'/mobile';$('mobileLink').textContent=location.origin+'/mobile';
 async function api(path,data){let r;try{r=await fetch('/api/'+path,{method:data?'POST':'GET',headers:data?{'Content-Type':'application/json','X-Dispatch':'1'}:{},body:data?JSON.stringify(data):undefined,signal:AbortSignal.timeout(20000)});if(r.status>=500)throw Error('Server unavailable');setServerConnection(true);}catch(e){setServerConnection(false);throw e;}const v=await r.json();if(!r.ok){if(r.status===401&&user){user=null;updateSignedInUser();clearInterval(timer);$('app').hidden=true;$('paging').hidden=true;$('receipts').hidden=true;$('receiptHistory')?.setAttribute('hidden','');$('printPurpose')?.setAttribute('hidden','');setSectionHeader('Sign in','signin');$('auth').hidden=false;$('editor').close();$('passwordDialog').close();$('statusDialog').close();}throw Object.assign(Error(v.error||'Request failed'),{status:r.status,attemptsRemaining:v.attempts_remaining});}return v;}
-function toast(s){$('toast').textContent=s;$('toast').hidden=false;setTimeout(()=>$('toast').hidden=true,5000);}
-async function boot(){try{const s=await api('session');if(location.hash==='#login'){if(s.user){await api('logout',{pushDevice:commPushId()});s.user=null;}history.replaceState(null,'',location.pathname+location.search);}setup=s.setup;user=s.user;if(user){const pref=await api('account/appearance');window.appAppearance.set(pref.mode);$('appearanceMode').value=pref.mode;}lockRepository();if(!user){if(typeof stopPaging==='function')stopPaging();$('paging').hidden=true;$('receipts').hidden=true;$('receiptHistory')?.setAttribute('hidden','');$('printPurpose')?.setAttribute('hidden','');setSectionHeader('Sign in','signin');$('sectionChooser').close();expandedAppointments.clear();$('requestsList').hidden=true;}updateSignedInUser();$('authTitle').textContent=setup?'Set up your store':'Welcome back';$('authHelp').textContent=setup?(s.local?'Create the administrator account. Then add your vehicles and employees.':'Open http://localhost:8080 on the server computer to create the first account.'):'Sign in to your operations workspace.';$('auth').hidden=!!user;$('app').hidden=!user;$('connection').textContent=user?'Connected to store':'Store server online';if(user){$('settingsTab').hidden=false;$('serverUpdateButton').hidden=!user.admin;if(!user.admin)tab('day');if(can('view_schedule'))await refresh();else applyPermissions();clearInterval(timer);timer=setInterval(()=>{if(can('view_schedule'))refresh().catch(()=>{});},10000);if(location.hash==='#settings'){tab('settings');if(can('check_updates'))settingsSection(2);history.replaceState(null,'',location.pathname+location.search);}else if(location.hash==='#comms'){history.replaceState(null,'',location.pathname+location.search);await commOpen();}else await chooseLanding();}}catch(e){$('connection').textContent='Server unavailable';$('offline').hidden=false;toast(e.message);}}
+let toastTimer;
+function toast(message,action){
+ const notice=$('toast');
+ clearTimeout(toastTimer);
+ notice.textContent=message;
+ if(action){
+  const button=document.createElement('button');
+  button.type='button';
+  button.textContent=message;
+  button.onclick=action;
+  notice.replaceChildren(button);
+ }else toastTimer=setTimeout(()=>notice.hidden=true,5000);
+ notice.hidden=false;
+}
+function requireSignIn(){
+ if(user)return true;
+ closeStoreMenu();
+ toast('Log in first',showSignIn);
+ return false;
+}
+function showSignIn(){
+ $('toast').hidden=true;
+ if(user)return;
+ workCloseQuick();
+ for(const id of ['app','paging','receipts','receiptUpload','receiptHistory','printPurpose'])$(id).hidden=true;
+ document.body.classList.remove('settingsView');
+ setSectionHeader('Sign in','signin');
+ $('auth').hidden=false;
+ $('login').elements.name.focus();
+}
+async function boot(){try{const s=await api('session');if(location.hash==='#login'){if(s.user){await api('logout',{pushDevice:commPushId()});s.user=null;}history.replaceState(null,'',location.pathname+location.search);}setup=s.setup;user=s.user;if(user){if($('toast').querySelector('button'))$('toast').hidden=true;const pref=await api('account/appearance');window.appAppearance.set(pref.mode);$('appearanceMode').value=pref.mode;}lockRepository();if(!user){if(typeof stopPaging==='function')stopPaging();$('paging').hidden=true;$('receipts').hidden=true;$('receiptHistory')?.setAttribute('hidden','');$('printPurpose')?.setAttribute('hidden','');setSectionHeader('Sign in','signin');$('sectionChooser').close();expandedAppointments.clear();$('requestsList').hidden=true;}updateSignedInUser();$('authTitle').textContent=setup?'Set up your store':'Welcome back';$('authHelp').textContent=setup?(s.local?'Create the administrator account. Then add your vehicles and employees.':'Open http://localhost:8080 on the server computer to create the first account.'):'Sign in to your operations workspace.';$('auth').hidden=!!user;$('app').hidden=!user;$('connection').textContent=user?'Connected to store':'Store server online';if(user){$('settingsTab').hidden=false;$('serverUpdateButton').hidden=!user.admin;if(!user.admin)tab('day');if(can('view_schedule'))await refresh();else applyPermissions();clearInterval(timer);timer=setInterval(()=>{if(can('view_schedule'))refresh().catch(()=>{});},10000);if(location.hash==='#settings'){tab('settings');if(can('check_updates'))settingsSection(2);history.replaceState(null,'',location.pathname+location.search);}else if(location.hash==='#comms'){history.replaceState(null,'',location.pathname+location.search);await commOpen();}else await chooseLanding();}}catch(e){$('connection').textContent='Server unavailable';$('offline').hidden=false;toast(e.message);}}
 async function refresh(){try{state=await api('state');user.can_create=state.permissions.can_create;user.see_requests=state.permissions.see_requests;user.grants=state.permissions.grants;renderRequests();$('connection').textContent='Connected · '+new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});$('offline').hidden=true;const value=$('filter').value;$('filter').innerHTML='<option value="">All vehicles</option>'+state.vehicles.map(v=>`<option>${esc(v)}</option>`).join('');$('filter').value=value;render();applyPermissions();checkUpdateNotice();$('vehicles').innerHTML=state.vehicles.map(v=>`<div class="listRow">${esc(v)}</div>`).join('')||'<p>No vehicles yet.</p>';renderUserList();}catch(e){if(e.message.includes('Schedule access required')){$('connection').textContent='Connected · schedule permission required';$('offline').hidden=true;toast('Ask an administrator to enable View schedule, search and filter in your employee permissions.');}else{$('connection').textContent='Disconnected';$('offline').hidden=false;}throw e;}}
 function filtered(){const q=can('show_search')?$('search').value.toLowerCase():'';return state.jobs.filter(j=>(!$('statusFilter').value||j.status===$('statusFilter').value)&&(!can('show_vehicle_filter')||!$('filter').value||j.vehicle===$('filter').value)&&(!q||Object.values(j).join(' ').toLowerCase().includes(q)));}
 function timeLabel(s){return new Date(s).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});}
@@ -310,17 +339,17 @@ $('jobs').addEventListener('keydown',e=>{const header=e.target.closest('[data-to
 const printPage=document.createElement('section');printPage.id='printPurpose';printPage.hidden=true;printPage.className='panel';printPage.innerHTML='<h1>Print with a Purpose</h1><p>This page is being designed. Check back soon.</p>';$('app').before(printPage);
 const printMenu=document.createElement('button');printMenu.id='printSection';printMenu.type='button';printMenu.textContent='Print with a Purpose';printMenu.onclick=()=>storeSection('print');menuDivider.before(printMenu);
 let pagingEnabled=false,pagingTimer=null,lastPageId=0,pagingBusy=false;
-const appearanceMenu=document.createElement('button');appearanceMenu.type='button';appearanceMenu.id='appearanceMenu';appearanceMenu.textContent='Settings';appearanceMenu.onclick=()=>{storeSection('dispatch');tab('settings');};$('storeMenu').append(appearanceMenu);
+const appearanceMenu=document.createElement('button');appearanceMenu.type='button';appearanceMenu.id='appearanceMenu';appearanceMenu.textContent='Settings';appearanceMenu.onclick=()=>{if(requireSignIn()){storeSection('dispatch');tab('settings');}};$('storeMenu').append(appearanceMenu);
 function closeStoreMenu(){$('storeMenu').hidden=true;$('storeMenuButton').setAttribute('aria-expanded','false');}
 document.addEventListener('pointerdown',e=>{if(!$('storeMenu').contains(e.target)&&!$('storeMenuButton').contains(e.target))closeStoreMenu();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeStoreMenu();});
 document.addEventListener('pointermove',e=>{if(e.pointerType!=='mouse'||isMobileView()||$('storeMenu').hidden)return;const a=$('storeMenu').getBoundingClientRect(),b=$('storeMenuButton').getBoundingClientRect();if(e.clientX<Math.min(a.left,b.left)||e.clientX>Math.max(a.right,b.right)||e.clientY<Math.min(a.top,b.top)||e.clientY>Math.max(a.bottom,b.bottom))closeStoreMenu();});
 $('storeMenuButton').onclick=()=>{const open=$('storeMenu').hidden;$('storeMenu').hidden=!open;$('storeMenuButton').setAttribute('aria-expanded',String(open));};
 function storeSection(section){
+ if(!requireSignIn())return;
  section=section===true?'paging':section===false?'dispatch':section;document.body.classList.remove('settingsView');$('settings').hidden=true;
  $('receiptUpload').hidden=true;if($('receiptHistory'))$('receiptHistory').hidden=true;
  $('storeMenu').hidden=true;$('storeMenuButton').setAttribute('aria-expanded','false');
- if(!user){toast('Sign in first.');return;}
  if(!['dispatch','paging','receipts','print'].includes(section))section='dispatch';
  if(section==='paging'&&!can('send_pages')&&!can('receive_pages')){toast('Ask an administrator for paging permission.');return;}
  printPage.hidden=section!=='print';$('paging').hidden=section!=='paging';$('app').hidden=section!=='dispatch';$('receipts').hidden=section!=='receipts';
@@ -357,7 +386,7 @@ function populateDailySections(preference){
 async function chooseLanding(force=false){const preference=await api('account/landing');populateDailySections(preference);if(preference.section&&!force){const target=requestedReceipts?'receipts':preference.section;requestedReceipts=false;storeSection(target);return;}setSectionHeader('Choose today’s starting page',false);if(!$('sectionChooser').open)$('sectionChooser').showModal();}
 $('sectionChooserForm').onsubmit=async e=>{e.preventDefault();const section=new FormData(e.target).get('section');try{await api('account/landing',{section});requestedReceipts=false;$('sectionChooser').close();storeSection(section);}catch(err){$('sectionChoiceError').textContent=err.message;}};
 $('sectionChooser').addEventListener('cancel',e=>e.preventDefault());
-$('chooseStartSection').onclick=()=>{if(!user)return;$('storeMenu').hidden=true;$('storeMenuButton').setAttribute('aria-expanded','false');chooseLanding(true).catch(e=>toast(e.message));};
+$('chooseStartSection').onclick=()=>{if(!requireSignIn())return;closeStoreMenu();chooseLanding(true).catch(e=>toast(e.message));};
 let updateReminderAfter=0;
 function noticeStorageKey(){return 'yfc-update-notice:'+user.name;}
 function checkUpdateNotice(){const notice=state.updateNotice;if(!user||!notice||Date.now()<updateReminderAfter||document.querySelector('dialog[open]'))return;let seen=null;try{seen=localStorage.getItem(noticeStorageKey());}catch{}if(seen===String(notice.id))return;$('userUpdateMessage').textContent=`${notice.actor} asks you to refresh to server version ${notice.version}.`;$('userUpdateDialog').showModal();}
@@ -387,7 +416,7 @@ $('userUpdateDialog').addEventListener('cancel',()=>{updateReminderAfter=Date.no
  function watchIntro(){if(intro.hidden||fading)return;if(phone.currentTime>=introEnd){fadeIntro();return;}introFrame=requestAnimationFrame(watchIntro);}
  function playIntro(manual=false){if((reduce.matches&&!manual)||$('auth').hidden)return;mobilePlayPrompt.hidden=true;clearTimeout(timeout);clearTimeout(fadeTimer);cancelAnimationFrame(introFrame);fading=false;intro.classList.remove('introFading');intro.hidden=false;phone.muted=true;phone.defaultMuted=true;phone.autoplay=true;phone.playsInline=true;phone.setAttribute('muted','');phone.setAttribute('playsinline','');phone.setAttribute('webkit-playsinline','');const source=new URL('/media/mobile-intro.'+format+'?v=title-2',location.href).href;if(phone.src!==source){phone.src=source;phone.load();}phone.currentTime=0;phone.play().catch(()=>{finish();if(!$('auth').hidden&&isMobileView())mobilePlayPrompt.hidden=false;});introFrame=requestAnimationFrame(watchIntro);timeout=setTimeout(finish,10000)}
  function playDesktop(){const attempt=++playAttempt;failed=false;desktop.hidden=false;fallback.hidden=true;$('pauseVideo').hidden=false;if(!desktop.src)desktop.src=media['desktop'+format];waitForPlayback();desktop.play().then(()=>{if(attempt!==playAttempt)return;clearTimeout(desktopTimeout);if($('auth').hidden){desktop.pause();return;}$('pauseVideo').textContent='Pause video'}).catch(()=>{if(attempt===playAttempt&&!$('auth').hidden)showFallback();})}
- function sync(){if($('auth').hidden){mobilePlayPrompt.hidden=true;++playAttempt;clearTimeout(desktopTimeout);desktop.pause();started=false;if(!intro.hidden)finish();return;}if(!started){started=true;if(isMobileView())playIntro();else if(!reduce.matches)playDesktop();else showFallback();}}
+ function sync(){if($('auth').hidden){mobilePlayPrompt.hidden=true;++playAttempt;clearTimeout(desktopTimeout);desktop.pause();started=false;if(!intro.hidden)finish();return;}if(!started){started=true;if(isMobileView()){if(document.activeElement!==$('login').elements.name)playIntro();}else if(!reduce.matches)playDesktop();else showFallback();}}
  $('skipVideo').onclick=finish;phone.onended=fadeIntro;phone.onerror=finish;phone.addEventListener('timeupdate',()=>{if(!intro.hidden&&phone.currentTime>=introEnd)fadeIntro();});document.addEventListener('visibilitychange',()=>{if(document.hidden&&!intro.hidden)finish();});
  $('pauseVideo').onclick=()=>{if(desktop.paused)playDesktop();else{clearTimeout(desktopTimeout);desktop.pause();$('pauseVideo').textContent='Play video'}};
  $('replayIntro').onclick=()=>{if(isMobileView())playIntro(true);else{desktop.currentTime=0;playDesktop()}};
@@ -855,7 +884,7 @@ async function commCollection(view) {
  } catch (e) { if (version === commVersion) commError(e.message); }
 }
 async function commOpen(thread = 0) {
- if (!user) return;
+ if (!requireSignIn()) return;
  if (commSession !== user) { commReset(); commSession = user; }
  commAlert.hidden = true;
  storeSection('dispatch'); $('app').hidden = true;
@@ -1485,7 +1514,7 @@ function workSelect(view) {
  workLoad();
 }
 function workOpen(quick=false,view='clock'){
- if (!quick&&!user) return;
+ if (!quick&&!requireSignIn()) return;
  workQuick=quick;
  if(quick)$('auth').hidden=true;
  else storeSection('dispatch');
