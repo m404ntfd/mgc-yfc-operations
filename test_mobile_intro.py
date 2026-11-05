@@ -11,7 +11,7 @@ def run():
     page=b.new_page(viewport={'width':390,'height':850});errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
     if webm:page.add_init_script("const original=HTMLMediaElement.prototype.canPlayType;HTMLMediaElement.prototype.canPlayType=function(type){return type.includes('mp4')?'':original.call(this,type);};")
     page.goto(f'http://127.0.0.1:{F.port}');expect(page.locator('#mobileIntro')).to_be_visible();page.wait_for_function("()=>document.getElementById('mobileVideo').currentTime>0")
-    assert page.locator('#mobileVideo').evaluate('(v)=>v.src.endsWith("#t=0,5.5")')
+    assert page.locator('#mobileVideo').evaluate('(v)=>v.muted&&v.playsInline&&!v.src.includes("#t=")')
     expect(page.locator('#mobileIntro')).to_have_class('introFading',timeout=9000)
     assert page.locator('#mobileVideo').evaluate('(v)=>v.paused&&v.currentTime<6')
     expect(page.locator('#mobileIntro')).to_have_css('transition-duration','0.7s');expect(page.locator('#mobileIntro')).to_be_hidden(timeout=2000);expect(page.locator('#login')).to_be_visible()
