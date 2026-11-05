@@ -18,6 +18,18 @@ ATTEMPTS={}
 RESTART=False
 STOPPING=False
 STARTED=time.time()
+UPDATE_STATUS={'available':False}
+def check_release_status():
+    result=updater.check()
+    UPDATE_STATUS['available']=bool(result.get('available'))
+    return result
+
+def monitor_release_status():
+    while True:
+        try: check_release_status()
+        except Exception: pass  # GitHub failure does not mean the store server is offline.
+        time.sleep(3600)
+
 
 @contextmanager
 def connect():
@@ -337,6 +349,8 @@ class Handler(BaseHTTPRequestHandler):
                 kind={'/':'text/html; charset=utf-8','/mobile':'text/html; charset=utf-8','/mobile/':'text/html; charset=utf-8','/app.js':'text/javascript','/style.css':'text/css'}[self.path]
                 return self.send((ROOT/'static'/filename).read_bytes(),kind=kind)
             with LOCK, connect() as c:
+                if self.path=='/api/connection-status':
+                    return self.send({'online':True,'update_available':UPDATE_STATUS['available']})
                 if self.path=='/api/session':
                     setup=not c.execute('SELECT 1 FROM users').fetchone()
                     try: u=self.user()
@@ -590,7 +604,7 @@ class Handler(BaseHTTPRequestHandler):
                     try:
                         if self.path=='/api/update-config': updater.configure(str(d.get('repository','')).strip())
                         elif self.path=='/api/update-check':
-                            result=updater.check(); result.pop('asset',None); return self.send(result)
+                            result=check_release_status(); result.pop('asset',None); return self.send(result)
                         elif self.path=='/api/update-install':
                             if os.environ.get('DISPATCH_LAUNCHER')!='1': raise ValueError('Restart using Start-Store-Dispatch.bat to enable installation.')
                             updater.stage(str(d.get('version','')))
@@ -730,6 +744,7 @@ if __name__=='__main__':
         if kernel.GetLastError()==183: raise SystemExit('MGC YFC Operations Server is already running.')
     data_lock=hold_data_lock()
     init(); threading.Thread(target=background,daemon=True).start()
+    threading.Thread(target=monitor_release_status,daemon=True).start()
     port=int(os.environ.get('DISPATCH_PORT','8080'))
     print('MGC YFC Operations Server '+updater.current())
     print(f'On this computer: http://localhost:{port}')
