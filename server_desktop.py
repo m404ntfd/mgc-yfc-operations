@@ -20,7 +20,7 @@ class ServerWindow:
     def __init__(self,root,smoke=False,console=False):
         self.root=root;self.smoke=smoke;self.console=None;self.pump=None;self.smoke_phase=0;self.process=None;self.log=None;self.stopping=False;self.tray_ready=False;self.queue=queue.Queue();self.token=secrets.token_urlsafe(48);self.deadline=time.time()+45;self.smoke_done=False;self.notice=None
         DATA.mkdir(parents=True,exist_ok=True)
-        root.title(NAME);root.geometry('700x510');root.minsize(660,480);root.iconbitmap(str(ASSETS/'dispatch.ico'))
+        root.title(NAME);root.geometry('820x580');root.minsize(800,560);root.iconbitmap(str(ASSETS/'dispatch.ico'))
         if console:
             from console_control import ConsoleWindow
             self.console=ConsoleWindow(ASSETS/'dispatch.ico');root.withdraw()
@@ -29,7 +29,12 @@ class ServerWindow:
             print('Double-click the YFC icon to reopen. To stop: right-click the YFC icon > Exit server.',flush=True)
         root.protocol('WM_DELETE_WINDOW',self.hide);root.bind('<Unmap>',self.on_minimize)
         style=ttk.Style();style.theme_use('clam');style.configure('TButton',padding=10);style.configure('TLabel',font=('Segoe UI',10))
-        f=ttk.Frame(root,padding=24);f.pack(fill='both',expand=True)
+        self.admin_panel=None;self.cleanup_checked=False
+        self.tabs=ttk.Notebook(root);self.tabs.pack(fill='both',expand=True)
+        self.server_tab=ttk.Frame(self.tabs);self.admin_tab=ttk.Frame(self.tabs)
+        self.tabs.add(self.server_tab,text='Server');self.tabs.add(self.admin_tab,text='Administration')
+        self.tabs.bind('<<NotebookTabChanged>>',self.on_tab_changed)
+        f=ttk.Frame(self.server_tab,padding=24);f.pack(fill='both',expand=True)
         self.picture=ImageTk.PhotoImage(Image.open(ASSETS/'dispatch.png').resize((72,72)))
         top=ttk.Frame(f);top.pack(fill='x');ttk.Label(top,image=self.picture).pack(side='left',padx=(0,16));ttk.Label(top,text='MGC YFC\nOperations Server',font=('Segoe UI',20,'bold')).pack(side='left')
         self.status=tk.StringVar(value='Starting server…');ttk.Label(f,textvariable=self.status,wraplength=600).pack(anchor='w',pady=(20,12))
@@ -92,7 +97,31 @@ class ServerWindow:
             if not webbrowser.open(target,new=2):raise OSError('No browser accepted the request.')
         except OSError as e:messagebox.showerror(NAME,'Cannot open the browser. Open '+target+' manually.\n'+str(e))
     def open_login(self):self.open_page('#login')
-    def manage(self):self.open_page('#settings')
+    def on_tab_changed(self,event=None):
+        if self.tabs.select()==str(self.admin_tab):self.manage()
+    def manage(self):
+        if self.admin_panel is None:
+            from remote.remote_manager import App
+            self.admin_panel=App(self.root,local=True,container=self.admin_tab,address=URL)
+        self.root.geometry('820x900');self.tabs.select(self.admin_tab);self.root.deiconify();self.root.lift()
+    def offer_remote_cleanup(self):
+        marker=ROOT/'remove-standalone-manager.pending'
+        if self.cleanup_checked or self.smoke or not marker.exists():return
+        try:
+            if request('session').get('application')!='thrift-mart-dispatch':return
+        except Exception:return
+        self.cleanup_checked=True
+        if not messagebox.askyesno(NAME,'The combined server application is installed and running. Administration is now included here. Remove the old standalone Remote Manager and its shortcuts from this computer? Your server, settings and data will be kept.'):
+            marker.unlink(missing_ok=True);return
+        from manager_cleanup import remove_standalone_manager
+        try:
+            remove_standalone_manager(ROOT);marker.unlink(missing_ok=True)
+            messagebox.showinfo(NAME,'The standalone Remote Manager was removed. Use the Administration tab in this server application.')
+        except OSError:
+            self.cleanup_checked=False
+            messagebox.showwarning(NAME,'Close the standalone Remote Manager before trying again. The server application will offer removal the next time it starts.')
+            self.cleanup_checked=True
+
     def open_log(self):os.startfile(DATA/'server-console.log')
     def ask_exit(self):
         if self.stopping:return
@@ -131,6 +160,7 @@ class ServerWindow:
             self.status.set('Server stopped. Check the log, then close and reopen the application.');self.show()
         elif self.process and not self.stopping and not self.notice:
             self.status.set('Server running • minimize safely to the system tray')
+        if not self.smoke and self.process and self.process.poll() is None:self.offer_remote_cleanup()
         if self.smoke and not self.smoke_done:
             try:
                 r=request('session')
@@ -152,7 +182,14 @@ class ServerWindow:
                             webbrowser.open=lambda url,**kw:opened.append(url) or True
                             self.open_login();self.manage()
                         finally:webbrowser.open=original_open
-                        assert opened==[URL+'/#login',URL+'/#settings']
+                        assert opened==[URL+'/#login']
+                        assert self.admin_panel is not None and self.admin_panel.address.get()==URL
+                        assert self.admin_panel.client is None
+                        admin=self.admin_panel.new_client()
+                        admin.request('setup',{'name':'SmokeAdmin','password':'TestPasswordOnly'})
+                        assert admin.login('SmokeAdmin','TestPasswordOnly')['name']==NAME
+                        assert admin.request('admin/users')['users']
+                        self.tabs.select(self.server_tab);self.root.geometry('820x580');self.root.update_idletasks()
                         assert self.exit_button.winfo_rooty()+self.exit_button.winfo_height() <= self.root.winfo_rooty()+self.root.winfo_height()
                         self.hide();self.root.update_idletasks()
                         assert self.root.state()=='withdrawn'
@@ -164,6 +201,12 @@ class ServerWindow:
         self.root.after(300,self.poll)
 
 def main():
+    if '--restore-self-test' in sys.argv:
+        from remote.restore import restore_self_test
+        restore_self_test();return
+    if '--restore-dir' in sys.argv:
+        from remote.restore import restore_window
+        restore_window(Path(sys.argv[sys.argv.index('--restore-dir')+1]));return
     kernel=ctypes.windll.kernel32;kernel.CreateMutexW.restype=ctypes.c_void_p
     mutex=kernel.CreateMutexW(None,False,'ThriftMartDispatchTray')
     if kernel.GetLastError()==183:
