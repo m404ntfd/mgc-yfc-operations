@@ -1,7 +1,7 @@
-# MGC YFC Operations 0.36.1
+# MGC YFC Operations 0.37.0
 
-- Work sites can now be located by U.S. street address. Choose a match, verify or adjust the center pin, and preview the geofence boundary on the map.
-- Enter geofence radii in feet or meters. Switching units preserves the physical radius. Existing work sites retain their coordinates and radius.
-- The header shows a clickable profile picture beside the notification area on desktop and mobile. It opens My profile and shows initials until a picture is approved.
+- Manager schedule now shows a weekly employee grid with shifts and scheduled hours. Select a shift to edit it or use the plus button in a day cell to add one.
+- Staff can request recurring unavailability or time off and track the decision in My requests. Pending submissions appear in Notifications for eligible reviewers. Approved requests appear on the schedule grid.
+- Managers manually approve their own and lower-level staff submissions. Administrators can review anyone's submissions, and their own take effect immediately. This applies to profile pictures, availability, and time off.
 
-Use Check for Updates on an existing server, or install the full Windows installer over the current installation. Address lookup and map tiles require internet access. You can still enter coordinates directly.
+Use Check for Updates on an existing server, or run the full Windows installer over the current installation.

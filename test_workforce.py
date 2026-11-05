@@ -42,6 +42,38 @@ class WorkforceTests(unittest.TestCase):
         self.assertEqual(call('workforce/shift',edited,manager)[0],200)
         self.assertEqual(call('workforce/shift',edited,manager)[0],409)
 
+        request=dict(kind='availability',blocks=[dict(day=0,start='08:00',end='12:00')])
+        self.assertEqual(call('workforce/request',request,staff)[0],200)
+        own_request=call('workforce/requests',client=staff)[1]['requests'][0]
+        self.assertEqual(call('workforce/requests',client=other)[1]['requests'],[])
+        self.assertEqual(call('workforce/review-requests',client=other)[0],403)
+        review=dict(id=own_request['id'],decision='approved')
+        self.assertEqual(call('workforce/review-request',review,other)[0],403)
+        self.assertEqual(call('admin/user-role',dict(name='Other',role_id=role))[0],200)
+        self.assertEqual(call('workforce/request',request,other)[0],200)
+        peer=call('workforce/requests',client=other)[1]['requests'][0]
+        self.assertEqual([row['id'] for row in call('workforce/review-requests',client=manager)[1]['requests']],[own_request['id']])
+        self.assertEqual(call('workforce/review-request',dict(id=peer['id'],decision='approved'),manager)[0],403)
+        self.assertEqual(call('comms/status',client=manager)[1]['pending_schedule'],1)
+        self.assertEqual(call('comms/status')[1]['pending_schedule'],2)
+        self.assertEqual(call('workforce/review-request',review,manager)[0],200)
+        self.assertEqual(call('workforce/review-request',dict(id=peer['id'],decision='declined'))[0],200)
+        today=overview['today']
+        self.assertEqual(call('workforce/request',dict(kind='time-off',start=today,end=today))[0],200)
+        self.assertEqual(call('workforce/requests')[1]['requests'][0]['status'],'approved')
+        self.assertEqual(call('workforce/request',dict(kind='time-off',start=today,end=today),manager)[0],200)
+        manager_request=call('workforce/review-requests',client=manager)[1]['requests'][0]
+        self.assertEqual(manager_request['status'],'pending')
+        self.assertEqual(call('comms/status',client=manager)[1]['pending_schedule'],1)
+        self.assertEqual(call('workforce/review-request',dict(id=manager_request['id'],decision='approved'),manager)[0],200)
+        self.assertEqual(call('workforce/requests',client=manager)[1]['requests'][0]['status'],'approved')
+        self.assertEqual(call('comms/status')[1]['pending_schedule'],0)
+        self.assertEqual(call('workforce/review-request',review)[0],409)
+        import datetime
+        next_week=(datetime.date.fromisoformat(week)+datetime.timedelta(days=7)).isoformat()
+        absences=call('workforce/team?week='+next_week,client=manager)[1]['absences']
+        self.assertEqual(absences,[dict(account=staff_id,day=next_week,kind='availability',start='08:00',end='12:00')])
+
         self.assertEqual(call('workforce/punch',dict(action='in'),staff)[0],409)
         site=dict(name='Main Office',latitude=30.69,longitude=-88.04,radius=150)
         self.assertEqual(call('workforce/site',site,manager)[0],403)

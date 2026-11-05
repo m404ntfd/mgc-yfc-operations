@@ -306,3 +306,21 @@ body{background:var(--page-background,#faf6f5);min-height:100vh;color:var(--page
 
 #headerProfile {border-radius:50%;padding:2px;min-width:38px;min-height:38px}
 #headerProfile .commInitial {width:32px;height:32px;display:grid;place-items:center;border-radius:50%;object-fit:cover;background:#edf6d3;color:#3f5900}
+
+.workGridScroll {overflow:auto;max-height:70vh;border:1px solid var(--work-border);border-radius:10px}
+.workScheduleGrid {width:100%;min-width:1140px;border-collapse:separate;border-spacing:0;font-size:.85rem}
+.workScheduleGrid th,.workScheduleGrid td {padding:6px;border-bottom:1px solid var(--work-border);border-right:1px solid var(--work-border);vertical-align:top;text-align:center}
+.workScheduleGrid thead th {position:sticky;top:0;background:var(--work-highlight);z-index:2}
+.workScheduleGrid tbody th {position:sticky;left:0;background:var(--work-surface);z-index:1;text-align:left;min-width:135px}
+.workScheduleGrid td {min-width:104px}
+.workScheduleGrid td:first-of-type,.workScheduleGrid td:last-child {min-width:54px}
+#workforce .workShiftCard {display:grid;text-align:left;gap:3px;padding:6px;width:100%;min-height:40px;margin:2px 0;background:var(--work-highlight);color:var(--work-text);border:1px solid var(--work-accent);font-size:.78rem}
+.workShiftCard span {overflow-wrap:anywhere}
+#workforce .workGridAdd {padding:3px 7px;min-height:30px;margin-top:4px;font-size:.8rem}
+.workAbsence {border-radius:4px;background:#ffdbd5;color:#61251d;padding:3px;font-size:.72rem;margin:2px 0}
+.workAbsence.timeOff {background:#fbe7b1;color:#533800}
+#workShiftDialog .workForm,#workRequestDialog .workForm {margin:0}
+#workShiftDialog,#workRequestDialog {width:min(660px,calc(100vw - 24px))}
+.workAvailabilityBlock,.workRequestDates {display:grid;grid-template-columns:repeat(auto-fit,minmax(115px,1fr));gap:8px;align-items:end;margin-bottom:8px}
+.workRequestState {text-transform:capitalize}
+#scheduleNotice {margin-bottom:14px}

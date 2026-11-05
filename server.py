@@ -230,18 +230,41 @@ def push_worker():
                 PUSH_QUEUE.task_done()
 
 
+def can_review_requests(u):
+    return has_permission(u,'manage_staff_schedule')
+
+
+def request_review_scope(u):
+    if u['admin']:
+        return 'SELECT profile_id FROM receipt_profiles', ()
+    if not can_review_requests(u):
+        return 'SELECT profile_id FROM receipt_profiles WHERE 0', ()
+    # Roles override individual grants, as in Handler.user().
+    return ('''SELECT p.profile_id FROM receipt_profiles p JOIN users u ON u.name=p.name
+        LEFT JOIN user_roles a ON a.name=u.name LEFT JOIN permission_roles r ON r.id=a.role_id
+        LEFT JOIN user_grants g ON g.name=u.name
+        WHERE p.profile_id=? OR (u.admin=0 AND
+              COALESCE(json_extract(COALESCE(r.body,g.body,'{}'),'$.manage_staff_schedule'),0)=0)''',
+        (u['receipt_owner'],))
+
+
+def can_review_request(c,u,account):
+    scope,args=request_review_scope(u)
+    return c.execute(f'SELECT ? IN ({scope})',(account,*args)).fetchone()[0]
+
+
 def profile_get(handler,c,u,path):
     account=u['receipt_owner']
-    review=has_permission(u,'approve_profile_photos')
     if path=='mine':
         row=c.execute("""SELECT account,approved IS NOT NULL AS approved,pending_revision,status
                          FROM user_profile_photos WHERE account=?""",(account,)).fetchone()
         return handler.send(dict(row) if row else {'approved':False,'pending_revision':None,'status':'none'})
     if path=='queue':
-        if not review: raise Problem('Profile photo approval permission required.',403)
-        rows=c.execute("""SELECT p.account,u.name,p.pending_revision FROM user_profile_photos p
+        if not can_review_requests(u): raise Problem('Profile photo approval permission required.',403)
+        scope,args=request_review_scope(u)
+        rows=c.execute(f"""SELECT p.account,u.name,p.pending_revision FROM user_profile_photos p
             JOIN receipt_profiles r ON r.profile_id=p.account JOIN users u ON u.name=r.name
-            WHERE p.pending_revision IS NOT NULL ORDER BY u.name""")
+            WHERE p.pending_revision IS NOT NULL AND p.account IN ({scope}) ORDER BY u.name""",args)
         return handler.send({'requests':[{**dict(row),'own':row['account']==account} for row in rows]})
     parts=path.split('/')
     if len(parts)==2 and parts[0]=='photo':
@@ -249,7 +272,7 @@ def profile_get(handler,c,u,path):
         row=c.execute("""SELECT p.approved FROM user_profile_photos p JOIN receipt_profiles r ON r.profile_id=p.account
             JOIN users u ON u.name=r.name WHERE p.account=?""",(target,)).fetchone()
         if row and row[0]: return handler.send(row[0],kind='image/jpeg')
-    if len(parts)==3 and parts[0]=='pending' and (review or parts[1]==account):
+    if len(parts)==3 and parts[0]=='pending' and (parts[1]==account or can_review_request(c,u,parts[1])):
         row=c.execute('SELECT pending FROM user_profile_photos WHERE account=? AND pending_revision=?',tuple(parts[1:])).fetchone()
         if row and row[0]: return handler.send(row[0],kind='image/jpeg')
     raise Problem('Profile photo not found.',404)
@@ -266,16 +289,18 @@ def profile_post(handler,c,u,path,d):
         if not 16<=len(raw)<=300000 or not raw.startswith(b'\xff\xd8\xff') or not raw.endswith(b'\xff\xd9'):
             raise Problem('Choose a valid JPEG profile photo.')
         revision=secrets.token_hex(12)
-        c.execute("""INSERT INTO user_profile_photos(account,pending,pending_revision,status) VALUES(?,?,?,'pending')
-            ON CONFLICT(account) DO UPDATE SET pending=excluded.pending,pending_revision=excluded.pending_revision,status='pending'""",
-                  (account,raw,revision))
+        if u['admin']:
+            c.execute("""INSERT INTO user_profile_photos(account,approved,approved_revision,status) VALUES(?,?,?,'approved')
+                ON CONFLICT(account) DO UPDATE SET approved=excluded.approved,approved_revision=excluded.approved_revision,
+                pending=NULL,pending_revision=NULL,status='approved'""",(account,raw,revision))
+        else:
+            c.execute("""INSERT INTO user_profile_photos(account,pending,pending_revision,status) VALUES(?,?,?,'pending')
+                ON CONFLICT(account) DO UPDATE SET pending=excluded.pending,pending_revision=excluded.pending_revision,status='pending'""",(account,raw,revision))
     elif path=='review':
-        if not has_permission(u,'approve_profile_photos'):
-            raise Problem('Profile photo approval permission required.',403)
         target,revision,decision=d.get('account'),d.get('revision'),d.get('decision')
         if not isinstance(target,str) or not isinstance(revision,str) or decision not in ('approve','reject'):
             raise Problem('Invalid review decision.')
-        if target==account: raise Problem('Another reviewer must approve or reject your photo.',403)
+        if not can_review_request(c,u,target): raise Problem('This request requires an administrator or an authorized manager.',403)
         if decision=='approve':
             query="""UPDATE user_profile_photos SET approved=pending,approved_revision=pending_revision,pending=NULL,pending_revision=NULL,status='approved'
                      WHERE account=? AND pending_revision=?"""
@@ -384,12 +409,16 @@ def comm_get(handler, c, u, path, query):
               AND NOT EXISTS(SELECT 1 FROM comm_hidden_groups h WHERE h.account=a.account AND h.thread=a.thread)
               AND NOT EXISTS(SELECT 1 FROM comm_hidden_messages h WHERE h.account=a.account AND h.message=m.id)
             GROUP BY a.thread""", (account, account))
-        review=has_permission(u,'approve_profile_photos')
-        pending=c.execute('SELECT COUNT(*) FROM user_profile_photos WHERE pending_revision IS NOT NULL AND account!=?',
-                          (account,)).fetchone()[0] if review else 0
+        review=can_review_requests(u)
+        scope,args=request_review_scope(u)
+        pending=c.execute(f'SELECT COUNT(*) FROM user_profile_photos WHERE pending_revision IS NOT NULL AND account IN ({scope})',
+                          args).fetchone()[0] if review else 0
         photo=c.execute('SELECT approved_revision FROM user_profile_photos WHERE account=? AND approved IS NOT NULL',
                         (account,)).fetchone()
-        return handler.send({'profile_account':account,'profile_photo_revision':(photo[0] or 'existing') if photo else None,'unread': [dict(r) for r in rows], 'alerts': comm_preferences(c, account)['alerts'],
+        schedule_review=review
+        schedule_pending=c.execute(f"""SELECT COUNT(*) FROM work_requests q JOIN receipt_profiles p ON p.profile_id=q.account
+            JOIN users u ON u.name=p.name WHERE q.status='pending' AND q.account IN ({scope})""",args).fetchone()[0] if schedule_review else 0
+        return handler.send({'schedule_review':schedule_review,'pending_schedule':schedule_pending,'profile_account':account,'profile_photo_revision':(photo[0] or 'existing') if photo else None,'unread': [dict(r) for r in rows], 'alerts': comm_preferences(c, account)['alerts'],
                              'photo_review':review,'pending_photos':pending})
     if path == 'inbox':
         threads = [dict(r) for r in c.execute("""SELECT t.id,t.kind,t.title,a.seen,
@@ -570,6 +599,12 @@ def comm_post(handler, c, u, path, d):
 
 def init_workforce(c):
     c.executescript("""
+        CREATE TABLE IF NOT EXISTS work_requests(
+            id INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT NOT NULL, kind TEXT NOT NULL, details TEXT NOT NULL,
+            notes TEXT NOT NULL, status TEXT NOT NULL, start_date TEXT NOT NULL, end_date TEXT,
+            reviewer TEXT, reviewed_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS work_request_account ON work_requests(account,status);
         CREATE TABLE IF NOT EXISTS work_clock_pins(account TEXT PRIMARY KEY, pin_hash TEXT UNIQUE NOT NULL);
         CREATE TABLE IF NOT EXISTS work_pin_security(
             id INTEGER PRIMARY KEY CHECK(id=1), salt TEXT NOT NULL, window INTEGER NOT NULL, failures INTEGER NOT NULL
@@ -758,8 +793,106 @@ def work_shifts(c, week, account=None):
     if account is not None:
         query+=' AND s.account=?'
         args+= (account,)
-    return [{**dict(row),'start':work_local(row['start']),'end':work_local(row['end'])}
+    return [{**dict(row),'start':work_local(row['start']),'end':work_local(row['end']),
+             'week_seconds':min(last,row['end'])-max(first,row['start'])}
             for row in c.execute(query+' ORDER BY s.start,u.name,s.id',args)]
+
+
+WORK_DAYS=('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')
+
+
+def work_request_rows(c,account=None,reviewer=None):
+    sql="""SELECT q.*,u.name FROM work_requests q JOIN receipt_profiles p ON p.profile_id=q.account
+             JOIN users u ON u.name=p.name"""
+    args=()
+    if account is not None:
+        sql+=' WHERE q.account=?'
+        args=(account,)
+    elif reviewer is not None:
+        scope,args=request_review_scope(reviewer)
+        sql+=f' WHERE q.account IN ({scope})'
+    rows=c.execute(sql+" ORDER BY (q.status='pending') DESC,q.id DESC",args)
+    return [{**dict(row),'details':json.loads(row['details'])} for row in rows]
+
+
+def work_week_absences(c,week):
+    end=week+dt.timedelta(days=6)
+    rows=c.execute("""SELECT q.account,q.kind,q.details FROM work_requests q
+        JOIN receipt_profiles p ON p.profile_id=q.account JOIN users u ON u.name=p.name
+        WHERE q.status='approved' AND q.start_date<=? AND (q.end_date IS NULL OR q.end_date>=?)""",
+                   (end.isoformat(),week.isoformat()))
+    cells=[]
+    for row in rows:
+        details=json.loads(row['details'])
+        for i in range(7):
+            day=(week+dt.timedelta(days=i)).isoformat()
+            if row['kind']=='time-off':
+                if details['start']<=day<=details['end']:
+                    cells.append(dict(account=row['account'],day=day,kind='time-off'))
+            elif day>=details['effective']:
+                for block in details['blocks']:
+                    if block['day']==i:
+                        cells.append(dict(account=row['account'],day=day,kind='availability',**{
+                            'start':block['start'],'end':block['end']}))
+    return cells
+
+
+def work_submit_request(c,u,d):
+    account=u['receipt_owner']
+    kind,notes=d.get('kind'),d.get('notes','')
+    if not isinstance(notes,str) or len(notes)>500: raise Problem('Use up to 500 characters for the note.')
+    today=dt.date.today()
+    if kind=='availability':
+        raw=d.get('blocks')
+        if not isinstance(raw,list) or len(raw)>28: raise Problem('Add up to 28 weekly unavailable periods.')
+        blocks=[]
+        for block in raw:
+            if not isinstance(block,dict): raise Problem('Choose valid days and times.')
+            day,start,end=block.get('day'),block.get('start'),block.get('end')
+            if type(day) is not int or not 0<=day<7: raise Problem('Choose a day for each unavailable period.')
+            if start==end=='':
+                pass
+            elif not all(isinstance(t,str) and re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d',t) for t in (start,end)) or start>=end:
+                raise Problem('Enter an end time after the start time. Split overnight periods across two days.')
+            blocks.append(dict(day=day,start=start,end=end))
+        first,last=today.isoformat(),None
+        details=dict(effective=first,blocks=blocks)
+        c.execute("UPDATE work_requests SET status='withdrawn' WHERE account=? AND kind='availability' AND status='pending'",
+                  (account,))
+    elif kind=='time-off':
+        try:
+            start,end=(dt.date.fromisoformat(d[key]) for key in ('start','end'))
+            if start<today or not 0<=(end-start).days<366: raise ValueError()
+        except (TypeError,ValueError,KeyError):
+            raise Problem('Choose a current or future date range of up to 366 days.')
+        first,last=start.isoformat(),end.isoformat()
+        details=dict(start=first,end=last)
+    else:
+        raise Problem('Choose availability or time off.')
+    request=c.execute("""INSERT INTO work_requests(account,kind,details,notes,status,start_date,end_date)
+                 VALUES(?,?,?,?,'pending',?,?)""",(account,kind,json.dumps(details),notes.strip(),first,last))
+    if u['admin']:
+        row=c.execute('SELECT * FROM work_requests WHERE id=?',(request.lastrowid,)).fetchone()
+        work_set_request_decision(c,row,'approved',u['name'])
+
+
+def work_review_request(c,u,d):
+    if not can_review_requests(u): raise Problem('This request requires an administrator or an authorized manager.',403)
+    ident,decision=d.get('id'),d.get('decision')
+    if type(ident) is not int or not 0<ident<2**63 or decision not in ('approved','declined'):
+        raise Problem('Choose a valid review decision.')
+    row=c.execute("SELECT * FROM work_requests WHERE id=? AND status='pending'",(ident,)).fetchone()
+    if not row: raise Problem('This request has already been reviewed or withdrawn.',409)
+    if not can_review_request(c,u,row['account']): raise Problem('This request requires an administrator or an authorized manager.',403)
+    work_set_request_decision(c,row,decision,u['name'])
+
+
+def work_set_request_decision(c,row,decision,reviewer):
+    if row['kind']=='availability' and decision=='approved':
+        c.execute("""UPDATE work_requests SET status='superseded' WHERE account=? AND kind='availability'
+                     AND status='approved'""",(row['account'],))
+    c.execute('UPDATE work_requests SET status=?,reviewer=?,reviewed_at=? WHERE id=?',
+              (decision,reviewer,dt.datetime.now().isoformat(timespec='seconds'),row['id']))
 
 
 def work_get(handler,c,u,path,query,clock_only=False):
@@ -778,13 +911,18 @@ def work_get(handler,c,u,path,query,clock_only=False):
             clock=dict(state=state,since=work_local(period['start']) if period else None,
                        gross=gross,worked=worked,week_gross=week_gross,week_worked=week_worked),
             require_location=work_require_location(c),sites_ready=bool(c.execute('SELECT 1 FROM work_sites LIMIT 1').fetchone()),
-            manage_schedule=has_permission(u,'manage_staff_schedule'),manage_sites=has_permission(u,'manage_work_sites'),
+            manage_schedule=has_permission(u,'manage_staff_schedule'),manage_review=can_review_requests(u),manage_sites=has_permission(u,'manage_work_sites'),
             shifts=[] if clock_only else work_shifts(c,week,account)))
     if path=='team':
         if not has_permission(u,'manage_staff_schedule'): raise Problem('Schedule management permission required.',403)
         people=[dict(row) for row in c.execute("""SELECT p.profile_id AS id,u.name FROM users u
                     JOIN receipt_profiles p ON p.name=u.name ORDER BY u.name""")]
-        return handler.send(dict(people=people,shifts=work_shifts(c,week)))
+        return handler.send(dict(people=people,shifts=work_shifts(c,week),absences=work_week_absences(c,week)))
+    if path=='requests':
+        return handler.send({'requests':work_request_rows(c,account)})
+    if path=='review-requests':
+        if not can_review_requests(u): raise Problem('This request requires an administrator or an authorized manager.',403)
+        return handler.send({'requests':work_request_rows(c,reviewer=u),'account':account})
     if path=='sites':
         if not has_permission(u,'manage_work_sites'): raise Problem('Work site management permission required.',403)
         return handler.send(dict(required=work_require_location(c),
@@ -824,6 +962,17 @@ def work_check_location(c,position):
 def work_post(handler,c,u,path,d,clock_only=False):
     account=u['receipt_owner']
     if not account: raise Problem('Staff account required.',403)
+    if path in ('request','withdraw-request','review-request'):
+        if path=='request': work_submit_request(c,u,d)
+        elif path=='review-request': work_review_request(c,u,d)
+        else:
+            ident=d.get('id')
+            if type(ident) is not int or not 0<ident<2**63: raise Problem('Invalid request.')
+            if not c.execute("UPDATE work_requests SET status='withdrawn' WHERE id=? AND account=? AND status='pending'",
+                             (ident,account)).rowcount:
+                raise Problem('Only your pending requests can be withdrawn.',409)
+        c.commit()
+        return handler.send({'ok':True})
     if path=='punch':
         action=d.get('action')
         period,pause=work_open(c,account)
@@ -933,6 +1082,15 @@ CREATE TABLE IF NOT EXISTS audit(at TEXT, actor TEXT, action TEXT, job TEXT);'''
         c.execute('CREATE TABLE IF NOT EXISTS sharing_settings(id INTEGER PRIMARY KEY CHECK(id=1),body TEXT)')
         c.execute('CREATE TABLE IF NOT EXISTS receipt_profiles(name TEXT PRIMARY KEY COLLATE NOCASE,profile_id TEXT UNIQUE)')
         for person in c.execute('SELECT name FROM users').fetchall():c.execute('INSERT OR IGNORE INTO receipt_profiles VALUES(?,?)',(person['name'],secrets.token_hex(16)))
+        c.execute("""UPDATE user_profile_photos SET approved=pending,approved_revision=pending_revision,
+                     pending=NULL,pending_revision=NULL,status='approved'
+                     WHERE pending_revision IS NOT NULL AND account IN (
+                       SELECT p.profile_id FROM receipt_profiles p JOIN users u ON u.name=p.name WHERE u.admin=1)""")
+        pending_admin_requests=c.execute("""SELECT q.*,u.name FROM work_requests q
+            JOIN receipt_profiles p ON p.profile_id=q.account JOIN users u ON u.name=p.name
+            WHERE u.admin=1 AND q.status='pending' ORDER BY q.id""").fetchall()
+        for request in pending_admin_requests:
+            work_set_request_decision(c,request,'approved',request['name'])
         c.execute('CREATE TABLE IF NOT EXISTS receipt_details(receipt_id TEXT PRIMARY KEY,reimbursement INTEGER NOT NULL DEFAULT 0,guest_assigned INTEGER NOT NULL DEFAULT 0)')
         c.execute('CREATE TABLE IF NOT EXISTS receipt_ownership(receipt_id TEXT PRIMARY KEY,profile_id TEXT)')
         c.execute("INSERT OR IGNORE INTO receipt_ownership SELECT r.id,p.profile_id FROM receipts r LEFT JOIN receipt_profiles p ON p.name=r.actor AND r.actor!='Guest'")
@@ -961,7 +1119,6 @@ PERMISSIONS={
  'text_contacts':'Show On Our Way text button', 'navigate':'Show navigation button',
  'manage_roles':'Create and edit permission roles',
  'manage_comms_groups':'Create and manage groups',
- 'approve_profile_photos':'Approve profile pictures',
  'manage_staff_schedule':'Create and edit staff shifts', 'manage_work_sites':'Manage time clock work sites and geofencing',
  'manage_vehicles':'Add vehicles', 'manage_users':'Add/remove employees and edit permissions',
  'rename_users':'Edit user names', 'unlock_users':'Unlock employee accounts after failed logins',

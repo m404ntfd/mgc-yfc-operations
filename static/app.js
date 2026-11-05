@@ -1176,6 +1176,8 @@ workPanel.innerHTML = `
  <nav class="workTabs" aria-label="Scheduling and time clock">
   <button type="button" data-work-view="clock">Time clock</button>
   <button type="button" data-work-view="mine">My schedule</button>
+  <button type="button" data-work-view="requests">My requests</button>
+  <button type="button" data-work-view="review" hidden>Review requests</button>
   <button type="button" data-work-view="team" hidden>Manager schedule</button>
   <button type="button" data-work-view="sites" hidden>Work sites</button>
  </nav>
@@ -1214,16 +1216,40 @@ workPanel.innerHTML = `
   <p>Shift dates and times use the server’s local time.</p>
   <div id="workTeamShifts" class="workList"></div>
   <button type="button" id="workAddShift" class="primary">Add shift</button>
-  <form id="workShiftForm" class="workForm" hidden>
+  <dialog id="workShiftDialog"><form id="workShiftForm" class="workForm" hidden>
    <h3 id="workShiftTitle">Add shift</h3>
    <label>Employee<select name="account" required></select></label>
    <label>Start<input type="datetime-local" name="start" required></label>
    <label>End<input type="datetime-local" name="end" required></label>
    <label>Location<input name="location" maxlength="100"></label>
    <label>Notes<textarea name="notes" maxlength="500" rows="2"></textarea></label>
-   <div class="actions"><button type="button" id="workCancelShift">Cancel</button><button class="primary">Save shift</button></div>
-  </form>
+   <div class="actions"><button type="button" id="workDeleteShift" hidden>Delete shift</button><button type="button" id="workCancelShift">Cancel</button><button class="primary">Save shift</button></div>
+   <p id="workShiftError" role="alert"></p>
+  </form></dialog>
  </section>
+ <section data-work-panel="requests" hidden>
+  <h3>My requests</h3>
+  <div class="actions"><button type="button" id="workAvailability">Request availability change</button><button type="button" id="workTimeOff">Request time off</button></div>
+  <div id="workMyRequests" class="workList"></div>
+ </section>
+ <section data-work-panel="review" hidden>
+  <h3>Review staff requests</h3>
+  <div id="workReviewRequests" class="workList"></div>
+ </section>
+ <dialog id="workRequestDialog"><form id="workRequestForm" class="workForm">
+  <h3 id="workRequestTitle"></h3>
+  <div id="workAvailabilityFields">
+   <p>List all recurring periods when you cannot work. Once approved, this replaces your previous weekly availability. Leave the list empty to clear recurring restrictions.</p>
+   <div id="workAvailabilityBlocks"></div><button type="button" id="workAddBlock">Add unavailable period</button>
+  </div>
+  <div id="workTimeOffFields" class="workRequestDates">
+   <label>First day off<input type="date" name="start"></label>
+   <label>Last day off (inclusive)<input type="date" name="end"></label>
+  </div>
+  <label>Note for your administrator<textarea name="notes" maxlength="500" rows="2"></textarea></label>
+  <p id="workRequestError" role="alert"></p>
+  <div class="actions"><button type="button" id="workRequestCancel">Cancel</button><button class="primary">Submit request</button></div>
+ </form></dialog>
  <section data-work-panel="sites" hidden>
   <h3>Work sites and geofencing</h3>
   <form id="workPolicyForm">
@@ -1301,6 +1327,7 @@ function workRender(data) {
   button.disabled=workBusy || (data.require_location&&!data.sites_ready&&['in','out'].includes(punch));
  }
  workPanel.querySelector('[data-work-view=team]').hidden = !data.manage_schedule;
+ workPanel.querySelector('[data-work-view=review]').hidden = !data.manage_review;
  workPanel.querySelector('[data-work-view=sites]').hidden = !data.manage_sites;
  $('workMyShifts').innerHTML = workShiftList(data.shifts, false);
  workTick();
@@ -1310,7 +1337,7 @@ async function workLoad(version = workVersion) {
  try {
   const data=await workApi(workQuick?'quick':'overview'+query);
   if (workPanel.hidden || version!==workVersion || request!==workFetch || user!==signedIn) return;
-  if ((workView==='team'&&!data.manage_schedule)||(workView==='sites'&&!data.manage_sites)) {
+  if ((workView==='team'&&!data.manage_schedule)||(workView==='review'&&!data.manage_review)||(workView==='sites'&&!data.manage_sites)) {
    workSelect('clock');return;
   }
   workRender(data);
@@ -1319,7 +1346,13 @@ async function workLoad(version = workVersion) {
    if (workPanel.hidden || version!==workVersion || request!==workFetch || user!==signedIn) return;
    workTeam=result;
    $('workAddShift').disabled=false;
-   $('workTeamShifts').innerHTML=workShiftList(result.shifts,true);
+   workRenderGrid(result,data.week);
+  }
+  if (['requests','review'].includes(workView)) {
+   const review=workView==='review';
+   const result=await workApi(review?'review-requests':'requests');
+   if (workPanel.hidden || version!==workVersion || request!==workFetch || user!==signedIn) return;
+   workRenderRequests(result,review);
   }
   if (workView==='sites') {
    const result=await workApi('sites');
@@ -1345,6 +1378,7 @@ function workSelect(view) {
  workVersion++;
  workStatus();
  $('workWeekControls').hidden=!['mine','team'].includes(view);
+ $('workShiftDialog').close();$('workRequestDialog').close();
  $('workShiftForm').hidden=$('workSiteForm').hidden=true;
  if(view==='team'){
   $('workTeamShifts').textContent='Loading shifts…';
@@ -1359,7 +1393,7 @@ function workSelect(view) {
  for (const panel of workPanel.querySelectorAll('[data-work-panel]')) panel.hidden=panel.dataset.workPanel!==view;
  workLoad();
 }
-function workOpen(quick=false){
+function workOpen(quick=false,view='clock'){
  if (!quick&&!user) return;
  workQuick=quick;
  if(quick)$('auth').hidden=true;
@@ -1378,7 +1412,7 @@ function workOpen(quick=false){
  for(const id of ['workGeoStatus','workMyShifts','workTeamShifts','workSiteList'])$(id).textContent='';
  for(const id of ['workGross','workNet','workWeekGross','workWeekNet'])$(id).textContent='—';
  for(const button of workPanel.querySelectorAll('[data-work-punch],[data-work-view=team],[data-work-view=sites]'))button.hidden=true;
- workSelect('clock');
+ workSelect(view);
 }
 workMenu.onclick=()=>workOpen();
 function workMoveWeek(days) {
@@ -1428,15 +1462,23 @@ async function workPunch(action) {
   if (!workPanel.hidden && user===signedIn) await workLoad();
  }
 }
-function workEditShift(shift) {
+function workEditShift(shift,cell) {
  const form=$('workShiftForm');
  form.reset();
  workEditingShift=shift;
  $('workShiftTitle').textContent=shift?'Edit shift':'Add shift';
+ $('workDeleteShift').hidden=!shift;
+ $('workShiftError').textContent='';
  const fields=form.elements;
  fields.account.replaceChildren(new Option('Choose an employee',''),...workTeam.people.map(p=>new Option(p.name,p.id)));
  if (shift) for (const key of ['account','start','end','location','notes']) fields[key].value=shift[key];
+ if(cell){
+  fields.account.value=cell.account;
+  fields.start.value=cell.day+'T09:00';
+  fields.end.value=cell.day+'T17:00';
+ }
  form.hidden=false;
+ $('workShiftDialog').showModal();
  fields.account.focus();
 }
 function workEditSite(site) {
@@ -1459,14 +1501,23 @@ async function workSave(path,data,button,form) {
  try {
   await workApi(path,data);
   if (user!==signedIn || version!==workVersion || workPanel.hidden) return;
-  if(form) form.hidden=true;
+  if(form){
+   form.hidden=true;
+   form.closest('dialog')?.close();
+  }
   workStatus('Saved.');
   await workLoad(version);
- } catch(err) { if(user===signedIn&&version===workVersion)workStatus(err.message); }
+ } catch(err) { if(user===signedIn&&version===workVersion){
+  if($('workShiftDialog').open)$('workShiftError').textContent=err.message;else workStatus(err.message);
+ } }
  finally { if(button)button.disabled=false; }
 }
 $('workAddShift').onclick=()=>workEditShift(null);
-$('workCancelShift').onclick=()=>$('workShiftForm').hidden=true;
+$('workCancelShift').onclick=()=>$('workShiftDialog').close();
+$('workDeleteShift').onclick=e=>{
+ const shift=workEditingShift;
+ if(shift&&confirm('Remove this scheduled shift?'))workSave('shift',{id:shift.id,revision:shift.revision,remove:true},e.currentTarget,$('workShiftForm'));
+};
 $('workAddSite').onclick=()=>workEditSite(null);
 $('workCancelSite').onclick=()=>$('workSiteForm').hidden=true;
 $('workUseLocation').onclick=async e=>{
@@ -1648,16 +1699,18 @@ profileDialog.innerHTML=`<form id="profilePhotoForm">
  <h2>My profile</h2><div id="profilePhotos" class="profilePhotos"></div>
  <p id="profilePhotoStatus" role="status"></p>
  <label>Choose a profile picture<input type="file" id="profilePhotoInput" accept="image/*" required></label>
- <div class="actions"><button type="button" id="closeProfilePhoto">Close</button><button class="primary">Submit for approval</button></div>
+ <div class="actions"><button type="button" id="closeProfilePhoto">Close</button><button class="primary" id="profilePhotoSubmit">Submit for approval</button></div>
  </form>`;
 const photoQueueDialog=document.createElement('dialog');
-photoQueueDialog.innerHTML=`<h2>Notifications</h2><h3>Profile picture approvals</h3>
- <p id="photoQueueStatus" role="status"></p><div id="photoQueue"></div>
+photoQueueDialog.innerHTML=`<h2>Notifications</h2>
+ <section id="scheduleNotice" hidden><h3>Scheduling requests</h3><p id="scheduleNoticeCount"></p><button id="scheduleNoticeOpen" type="button">Review scheduling requests</button></section>
+ <section id="profilePhotoNotice" hidden><h3>Profile picture approvals</h3>
+ <p id="photoQueueStatus" role="status"></p><div id="photoQueue"></div></section>
  <div class="actions"><button type="button" id="closePhotoQueue">Close</button></div>`;
 document.body.append(profileDialog,photoQueueDialog);
 
 const profileApi=(path,data)=>api('profile/'+path,data);
-let photoPendingCount=0;
+let photoPendingCount=0,showPhotoReview=false;
 function profileReset(){
  photoNotifications.hidden=true;
  photoPendingCount=0;
@@ -1671,14 +1724,20 @@ function profileReset(){
 }
 function profileReviewStatus(result){
  renderHeaderAvatar(result.profile_account,result.profile_photo_revision);
- const count=result.pending_photos||0;
- photoNotifications.hidden=!result.photo_review;
+ const photos=result.pending_photos||0, schedule=result.pending_schedule||0;
+ const count=photos+schedule;
+ showPhotoReview=result.photo_review;
+ photoNotifications.hidden=!result.photo_review&&!result.schedule_review;
+ $('profilePhotoNotice').hidden=!result.photo_review;
+ $('scheduleNotice').hidden=!result.schedule_review;
+ $('scheduleNoticeCount').textContent=schedule?`${schedule} request${schedule===1?'':'s'} awaiting review.`:'No scheduling requests awaiting review.';
  $('photoReviewCount').hidden=!count;
  $('photoReviewCount').textContent=count;
- photoNotifications.setAttribute('aria-label',count?`Notifications, ${count} profile picture approvals`:'Notifications');
- if(!result.photo_review&&photoQueueDialog.open)photoQueueDialog.close();
- if(result.photo_review&&count!==photoPendingCount&&photoQueueDialog.open)loadPhotoQueue();
- photoPendingCount=count;
+ const counts=[photos?`${photos} profile picture approvals`:'',schedule?`${schedule} scheduling requests`:''].filter(Boolean);
+ photoNotifications.setAttribute('aria-label',counts.length?'Notifications, '+counts.join(', '):'Notifications');
+ if(!result.photo_review&&!result.schedule_review&&photoQueueDialog.open)photoQueueDialog.close();
+ if(result.photo_review&&photos!==photoPendingCount&&photoQueueDialog.open)loadPhotoQueue();
+ photoPendingCount=photos;
 }
 function commAvatar(id,name,photo,revision=null){
  if(photo)return `<img class="commInitial" src="/api/profile/photo/${encodeURIComponent(id)}${revision?'?v='+encodeURIComponent(revision):''}" alt="" loading="lazy">`;
@@ -1695,7 +1754,7 @@ async function loadProfilePhoto(){
   pending:'Your submitted picture is waiting for approval.',
   approved:'Your picture is approved and visible to signed-in staff.',
   rejected:'Your last submission was declined. You can submit another picture.',
-  none:'Your picture will appear after a reviewer approves it.'
+  none:user?.admin?'Your picture will appear when saved.':'Your picture will appear after approval.'
  })[photo.status]||'';
 }
 profileMenu.onclick=async()=>{
@@ -1703,6 +1762,7 @@ profileMenu.onclick=async()=>{
  $('profilePhotoForm').reset();
  $('profilePhotos').replaceChildren();
  $('profilePhotoStatus').textContent='Loading profile…';
+ $('profilePhotoSubmit').textContent=user?.admin?'Save profile picture':'Submit for approval';
  profileDialog.showModal();
  try{await loadProfilePhoto();}catch(e){$('profilePhotoStatus').textContent=e.message;}
 };
@@ -1750,8 +1810,8 @@ async function loadPhotoQueue(){
    const id=encodeURIComponent(request.account),revision=encodeURIComponent(request.pending_revision);
    return `<article class="profileReviewRow"><img alt="" src="/api/profile/pending/${id}/${revision}">
     <div><strong>${esc(request.name)}</strong><p>Profile picture approval</p>
-     ${request.own?'<p>Another reviewer will review your photo.</p>':
-     `<div class="actions"><button type="button" data-decision="reject" data-account="${id}" data-revision="${revision}">Decline</button><button type="button" class="primary" data-decision="approve" data-account="${id}" data-revision="${revision}">Approve</button></div>`}
+     ${request.own?'<p>Your picture is pending your approval.</p>':''}
+     <div class="actions"><button type="button" data-decision="reject" data-account="${id}" data-revision="${revision}">Decline</button><button type="button" class="primary" data-decision="approve" data-account="${id}" data-revision="${revision}">Approve</button></div>
     </div></article>`;
   }).join('')||'<p>No profile pictures are waiting for approval.</p>';
  }catch(err){if(user===signedIn&&photoQueueDialog.open)$('photoQueueStatus').textContent=err.message;}
@@ -1760,9 +1820,10 @@ photoNotifications.onclick=()=>{
  $('photoQueue').replaceChildren();
  $('photoQueueStatus').textContent='';
  photoQueueDialog.showModal();
- loadPhotoQueue();
+ if(showPhotoReview)loadPhotoQueue();
 };
 $('closePhotoQueue').onclick=()=>photoQueueDialog.close();
+$('scheduleNoticeOpen').onclick=()=>{photoQueueDialog.close();workOpen(false,'review');};
 $('photoQueue').onclick=async e=>{
  const button=e.target.closest('[data-decision]');
  if(!button)return;
@@ -1898,3 +1959,130 @@ $('workFindAddress').onclick=async e=>{
  finally{button.disabled=false;}
 };
 workSiteFields.address.addEventListener('input',()=>$('workAddressMatches').replaceChildren());
+
+const workWeekdays=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+function workDateOffset(day,offset){
+ const date=new Date(day+'T12:00:00Z');
+ date.setUTCDate(date.getUTCDate()+offset);
+ return date.toISOString().slice(0,10);
+}
+function workShiftTime(value){
+ const [hour,minute]=value.slice(-5).split(':').map(Number);
+ return `${hour%12||12}:${String(minute).padStart(2,'0')} ${hour<12?'AM':'PM'}`;
+}
+function workRenderGrid(team,week){
+ const days=workWeekdays.map((label,i)=>({label,day:workDateOffset(week,i),next:workDateOffset(week,i+1)}));
+ const shifts=new Map(),absences=new Map();
+ for(const shift of team.shifts){
+  if(!shifts.has(shift.account))shifts.set(shift.account,[]);
+  shifts.get(shift.account).push(shift);
+ }
+ for(const absence of team.absences){
+  const key=absence.account+':'+absence.day;
+  if(!absences.has(key))absences.set(key,[]);
+  absences.get(key).push(absence);
+ }
+ $('workTeamShifts').innerHTML=`<div class="workGridScroll" tabindex="0" aria-label="Weekly staff schedule">
+  <table class="workScheduleGrid"><thead><tr><th scope="col">Employee</th><th scope="col">Shifts</th>
+  ${days.map(day=>`<th scope="col">${day.label} ${day.day.slice(5)}</th>`).join('')}<th scope="col">Hours</th></tr></thead>
+  <tbody>${team.people.map(person=>{
+   const own=shifts.get(person.id)||[];
+   const hours=own.reduce((total,shift)=>total+shift.week_seconds,0)/3600;
+   return `<tr><th scope="row">${esc(person.name)}</th><td>${own.length}</td>
+    ${days.map(({day,next})=>{
+     const blocked=absences.get(person.id+':'+day)||[];
+     const items=own.filter(s=>s.start<next+'T00:00'&&s.end>day+'T00:00');
+     return `<td>${blocked.map(b=>`<div class="workAbsence ${b.kind==='time-off'?'timeOff':''}">${b.kind==='time-off'?'Time off':b.start?'Unavailable '+workShiftTime(b.start)+' – '+workShiftTime(b.end):'Unavailable · all day'}</div>`).join('')}
+      ${items.map(shift=>`<button class="workShiftCard" type="button" data-edit-shift="${shift.id}">
+       <strong>${workShiftTime(shift.start)} – ${workShiftTime(shift.end)}</strong>
+       ${shift.location?`<span>${esc(shift.location)}</span>`:''}</button>`).join('')}
+      <button type="button" class="workGridAdd" data-grid-account="${esc(person.id)}" data-grid-day="${day}" aria-label="Add shift for ${esc(person.name)} on ${day}">＋</button></td>`;
+    }).join('')}<td>${new Intl.NumberFormat(undefined,{maximumFractionDigits:2}).format(hours)}</td></tr>`;
+  }).join('')}</tbody></table></div>`;
+}
+$('workTeamShifts').addEventListener('click',e=>{
+ const button=e.target.closest('[data-grid-account]');
+ if(button)workEditShift(null,{account:button.dataset.gridAccount,day:button.dataset.gridDay});
+});
+
+let workRequestKind='';
+function workAddBlock(){
+ const list=$('workAvailabilityBlocks');
+ if(list.children.length>=28)return;
+ const row=document.createElement('div');
+ row.className='workAvailabilityBlock';
+ row.innerHTML=`<label>Day<select>${workWeekdays.map((day,i)=>`<option value="${i}">${day}</option>`).join('')}</select></label>
+  <label>From<input type="time"></label><label>Until<input type="time"></label>
+  <label class="workCheck"><input type="checkbox" checked>All day</label>
+  <button type="button" aria-label="Remove unavailable period">Remove</button>`;
+ const allDay=row.querySelector('input[type=checkbox]');
+ const times=[...row.querySelectorAll('input[type=time]')];
+ const update=()=>times.forEach(input=>{input.disabled=allDay.checked;input.required=!allDay.checked;});
+ allDay.onchange=update;update();
+ row.querySelector('button').onclick=()=>row.remove();
+ list.append(row);
+}
+function workRequestOpen(kind){
+ workRequestKind=kind;
+ const form=$('workRequestForm');
+ form.reset();
+ const availability=kind==='availability';
+ $('workRequestTitle').textContent=availability?'Request availability change':'Request time off';
+ $('workAvailabilityFields').hidden=!availability;
+ $('workTimeOffFields').hidden=availability;
+ $('workAvailabilityBlocks').replaceChildren();
+ for(const input of [$('workRequestForm').elements.start,$('workRequestForm').elements.end]){
+  input.required=!availability;input.disabled=availability;input.min=workData?.today||'';
+ }
+ if(availability)workAddBlock();
+ $('workRequestError').textContent='';
+ $('workRequestDialog').showModal();
+}
+$('workAvailability').onclick=()=>workRequestOpen('availability');
+$('workTimeOff').onclick=()=>workRequestOpen('time-off');
+$('workAddBlock').onclick=workAddBlock;
+$('workRequestCancel').onclick=()=>$('workRequestDialog').close();
+$('workRequestForm').onsubmit=async e=>{
+ e.preventDefault();
+ const form=e.currentTarget,button=e.submitter,version=workVersion;
+ const data={kind:workRequestKind,notes:form.elements.notes.value};
+ if(workRequestKind==='availability'){
+  data.blocks=[...$('workAvailabilityBlocks').children].map(row=>{
+   const allDay=row.querySelector('input[type=checkbox]').checked;
+   const [start,end]=[...row.querySelectorAll('input[type=time]')].map(i=>allDay?'':i.value);
+   return {day:Number(row.querySelector('select').value),start,end};
+  });
+ }else{data.start=form.elements.start.value;data.end=form.elements.end.value;}
+ button.disabled=true;
+ try{
+  await workApi('request',data);
+  if(version!==workVersion)return;
+  $('workRequestDialog').close();
+  workStatus(user?.admin?'Request applied.':can('manage_staff_schedule')?'Request pending. Open Review requests to approve it.':'Request sent for approval.');
+  await workLoad();
+ }catch(err){if(version===workVersion)$('workRequestError').textContent=err.message;}
+ finally{button.disabled=false;}
+};
+function workRenderRequests(result,review){
+ const list=$(review?'workReviewRequests':'workMyRequests');
+ list.innerHTML=result.requests.map(request=>{
+  const availability=request.kind==='availability';
+  const summary=availability?(request.details.blocks.map(b=>`${workWeekdays[b.day]}: ${b.start?b.start+' – '+b.end:'All day'}`).join(', ')||'Clear weekly unavailability'):
+   `${request.details.start} to ${request.details.end}`;
+  const pending=request.status==='pending';
+  return `<article class="workRow"><div><strong>${review?esc(request.name)+' · ':''}${availability?'Availability':'Time off'}</strong>
+   <p>${esc(summary)}</p>${request.notes?`<p>${esc(request.notes)}</p>`:''}<p class="workRequestState">${esc(request.status)}${request.reviewer?' · '+esc(request.reviewer):''}</p></div>
+   ${pending?`<div class="actions">${review?
+    `<button type="button" data-work-request="${request.id}" data-work-decision="declined">Decline</button><button class="primary" type="button" data-work-request="${request.id}" data-work-decision="approved">Approve</button>`:
+    `<button type="button" data-work-request="${request.id}">Withdraw</button>`}</div>`:''}</article>`;
+ }).join('')||'<p>No requests yet.</p>';
+}
+for(const id of ['workMyRequests','workReviewRequests']){
+ $(id).addEventListener('click',async e=>{
+  const button=e.target.closest('[data-work-request]');
+  if(!button)return;
+  const id=Number(button.dataset.workRequest),decision=button.dataset.workDecision;
+  await workSave(decision?'review-request':'withdraw-request',{id,decision},button);
+  commPoll();
+ });
+}

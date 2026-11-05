@@ -108,14 +108,30 @@ class CommunicationTests(unittest.TestCase):
             casey.open(url)
         self.assertEqual(hidden_photo.exception.code,404)
         hidden_photo.exception.close()
-        reviewer=call('roles',dict(name='Photo reviewer',grants={'approve_profile_photos':True}))[1]['id']
-        self.assertEqual(call('admin/user-role',dict(name='Casey',role_id=reviewer))[0],200)
+        manager_role=call('roles',dict(name='Scheduler',grants={'manage_staff_schedule':True}))[1]['id']
+        self.assertEqual(call('admin/user-role',dict(name='Casey',role_id=manager_role))[0],200)
+        self.assertEqual(call('admin/user-role',dict(name='Blair Morgan',role_id=manager_role))[0],200)
+        self.assertEqual(call('profile/upload',dict(image=base64.b64encode(raw).decode()),blair)[0],200)
+        peer=call('profile/mine',client=blair)[1]
+        peer_review=dict(account=peer['account'],revision=peer['pending_revision'],decision='approve')
+        self.assertEqual(call('profile/review',peer_review,casey)[0],403)
         self.assertEqual(call('comms/status',client=casey)[1]['pending_photos'],1)
-        self.assertEqual(call('comms/status')[1]['pending_photos'],1)
-        with casey.open(url) as photo:
-            self.assertEqual(photo.read(),raw)
+        self.assertEqual([row['account'] for row in call('profile/queue',client=casey)[1]['requests']],[profile_id])
         self.assertEqual(call('profile/review',review_data,casey)[0],200)
+        self.assertEqual(call('profile/review',peer_review)[0],200)
+        self.assertEqual(call('profile/upload',dict(image=base64.b64encode(raw).decode()),casey)[0],200)
+        own=call('profile/queue',client=casey)[1]['requests'][0]
+        self.assertEqual(call('profile/mine',client=casey)[1]['status'],'pending')
+        self.assertEqual(call('comms/status',client=casey)[1]['pending_photos'],1)
+        self.assertEqual(call('profile/review',dict(account=own['account'],revision=own['pending_revision'],decision='approve'),casey)[0],200)
+        self.assertEqual(call('profile/mine',client=casey)[1]['status'],'approved')
         self.assertEqual(call('profile/review',review_data)[0],409)
+        self.assertEqual(call('profile/upload',dict(image=base64.b64encode(raw).decode()))[0],200)
+        admin_photo=call('profile/mine')[1]
+        self.assertTrue(admin_photo['approved'])
+        self.assertIsNone(admin_photo['pending_revision'])
+        with blair.open(f"{base}/photo/{admin_photo['account']}") as photo:
+            self.assertEqual(photo.read(),raw)
         with blair.open(f'{base}/photo/{profile_id}') as photo:
             self.assertEqual(photo.read(),raw)
         # A reused name does not inherit the old account's conversations.
