@@ -1,8 +1,9 @@
 """Browser test for administrator and delegated account-unlock settings."""
-from test_server import Tests as Fixture
+import test_server
 from playwright.sync_api import sync_playwright,expect
 
 def run():
+ Fixture=test_server.Tests
  Fixture.setUpClass()
  try:
   Fixture.call('setup',{'name':'Admin','password':'testpassword'})
