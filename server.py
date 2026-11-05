@@ -978,7 +978,10 @@ def work_set_request_decision(c,row,decision,reviewer):
               (decision,reviewer,dt.datetime.now().isoformat(timespec='seconds'),row['id']))
 
 
-def work_payroll_preview(c,start_value,break_after='0'):
+DEFAULT_PAYROLL_BREAK_HOURS=5.5
+
+
+def work_payroll_preview(c,start_value,break_after=DEFAULT_PAYROLL_BREAK_HOURS):
     try:
         start=dt.date.fromisoformat(start_value)
         end=start+dt.timedelta(days=6)
@@ -1192,7 +1195,8 @@ def work_get(handler,c,u,path,query,clock_only=False):
                                         for row in rows[:50]],'more':len(rows)>50})
     if path=='payroll':
         if not has_permission(u,'export_payroll'): raise Problem('Payroll export permission required.',403)
-        return handler.send(work_payroll_preview(c,query.get('start',[''])[0],query.get('break_after',['0'])[0]))
+        return handler.send(work_payroll_preview(c,query.get('start',[''])[0],
+                                                 query.get('break_after',[DEFAULT_PAYROLL_BREAK_HOURS])[0]))
     if path=='overview':
         gross,worked=work_hours(c,account,work_bounds(today),now)
         week_gross,week_worked=work_hours(c,account,work_bounds(week,7),now)

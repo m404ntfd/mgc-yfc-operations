@@ -185,16 +185,23 @@ class WorkforceTests(unittest.TestCase):
         c.execute("INSERT INTO work_shifts(account,start,end,location,notes) VALUES('staff',?,?,?,?)",
                   (first+7200,first+10800,'Office',''))
         c.execute("INSERT INTO work_periods VALUES(4,'staff',?,?,NULL,NULL)",(first+14400,first+16200))
+        c.execute("INSERT INTO work_periods VALUES(5,'staff',?,?,NULL,NULL)",(first+18000,first+37800))
         c.execute("INSERT INTO work_breaks VALUES(2,2,?,NULL)",(last-300,))
         preview=server.work_payroll_preview(c,start.isoformat())
         records={employee['name']:employee for employee in preview['employees']}
-        self.assertEqual((records['Staff']['gross'],records['Staff']['net']),(5400,4800))
+        self.assertEqual((records['Staff']['gross'],records['Staff']['net']),(25200,24600))
         self.assertTrue(records['Incomplete']['open_punch'])
         self.assertEqual({i['kind'] for i in records['Incomplete']['issues']},{'missing-clock-out','missing-break-end'})
-        self.assertEqual({i['kind'] for i in records['Staff']['issues']},{'missing-clock-in','no-break-recorded'})
-        filtered=server.work_payroll_preview(c,start.isoformat(),'2')
+        self.assertEqual(records['Staff']['issues'],[
+            dict(kind='missing-clock-in',at=server.work_local(first+7200)),
+            dict(kind='no-break-recorded',at=server.work_local(first+18000)),
+        ])
+        filtered=server.work_payroll_preview(c,start.isoformat(),'6')
         staff=next(e for e in filtered['employees'] if e['account']=='staff')
         self.assertEqual([i['kind'] for i in staff['issues']],['missing-clock-in'])
+        all_shifts=server.work_payroll_preview(c,start.isoformat(),'0')
+        staff=next(e for e in all_shifts['employees'] if e['account']=='staff')
+        self.assertEqual([i['kind'] for i in staff['issues']].count('no-break-recorded'),2)
         self.assertEqual(preview['unlinked'],1)
 
     def test_elapsed_and_net_time_are_clipped_to_the_selected_period(self):

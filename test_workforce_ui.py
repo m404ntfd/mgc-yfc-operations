@@ -68,6 +68,14 @@ def run():
             manager.locator('#settingsTab').click()
             manager.get_by_role('button',name='Application Settings',exact=True).click()
             manager.locator('#settingsSubcategories').get_by_role('button',name='Users',exact=True).click()
+            staff_row=manager.locator('#users .listRow').filter(has_text='Staff')
+            expect(staff_row.get_by_role('button',name='Edit name',exact=True)).to_have_count(0)
+            staff_row.get_by_role('button',name='Employee Profile',exact=True).click()
+            employee_profile=manager.get_by_role('dialog',name='Employee Profile')
+            expect(employee_profile.get_by_label('Login username')).to_have_value('Staff')
+            employee_profile.get_by_role('button',name='Edit display name').click()
+            expect(manager.locator('#renameUserName')).to_have_value('Staff')
+            manager.locator('#renameUserCancel').click()
             manager.locator('[data-work-assignment=Staff]').click()
             assignments=manager.locator('#workAssignmentForm')
             expect(assignments.get_by_role('checkbox',name='Main Office')).to_be_visible()
@@ -191,8 +199,9 @@ def run():
             }))
             payroll=manager.locator('#workPayrollForm')
             payroll.locator('[name=start]').fill('2025-01-05')
-            payroll.locator('[name=threshold]').fill('40')
-            payroll.locator('[name=breaks]').select_option('exclude')
+            expect(payroll.locator('[name=threshold]')).to_have_value('40')
+            expect(payroll.locator('[name=break_after]')).to_have_value('5.5')
+            expect(payroll.locator('[name=breaks]')).to_have_value('exclude')
             payroll.get_by_role('button',name='Preview hours').click()
             manager.get_by_role('checkbox',name='Include Staff',exact=True).check()
             manager.get_by_label('Overtime treatment for Staff').select_option('overtime')
@@ -212,6 +221,13 @@ def run():
                 rows=list(csv.DictReader(file))
             assert len(rows)==1 and rows[0]['Employee']=='Staff'
             assert rows[0]['Regular Hours']=='40.00' and rows[0]['Overtime Hours']=='3.00'
+            payroll.locator('[name=threshold]').fill('41')
+            payroll.locator('[name=break_after]').fill('6')
+            payroll.locator('[name=breaks]').select_option('include')
+            with manager.expect_request('**/api/workforce/payroll?*break_after=6'):
+                payroll.get_by_role('button',name='Preview hours').click()
+            expect(manager.locator('[data-payroll-account=staff] [data-regular]')).to_have_text('41.00')
+            expect(manager.locator('[data-payroll-account=staff] [data-overtime]')).to_have_text('4.00')
             assert not errors,errors
             browser.close()
     finally:

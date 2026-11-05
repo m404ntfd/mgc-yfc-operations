@@ -14,6 +14,7 @@
 'use strict';
 const $=id=>document.getElementById(id), esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let state={jobs:[],vehicles:[],users:[]},user,setup=false,mode='day',editing=null,timer;
+$('login').elements.name.labels[0].firstChild.textContent='Username';
 const loginAttempts=document.createElement('p');loginAttempts.id='loginAttempts';loginAttempts.setAttribute('role','status');$('authError').after(loginAttempts);
 const operationsTitle=document.createElement('div');operationsTitle.className='operationsTitle';operationsTitle.textContent='MGC YFC Operations';$('storeMenuButton').before(operationsTitle);const pageLabel=$('currentSection');$('storeMenuButton').replaceChildren(pageLabel,document.createTextNode(' ▾'));
 const menuDivider=document.createElement('hr');menuDivider.className='menuDivider';$('chooseStartSection').before(menuDivider);
@@ -26,13 +27,13 @@ const offlineOverlay=document.createElement('dialog');offlineOverlay.id='offline
 let serverOnline=true,serverUpdateAvailable=false;
 const connectionDot=document.createElement('span');connectionDot.id='connectionDot';connectionDot.className='statusDot';connectionDot.setAttribute('aria-hidden','true');const connectionLine=document.createElement('div');connectionLine.id='connectionLine';$('connection').before(connectionLine);connectionLine.append(connectionDot,$('connection'));
 const loggedOutStatus=document.createElement('div');loggedOutStatus.id='loggedOutStatus';loggedOutStatus.innerHTML='<span class="statusDot signedOutDot" aria-hidden="true"></span>No User Currently Logged In';connectionLine.after(loggedOutStatus);
-function setServerConnection(online){serverOnline=online;if(online){if(offlineOverlay.open)offlineOverlay.close();offlineOverlay.hidden=true;}else{offlineOverlay.hidden=false;if(!offlineOverlay.open)offlineOverlay.showModal();}connectionDot.dataset.connectionState=online?(serverUpdateAvailable?'update':'online'):'offline';connectionDot.title=online?(serverUpdateAvailable?'Server online — update available':'Server online'):'Server offline';if(!online)$('connection').textContent='Server offline';}
+function setServerConnection(online){serverOnline=online;if(online){if(offlineOverlay.open)offlineOverlay.close();offlineOverlay.hidden=true;}else if(!$('addUserStatus')?.open){offlineOverlay.hidden=false;if(!offlineOverlay.open)offlineOverlay.showModal();}connectionDot.dataset.connectionState=online?(serverUpdateAvailable?'update':'online'):'offline';connectionDot.title=online?(serverUpdateAvailable?'Server online — update available':'Server online'):'Server offline';if(!online)$('connection').textContent='Server offline';}
 async function pollServerConnection(){try{const r=await api('connection-status');serverUpdateAvailable=!!r.update_available;setServerConnection(true);$('connection').textContent=serverUpdateAvailable?'Store server online · Update available':'Store server online';}catch{setServerConnection(false);}}
 setServerConnection(true);setInterval(pollServerConnection,15000);pollServerConnection();
 const localDate=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 $('date').value=localDate(new Date());
 $('mobileLink').href=location.origin+'/mobile';$('mobileLink').textContent=location.origin+'/mobile';
-async function api(path,data){let r;try{r=await fetch('/api/'+path,{method:data?'POST':'GET',headers:data?{'Content-Type':'application/json','X-Dispatch':'1'}:{},body:data?JSON.stringify(data):undefined,signal:AbortSignal.timeout(20000)});if(r.status>=500)throw Error('Server unavailable');setServerConnection(true);}catch(e){setServerConnection(false);throw e;}const v=await r.json();if(!r.ok){if(r.status===401&&user){user=null;updateSignedInUser();clearInterval(timer);$('app').hidden=true;$('paging').hidden=true;$('receipts').hidden=true;$('receiptHistory')?.setAttribute('hidden','');$('printPurpose')?.setAttribute('hidden','');setSectionHeader('Sign in','signin');$('auth').hidden=false;$('editor').close();$('passwordDialog').close();$('statusDialog').close();}throw Object.assign(Error(v.error||'Request failed'),{attemptsRemaining:v.attempts_remaining});}return v;}
+async function api(path,data){let r;try{r=await fetch('/api/'+path,{method:data?'POST':'GET',headers:data?{'Content-Type':'application/json','X-Dispatch':'1'}:{},body:data?JSON.stringify(data):undefined,signal:AbortSignal.timeout(20000)});if(r.status>=500)throw Error('Server unavailable');setServerConnection(true);}catch(e){setServerConnection(false);throw e;}const v=await r.json();if(!r.ok){if(r.status===401&&user){user=null;updateSignedInUser();clearInterval(timer);$('app').hidden=true;$('paging').hidden=true;$('receipts').hidden=true;$('receiptHistory')?.setAttribute('hidden','');$('printPurpose')?.setAttribute('hidden','');setSectionHeader('Sign in','signin');$('auth').hidden=false;$('editor').close();$('passwordDialog').close();$('statusDialog').close();}throw Object.assign(Error(v.error||'Request failed'),{status:r.status,attemptsRemaining:v.attempts_remaining});}return v;}
 function toast(s){$('toast').textContent=s;$('toast').hidden=false;setTimeout(()=>$('toast').hidden=true,5000);}
 async function boot(){try{const s=await api('session');if(location.hash==='#login'){if(s.user){await api('logout',{pushDevice:commPushId()});s.user=null;}history.replaceState(null,'',location.pathname+location.search);}setup=s.setup;user=s.user;if(user){const pref=await api('account/appearance');window.appAppearance.set(pref.mode);$('appearanceMode').value=pref.mode;}lockRepository();if(!user){if(typeof stopPaging==='function')stopPaging();$('paging').hidden=true;$('receipts').hidden=true;$('receiptHistory')?.setAttribute('hidden','');$('printPurpose')?.setAttribute('hidden','');setSectionHeader('Sign in','signin');$('sectionChooser').close();expandedAppointments.clear();$('requestsList').hidden=true;}updateSignedInUser();$('authTitle').textContent=setup?'Set up your store':'Welcome back';$('authHelp').textContent=setup?(s.local?'Create the administrator account. Then add your vehicles and employees.':'Open http://localhost:8080 on the server computer to create the first account.'):'Sign in to your operations workspace.';$('auth').hidden=!!user;$('app').hidden=!user;$('connection').textContent=user?'Connected to store':'Store server online';if(user){$('settingsTab').hidden=false;$('serverUpdateButton').hidden=!user.admin;if(!user.admin)tab('day');if(can('view_schedule'))await refresh();else applyPermissions();clearInterval(timer);timer=setInterval(()=>{if(can('view_schedule'))refresh().catch(()=>{});},10000);if(location.hash==='#settings'){tab('settings');if(can('check_updates'))settingsSection(2);history.replaceState(null,'',location.pathname+location.search);}else if(location.hash==='#comms'){history.replaceState(null,'',location.pathname+location.search);await commOpen();}else await chooseLanding();}}catch(e){$('connection').textContent='Server unavailable';$('offline').hidden=false;toast(e.message);}}
 async function refresh(){try{state=await api('state');user.can_create=state.permissions.can_create;user.see_requests=state.permissions.see_requests;user.grants=state.permissions.grants;renderRequests();$('connection').textContent='Connected · '+new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});$('offline').hidden=true;const value=$('filter').value;$('filter').innerHTML='<option value="">All vehicles</option>'+state.vehicles.map(v=>`<option>${esc(v)}</option>`).join('');$('filter').value=value;render();applyPermissions();checkUpdateNotice();$('vehicles').innerHTML=state.vehicles.map(v=>`<div class="listRow">${esc(v)}</div>`).join('')||'<p>No vehicles yet.</p>';renderUserList();}catch(e){if(e.message.includes('Schedule access required')){$('connection').textContent='Connected · schedule permission required';$('offline').hidden=true;toast('Ask an administrator to enable View schedule, search and filter in your employee permissions.');}else{$('connection').textContent='Disconnected';$('offline').hidden=false;}throw e;}}
@@ -94,7 +95,7 @@ for(const [id,step]of [['prev',-1],['next',1]])$(id).onclick=()=>{$('date').valu
 $('jobs').onclick=e=>{const edit=e.target.closest('[data-edit]');const expand=!edit&&(e.target.closest('[data-expand],[data-toggle-appointment]')||e.target.closest('.job.collapsed'));if(expand){const id=expand.dataset.expand||expand.dataset.toggleAppointment||expand.dataset.appointment;if(expandedAppointments.has(id))expandedAppointments.delete(id);else expandedAppointments.add(id);render();return;}const b=e.target.closest('[data-edit]');if(b&&can('edit_appointments'))openJob(b.dataset.edit);const status=e.target.closest('[data-status]');if(status)openStatus(status.dataset.status);};
 $('jobForm').onsubmit=async e=>{e.preventDefault();$('save').disabled=true;bottomRequestSubmit.disabled=true;try{await api('save',{...Object.fromEntries(new FormData(e.target)),staffNames:new FormData(e.target).getAll('staffNames'),photos:requestPhotos,...(editing?{id:editing.id,revision:editing.revision}:{})});$('editor').close();toast('Appointment saved.');await refresh().catch(()=>toast('Saved. Reconnect to refresh the schedule.'));}catch(err){$('formError').textContent=err.message;}finally{$('save').disabled=false;bottomRequestSubmit.disabled=false;}};
 $('remove').onclick=async()=>{if(!editing||!confirm('Remove this appointment from the schedule? Use Canceled status instead if you want to keep its details.'))return;try{await api('delete',{id:editing.id,revision:editing.revision});$('editor').close();toast('Appointment removed.');await refresh().catch(()=>toast('Removed. Reconnect to refresh the schedule.'));}catch(e){$('formError').textContent=e.message;}};
-for(const [id,path]of [['vehicleForm','vehicle'],['userForm','user']])$(id).onsubmit=async e=>{e.preventDefault();try{await api(path,Object.fromEntries(new FormData(e.target)));e.target.reset();await refresh();toast(path==='user'?'Employee account added.':'Vehicle added.');}catch(err){toast(err.message);}};
+$('vehicleForm').onsubmit=async e=>{e.preventDefault();try{await api('vehicle',Object.fromEntries(new FormData(e.target)));e.target.reset();await refresh();toast('Vehicle added.');}catch(err){toast(err.message);}};
 $('auditButton').onclick=async()=>{try{const a=await api('audit');$('audit').innerHTML=a.map(r=>`<div class="listRow">${esc(r.action)}<div class="muted">${esc(r.actor)} · ${esc(r.at.replace('T',' '))}</div></div>`).join('')||'<p>No changes yet.</p>';}catch(e){toast(e.message);}};
 
 let repositoryUnlockTimer;
@@ -532,7 +533,7 @@ function renderUserList(){
   const pin=can('reset_passwords')&&(!person.admin||user.admin);
   const rename=can('rename_users')&&(!person.admin||user.admin);
   return `<div class="listRow"><span>${name}${person.admin?' · Administrator':''}</span>
-   <span>${rename?`<button type="button" data-rename-user="${name}">Edit name</button><button type="button" data-user-identity="${name}">Login &amp; legal names</button>`:''}
+   <span>${rename?`<button type="button" data-user-identity="${name}">Employee Profile</button>`:''}
    ${can('manage_staff_schedule')?`<button type="button" data-work-assignment="${name}">Work assignments</button>`:''}
    ${pin?`<button type="button" data-clock-pin="${name}">Time Clock PIN</button>`:''}
    ${edit?`<button type="button" data-password="${name}">Edit user / permissions</button>`:''}</span></div>`;
@@ -543,18 +544,58 @@ async function loadUserList(){
  const {users}=await api('admin/users');
  if(user===signedIn){state.users=users;renderUserList();}
 }
+const addUserStatus=document.createElement('dialog');
+addUserStatus.id='addUserStatus';
+addUserStatus.setAttribute('aria-labelledby','addUserTitle');
+addUserStatus.setAttribute('aria-describedby','addUserMessage');
+addUserStatus.innerHTML=`<h2 id="addUserTitle" tabindex="-1" autofocus>Add user</h2>
+ <p id="addUserMessage" role="status"></p>
+ <progress id="addUserProgress" aria-label="Adding user"></progress>
+ <form method="dialog" class="actions"><button id="addUserDone" class="primary">Done</button></form>`;
+document.body.append(addUserStatus);
+addUserStatus.addEventListener('cancel',e=>{if($('addUserDone').disabled)e.preventDefault();});
+addUserStatus.addEventListener('close',()=>{
+ if(!serverOnline)setServerConnection(false);
+});
+$('userForm').onsubmit=async e=>{
+ e.preventDefault();
+ if(addUserStatus.open)return;
+ const form=e.currentTarget,submit=form.querySelector('button');
+ const data=Object.fromEntries(new FormData(form));
+ const message=$('addUserMessage'),progress=$('addUserProgress'),done=$('addUserDone');
+ submit.disabled=true;
+ done.disabled=true;
+ progress.hidden=false;
+ message.textContent='Adding user…';
+ addUserStatus.showModal();
+ try{
+  await api('user',data);
+  form.reset();
+  message.textContent='User added. Refreshing the Users list…';
+  message.textContent=await loadUserList().then(
+   ()=>'User added successfully.',
+   ()=>'User added successfully. Reopen Users to refresh the list.'
+  );
+ }catch(err){
+  message.textContent=err.status?err.message:
+   'The app could not confirm whether the user was added. Check the Users list before trying again.';
+ }finally{
+  progress.hidden=true;
+  done.disabled=false;
+  submit.disabled=false;
+  done.focus();
+ }
+};
 const renameUserDialog=document.createElement('dialog');
-renameUserDialog.innerHTML='<form id="renameUserForm"><h2>Edit user name</h2><label>User name<input id="renameUserName" maxlength="80" required></label><p id="renameUserError" role="alert"></p><div class="actions"><button type="button" id="renameUserCancel">Cancel</button><button class="primary">Save name</button></div></form>';
+renameUserDialog.innerHTML='<form id="renameUserForm"><h2>Edit display name</h2><label>Display name<input id="renameUserName" maxlength="80" required></label><p id="renameUserError" role="alert"></p><div class="actions"><button type="button" id="renameUserCancel">Cancel</button><button class="primary">Save name</button></div></form>';
 document.body.append(renameUserDialog);
 let renameUserTarget;
-$('users').addEventListener('click',e=>{
- const button=e.target.closest('[data-rename-user]');
- if(!button)return;
- renameUserTarget=button.dataset.renameUser;
+function openRenameUser(name){
+ renameUserTarget=name;
  $('renameUserName').value=renameUserTarget;
  $('renameUserError').textContent='';
  renameUserDialog.showModal();
-});
+}
 $('renameUserCancel').onclick=()=>renameUserDialog.close();
 $('renameUserForm').onsubmit=async e=>{
  e.preventDefault();
@@ -1279,10 +1320,10 @@ workPanel.innerHTML = `
   <p>Preview a completed seven-day workweek using recorded punches. Select employees on one QuickBooks pay schedule and confirm their overtime treatment before downloading.</p>
   <form id="workPayrollForm" class="workForm">
    <label>First day of payroll workweek<input name="start" type="date" required></label>
-   <label>Weekly overtime threshold (hours)<input name="threshold" type="number" min="1" max="168" step="0.25" required></label>
-   <label>Flag no recorded break after this many hours<input name="break_after" type="number" min="0" max="48" step="0.25" value="0" required></label>
+   <label>Weekly overtime threshold (hours)<input name="threshold" type="number" min="1" max="168" step="0.25" value="40" required></label>
+   <label>Flag no recorded break at this many hours<input name="break_after" type="number" min="0" max="48" step="0.25" value="5.5" required></label>
    <p>Use 0 to review all worked shifts with no break recorded. A flag does not mean a break was required.</p>
-   <label>Recorded breaks<select name="breaks" required><option value="">Choose how to count breaks</option><option value="exclude">Exclude recorded breaks</option><option value="include">Include recorded breaks</option></select></label>
+   <label>Recorded breaks<select name="breaks"><option value="exclude" selected>Exclude recorded breaks</option><option value="include">Include recorded breaks</option></select></label>
    <button type="submit" class="primary">Preview hours</button>
   </form>
   <p id="workPayrollStatus" role="status"></p>
@@ -2565,8 +2606,10 @@ $('workCardAddBreak').onclick=()=>{
 };
 
 const userIdentityDialog=document.createElement('dialog');
+userIdentityDialog.setAttribute('aria-labelledby','userIdentityTitle');
 userIdentityDialog.innerHTML=`<form id="userIdentityForm">
- <h2>Login &amp; legal names</h2><p id="userIdentityPerson"></p>
+ <h2 id="userIdentityTitle">Employee Profile</h2><p id="userIdentityPerson"></p>
+ <button type="button" id="editDisplayName">Edit display name</button>
  <label>Login username<input name="username" maxlength="80" required autocomplete="off"></label>
  <label>Legal first name<input name="first" maxlength="80"></label>
  <label>Legal middle name<input name="middle" maxlength="80"></label>
@@ -2577,6 +2620,10 @@ userIdentityDialog.innerHTML=`<form id="userIdentityForm">
 document.body.append(userIdentityDialog);
 let userIdentityTarget='',userIdentityVersion=0;
 $('closeUserIdentity').onclick=()=>userIdentityDialog.close();
+$('editDisplayName').onclick=()=>{
+ userIdentityDialog.close();
+ openRenameUser(userIdentityTarget);
+};
 $('users').addEventListener('click',async e=>{
  const button=e.target.closest('[data-user-identity]');
  if(!button)return;
@@ -2603,7 +2650,7 @@ $('userIdentityForm').onsubmit=async e=>{
  button.disabled=true;
  try{
   await api('admin/user-identity',data);
-  if(user===signedIn&&version===userIdentityVersion){userIdentityDialog.close();toast('Login and legal names saved.');}
+  if(user===signedIn&&version===userIdentityVersion){userIdentityDialog.close();toast('Employee profile saved.');}
  }catch(err){if(user===signedIn&&version===userIdentityVersion)$('userIdentityError').textContent=err.message;}
  finally{if(version===userIdentityVersion)button.disabled=false;}
 };
