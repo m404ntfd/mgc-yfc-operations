@@ -16,7 +16,8 @@ class Receipts(unittest.TestCase):
   self.assertEqual(call('receipt-categories',client=guest)[1]['categories'],['Ministry','Store supplies'])
   self.assertEqual(call('admin/receipt-categories',{'categories':['Intruder']},guest)[0],401)
   body=base64.b64encode(b'%PDF-1.4\nreceipt test').decode()
-  data=dict(id='a'*32,category='Ministry',filename='receipt.pdf',body=body)
+  assignee=call('receipt-users',client=guest)[1]['users'][0]['id']
+  data=dict(assignee=assignee,id='a'*32,category='Ministry',filename='receipt.pdf',body=body)
   self.assertEqual(call('receipt-submit',dict(data,category='missing'),guest)[0],400)
   self.assertEqual(call('receipt-submit',dict(data,body=base64.b64encode(b'<script>bad</script>').decode()),guest)[0],400)
   code,result=call('receipt-submit',data,guest);self.assertEqual(code,200);self.assertTrue(result['email_pending'])
