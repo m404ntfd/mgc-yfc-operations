@@ -1,6 +1,8 @@
 """Mobile/desktop receipt form and authenticated return routing."""
 from test_server import Tests as F
 from playwright.sync_api import sync_playwright,expect
+from pathlib import Path
+import tempfile
 
 def run():
  F.setUpClass()
@@ -13,13 +15,13 @@ def run():
     context=browser.new_context(viewport={'width':width,'height':844},reduced_motion='reduce');page=context.new_page();page.on('pageerror',lambda e:errors.append(str(e)))
     page.goto(f'http://127.0.0.1:{F.port}')
     page.locator('#receiptShortcut').click();expect(page.locator('#receiptUpload')).to_be_visible();expect(page.locator('#auth')).to_be_hidden()
-    page.screenshot(path=f'/tmp/receipt-{width}.png')
+    page.screenshot(path=str(Path(tempfile.gettempdir())/f'receipt-{width}.png'))
     page.locator('#receiptCategory').select_option('Ministry')
     page.locator('#receiptFile').set_input_files({'name':'receipt.pdf','mimeType':'application/pdf','buffer':b'%PDF-1.4\nreceipt'})
     page.locator('#receiptSubmitNew').click();expect(page.locator('#receiptResult')).to_contain_text('Ready for the next receipt')
     expect(page.locator('#receiptFilename')).to_have_text('No file selected.');expect(page.locator('#receiptCategory')).to_have_value('')
     page.locator('#receiptFile').set_input_files({'name':'receipt.pdf','mimeType':'application/pdf','buffer':b'%PDF-1.4\nreceipt'})
-    page.locator('#receiptCategory').select_option('Supplies');page.get_by_role('button',name='Reset',exact=True).click()
+    page.locator('#receiptCategory').select_option('Supplies');page.get_by_role('button',name='Reset',exact=True).click();page.locator('#confirmReceiptReset').click()
     expect(page.locator('#receiptFilename')).to_have_text('No file selected.');expect(page.locator('#receiptCategory')).to_have_value('')
     page.locator('#receiptReturn').click();expect(page.locator('#auth')).to_be_visible();expect(page.locator('#app')).to_be_hidden()
     page.locator('#login [name=name]').fill('Admin');page.locator('#login [name=password]').fill('testpassword');page.locator('#login button').click()
