@@ -15,7 +15,7 @@ def run():
     page.goto(f'http://127.0.0.1:{F.port}')
     page.locator('#login [name=name]').fill('Admin');page.locator('#login [name=password]').fill('testpassword');page.locator('#login button').click()
     if width==1280:
-     page.locator('#accountButton').click()
+     page.locator('#accountButton').click();page.locator('#storeMenuButton').click();page.locator('#printSection').click()
     if width==390:
      page.locator('[name=section][value=print]').check();page.locator('#sectionChooserForm button').click()
     expect(page.locator('#printPurpose')).to_be_visible()
@@ -23,10 +23,10 @@ def run():
     page.locator('#storeMenuButton').click();page.locator('#appearanceMenu').click()
     expect(page.locator('#printPurpose')).to_be_hidden();expect(page.locator('#currentSection')).to_have_text('Settings')
     expect(page.get_by_role('button',name='Phone Access',exact=True)).to_be_hidden()
-    page.locator('#accountButton').click();expect(page.locator('#printPurpose')).to_be_visible()
+    page.locator('#accountButton').click();expect(page.locator('#printPurpose' if width==390 else '#receipts')).to_be_visible()
     page.locator('#storeMenuButton').click();page.locator('#chooseStartSection').click()
     page.locator('[name=section][value=receipts]').check();page.locator('#sectionChooserForm button').click()
-    page.locator('#accountButton').click();expect(page.locator('#printPurpose')).to_be_visible()
+    page.locator('#accountButton').click();expect(page.locator('#receipts')).to_be_visible()
     page.locator('#storeMenuButton').click();page.locator('#receiptsSection').click();page.locator('#openReceiptUpload').click()
     page.locator('#receiptCategory').select_option('Office')
     page.locator('#receiptFile').set_input_files({'name':'receipt.pdf','mimeType':'application/pdf','buffer':b'%PDF-1.4 receipt'})
