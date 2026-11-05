@@ -4,6 +4,9 @@ from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'remote'))
 from client import Client
 root=Path(sys.argv[1])
+assert (root/'remove-standalone-manager.pending').exists(), 'Upgrade did not schedule standalone-manager cleanup after server startup'
+restore=subprocess.run([str(root/'MGC YFC Operations Server.exe'),'--restore-self-test'],timeout=60)
+assert restore.returncode==0,'Integrated server restore utility failed'
 with tempfile.TemporaryDirectory() as data:
  with socket.socket() as s:s.bind(('127.0.0.1',0));port=s.getsockname()[1]
  p=subprocess.Popen([str(root/'runtime/python.exe'),str(root/'launcher.py')],cwd=root,env={**os.environ,'DISPATCH_DATA':data,'DISPATCH_PORT':str(port)})
