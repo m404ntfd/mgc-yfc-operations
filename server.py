@@ -40,6 +40,8 @@ CREATE TABLE IF NOT EXISTS pages(id INTEGER PRIMARY KEY AUTOINCREMENT, at REAL, 
 CREATE TABLE IF NOT EXISTS login_security(id INTEGER PRIMARY KEY CHECK(id=1), max_attempts INTEGER NOT NULL);
 INSERT OR IGNORE INTO login_security VALUES(1,5);
 CREATE TABLE IF NOT EXISTS account_lockouts(name TEXT PRIMARY KEY COLLATE NOCASE, failures INTEGER NOT NULL DEFAULT 0, locked_at TEXT);
+CREATE TABLE IF NOT EXISTS receipt_categories(code TEXT PRIMARY KEY);
+CREATE TABLE IF NOT EXISTS receipts(id TEXT PRIMARY KEY, at REAL, actor TEXT, category TEXT, filename TEXT, mime TEXT, body BLOB, source TEXT);
 CREATE TABLE IF NOT EXISTS audit(at TEXT, actor TEXT, action TEXT, job TEXT);''')
         if 'chosen_on' not in {r[1] for r in c.execute('PRAGMA table_info(landing_preferences)')}:
             c.execute('ALTER TABLE landing_preferences ADD COLUMN chosen_on TEXT')
@@ -340,7 +342,17 @@ class Handler(BaseHTTPRequestHandler):
                     try: u=self.user()
                     except Problem: u=None
                     return self.send({'application':'thrift-mart-dispatch','name':'MGC YFC Operations Server','version':updater.current(),'setup':setup,'user':u and {'name':u['name'],'admin':u['admin'],'can_create':u['can_create'],'see_requests':u['see_requests'],'grants':u['grants']},'local':self.client_address[0] in ('127.0.0.1','::1')})
+                if self.path=='/api/receipt-categories':
+                    return self.send({'categories':[r[0] for r in c.execute('SELECT code FROM receipt_categories ORDER BY code')]})
                 u=self.user()
+                if self.path=='/api/admin/receipts':
+                    if not u['admin']: raise Problem('Administrator access required.',403)
+                    return self.send({'receipts':[dict(r) for r in c.execute('SELECT id,at,actor,category,filename FROM receipts ORDER BY at DESC LIMIT 200')]})
+                if self.path.startswith('/api/admin/receipt-file/'):
+                    if not u['admin']: raise Problem('Administrator access required.',403)
+                    r=c.execute('SELECT body,mime FROM receipts WHERE id=?',(self.path.rsplit('/',1)[1],)).fetchone()
+                    if not r: raise Problem('Receipt not found.',404)
+                    return self.send(r['body'],kind=r['mime'])
                 if self.path=='/api/admin/login-security':
                     if not u['admin']: raise Problem('Administrator access required.',403)
                     return self.send({'max_attempts':c.execute('SELECT max_attempts FROM login_security WHERE id=1').fetchone()[0]})
@@ -446,8 +458,40 @@ class Handler(BaseHTTPRequestHandler):
                     c.execute('DELETE FROM account_lockouts WHERE name=?',(r['name'],))
                     token=secrets.token_urlsafe(32); SESSIONS[token]={'name':r['name'],'admin':bool(r['admin']),'expires':time.time()+43200}
                     return self.send({'ok':True},cookie=f'session={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200')
+                if self.path=='/api/receipt-submit':
+                    # This is intentionally public. Never grants a session or schedule access.
+                    category=d.get('category'); ident=d.get('id'); filename=d.get('filename')
+                    if not isinstance(ident,str) or len(ident)!=32 or any(x not in '0123456789abcdef' for x in ident): raise Problem('Invalid submission ID.')
+                    source=hashlib.sha256(self.client_address[0].encode()).hexdigest()
+                    if c.execute('SELECT 1 FROM receipts WHERE id=?',(ident,)).fetchone():
+                        return self.send({'ok':True,'id':ident,'email_pending':True})
+                    if c.execute('SELECT COUNT(*) FROM receipts WHERE source=? AND at>?',(source,time.time()-300)).fetchone()[0]>=10: raise Problem('Please wait five minutes before submitting more receipts.',429)
+                    if not isinstance(category,str) or not c.execute('SELECT 1 FROM receipt_categories WHERE code=?',(category,)).fetchone(): raise Problem('Select a configured category or code.')
+                    if not isinstance(filename,str) or not 1<=len(filename)<=200: raise Problem('Choose a receipt file.')
+                    try: body=base64.b64decode(d.get('body',''),validate=True)
+                    except (ValueError,TypeError): raise Problem('Invalid receipt file.')
+                    if not 1<=len(body)<=3000000: raise Problem('Receipt files must be 3 MB or smaller.')
+                    mime=None
+                    if body.startswith(b'\xff\xd8\xff'): mime='image/jpeg'
+                    elif body.startswith(b'\x89PNG\r\n\x1a\n'): mime='image/png'
+                    elif body.startswith(b'%PDF-'): mime='application/pdf'
+                    elif len(body)>12 and body[4:8]==b'ftyp' and body[8:12] in (b'heic',b'heix',b'hevc',b'hevx',b'mif1'): mime='image/heic'
+                    elif len(body)>12 and body[:4]==b'RIFF' and body[8:12]==b'WEBP': mime='image/webp'
+                    if not mime: raise Problem('Choose a JPEG, PNG, HEIC, WebP or PDF receipt.')
+                    try: actor=self.user()['name']
+                    except Problem: actor='Guest'
+                    c.execute('INSERT INTO receipts VALUES(?,?,?,?,?,?,?,?)',(ident,time.time(),actor,category,filename,mime,body,source))
+                    return self.send({'ok':True,'id':ident,'email_pending':True})
                 u=self.user()
                 if self.path in ROUTE_PERMISSIONS and not route_allowed(u,self.path): raise Problem('Administrator or delegated permission required.',403)
+                if self.path=='/api/admin/receipt-categories':
+                    if not u['admin']: raise Problem('Administrator access required.',403)
+                    categories=d.get('categories')
+                    if not isinstance(categories,list) or len(categories)>200 or any(not isinstance(x,str) or not 1<=len(x.strip())<=100 for x in categories): raise Problem('Enter up to 200 categories, each 1–100 characters.')
+                    categories=list(dict.fromkeys(x.strip() for x in categories))
+                    c.execute('DELETE FROM receipt_categories')
+                    c.executemany('INSERT INTO receipt_categories VALUES(?)',[(x,) for x in categories])
+                    return self.send({'ok':True})
                 if self.path=='/api/admin/login-security':
                     if not u['admin']: raise Problem('Administrator access required.',403)
                     limit=d.get('max_attempts')

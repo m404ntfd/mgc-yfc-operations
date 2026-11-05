@@ -19,7 +19,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - run: python -m unittest test_server test_updater test_remote test_lockout test_journal
+      - run: python -m unittest test_server test_updater test_remote test_lockout test_journal test_receipts
       - run: node --check static/app.js
   mobile-browser:
     runs-on: ubuntu-latest
@@ -34,6 +34,7 @@ jobs:
       - run: python test_daily.py
       - run: python test_login.py
       - run: python test_sections.py
+      - run: python test_receipt_ui.py
       - run: python test_security_ui.py
   windows-installer:
     needs: [test, mobile-browser]

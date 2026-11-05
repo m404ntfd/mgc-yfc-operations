@@ -1,10 +1,9 @@
-# MGC YFC Operations 0.22.0
+# MGC YFC Operations 0.23.0
 
-- Renames the Windows Server, Console, Remote Manager, installer and shortcuts to MGC YFC Operations. The scheduling section remains Thrift Mart Dispatch.
-- Prompts each employee to choose a permitted starting page once per server calendar day.
-- Verifies full pickup/delivery backups, including photos and history. Archives eligible completed/canceled records after 30 days into Dispatch Journal beneath the configured backup folder. Reports and complete restores include archived history.
-- Preserves installation identity, data paths, accounts, settings, instance locks and update ZIP compatibility.
+- Adds a Receipt Upload page from the login button and Receipts & Accounting.
+- Supports mobile camera/photo selection and desktop file upload, with Settings-managed categories/codes.
+- Adds Submit, Submit & Start New, Reset and Return to Dashboard. Signed-in users return to their chosen starting page; guests return to sign-in. Public uploads do not grant dashboard access.
+- Stores receipts and categories in the server database, included in existing database backups. Administrators can review submitted files in Settings > Receipts.
+- Email delivery remains pending the requested recipient list and email layout; confirmations explicitly report server storage, not sent mail.
 
-Run the new Windows installer over the existing installation to update desktop programs and shortcuts; the in-app code updater alone does not replace desktop executables. Existing startup and shortcut targets remain supported. Do not uninstall or move the data directory.
-
-The repository is now m404ntfd/mgc-yfc-operations. Release and update links use the new name; GitHub redirects existing repository links. OneDrive must finish syncing; Files On-Demand is needed to reclaim space occupied by synced archives.
+Use Check for Updates on the host server, install and restart, then reload browsers. The Windows installer is also provided for desktop installations. Existing data paths and installation identity are preserved.

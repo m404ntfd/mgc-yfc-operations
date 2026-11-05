@@ -50,7 +50,7 @@ function render(){
  for(const [id,selected]of [['dayTab',mode==='day'&&day===today],['weekTab',weekly&&from===weekStart(today)],['nextWeekTab',weekly&&from===shiftDate(weekStart(today),7)],['settingsTab',mode==='settings']]){$(id).classList.toggle('selected',selected);$(id).setAttribute('aria-pressed',String(selected));}
  $('prev').setAttribute('aria-label',weekly?'Previous week':'Previous day');$('next').setAttribute('aria-label',weekly?'Next week':'Next day');
 }
-function tab(t){mode=t;if(t==='settings'){loadUpdates();loadBackups();loadLoginSecurity();}$('schedule').hidden=['settings','reports'].includes(t);$('settings').hidden=t!=='settings';$('reports').hidden=t!=='reports';if(t==='reports')loadReport();render();}
+function tab(t){mode=t;if(t==='settings'){loadUpdates();loadBackups();loadLoginSecurity();loadReceiptSettings();}$('schedule').hidden=['settings','reports'].includes(t);$('settings').hidden=t!=='settings';$('reports').hidden=t!=='reports';if(t==='reports')loadReport();render();}
 function quickView(offset){const today=localDate(new Date());$('date').value=offset===null?today:shiftDate(weekStart(today),offset);tab(offset===null?'day':'week');}
 function openJob(id,type){if(user.can_create&&!state.vehicles.length){toast('Add a vehicle in Settings first.');if(user.admin)tab('settings');return;}editing=id?[...state.jobs,...(state.requests||[])].find(j=>j.id===id):null;$('jobForm').reset();$('jobForm').elements.status.innerHTML=(user.can_create?['Scheduled','In Route / In Progress','Completed','Canceled']:['Requested','Canceled']).map(v=>`<option value="${v}">${v==='Canceled'?'Cancelled':v}</option>`).join('');$('jobVehicle').innerHTML=state.vehicles.map(v=>`<option>${esc(v)}</option>`).join('');const j=editing||{state:'MS',type:type||'Pickup',status:user.can_create?'Scheduled':'Requested',start:$('date').value+'T09:00',end:$('date').value+'T10:00'};for(const [k,v]of Object.entries(j))if($('jobForm').elements[k])$('jobForm').elements[k].value=v;
 $('jobForm').elements.street.value=Object.hasOwn(j,'street')?j.street:(j.address||'');$('legacyAddress').hidden=!editing||!!j.street;
@@ -137,10 +137,13 @@ async function loadLoginSecurity(){
 $('loginSecurityForm').onsubmit=async e=>{e.preventDefault();try{await api('admin/login-security',{max_attempts:Number($('maxLoginAttempts').value)});$('loginSecurityMessage').textContent='Login attempt limit saved.';}catch(e){$('loginSecurityMessage').textContent=e.message;}};
 $('refreshLockouts').onclick=loadLoginSecurity;
 $('lockedAccounts').onclick=async e=>{const b=e.target.closest('[data-unlock]');if(!b)return;b.disabled=true;try{await api('admin/unlock-user',{name:b.dataset.unlock});await loadLoginSecurity();$('loginSecurityMessage').textContent=b.dataset.unlock+' unlocked.';}catch(e){$('loginSecurityMessage').textContent=e.message;}finally{b.disabled=false;}};
+const receiptSettings=document.createElement('div');receiptSettings.className='panel';receiptSettings.id='receiptSettings';
+receiptSettings.innerHTML='<h2>Receipt categories / codes</h2><form id="receiptCategoryForm"><label>One category or code per line<textarea id="receiptCodes" rows="8" maxlength="20200"></textarea></label><button>Save receipt categories</button></form><p id="receiptSettingsResult" role="status"></p><h3>Submitted receipts</h3><button id="refreshReceipts" type="button">Refresh receipts</button><div id="receiptList"></div>';
+$('settings').append(receiptSettings);
 const settingsPanels=[...$('settings').children];
 const settingsTabs=document.createElement('nav');settingsTabs.className='settingsTabs';settingsTabs.setAttribute('aria-label','Settings sections');
-const settingsNames=['Phone Access','Backups','Updates','Vehicles','Employees','Recent Changes','Login Security'];
-function settingsSection(index){settingsPanels.forEach((panel,i)=>panel.hidden=i!==index);[...settingsTabs.children].forEach((button,i)=>{button.classList.toggle('selected',i===index);button.setAttribute('aria-pressed',String(i===index));});}
+const settingsNames=['Phone Access','Backups','Updates','Vehicles','Employees','Recent Changes','Login Security','Receipts'];
+function settingsSection(index){settingsPanels.forEach((panel,i)=>panel.hidden=i!==index||(panel.id==='receiptSettings'&&!user?.admin));[...settingsTabs.children].forEach((button,i)=>{button.classList.toggle('selected',i===index);button.setAttribute('aria-pressed',String(i===index));});}
 settingsPanels.forEach((panel,i)=>{const button=document.createElement('button');button.type='button';button.textContent=settingsNames[i];button.onclick=()=>settingsSection(i);settingsTabs.append(button);});
 $('settings').prepend(settingsTabs);settingsSection(0);
 
@@ -247,6 +250,7 @@ let pagingEnabled=false,pagingTimer=null,lastPageId=0,pagingBusy=false;
 $('storeMenuButton').onclick=()=>{const open=$('storeMenu').hidden;$('storeMenu').hidden=!open;$('storeMenuButton').setAttribute('aria-expanded',String(open));};
 function storeSection(section){
  section=section===true?'paging':section===false?'dispatch':section;
+ $('receiptUpload').hidden=true;
  $('storeMenu').hidden=true;$('storeMenuButton').setAttribute('aria-expanded','false');
  if(!user){toast('Sign in first.');return;}
  if(!['dispatch','paging','receipts'].includes(section))section='dispatch';
@@ -302,8 +306,46 @@ $('userUpdateDialog').addEventListener('cancel',()=>{updateReminderAfter=Date.no
  $('skipVideo').onclick=finish;phone.onended=finish;phone.onerror=finish;
  $('pauseVideo').onclick=()=>{if(desktop.paused)playDesktop();else{desktop.pause();$('pauseVideo').textContent='Play video'}};
  $('replayIntro').onclick=()=>{if(mobile.matches)playIntro();else{desktop.currentTime=0;playDesktop()}};
- $('receiptShortcut').onclick=()=>{requestedReceipts=true;$('receiptLoginHelp').textContent='Sign in first. Receipts & Accounting will open after sign-in.';$('login').elements.name.focus()};
+ $('receiptShortcut').onclick=openReceiptUpload;
  new MutationObserver(sync).observe($('auth'),{attributes:true,attributeFilter:['hidden']});
  mobile.addEventListener('change',()=>{finish();desktop.pause();if(!mobile.matches&&!reduce.matches&&!$('auth').hidden)playDesktop()});
  reduce.addEventListener('change',()=>{if(reduce.matches){finish();desktop.pause()}});sync();
 })();
+
+// Receipt collection remains separate from authenticated operations access.
+let receiptFile=null,receiptId=null,receiptBusy=false;
+function resetReceipt(){receiptFile=null;receiptId=null;$('receiptFilename').textContent='No file selected.';$('receiptResult').textContent='';$('receiptCamera').value='';}
+function pickReceipt(input){receiptFile=input.files[0]||null;receiptId=null;$('receiptFilename').textContent=receiptFile?receiptFile.name:'No file selected.';$('receiptResult').textContent='';}
+$('receiptFile').onchange=()=>pickReceipt($('receiptFile'));$('receiptCamera').onchange=()=>pickReceipt($('receiptCamera'));
+$('receiptCameraButton').onclick=()=>$('receiptCamera').click();$('receiptGalleryButton').onclick=()=>$('receiptFile').click();
+async function openReceiptUpload(){
+ $('receiptForm').reset();$('auth').hidden=true;$('app').hidden=true;$('paging').hidden=true;$('receipts').hidden=true;$('storeMenu').hidden=true;$('receiptUpload').hidden=false;
+ setSectionHeader('Receipt Upload','receipts');$('receiptCategory').replaceChildren(new Option('Select a category / code',''));$('receiptCategoryHelp').textContent='Loading categories…';
+ try{const r=await api('receipt-categories');for(const code of r.categories)$('receiptCategory').add(new Option(code,code));$('receiptCategoryHelp').textContent=r.categories.length?'':'An administrator needs to add receipt categories in Settings before you can submit.';}
+ catch(e){$('receiptCategoryHelp').textContent=e.message;}
+}
+$('openReceiptUpload').onclick=openReceiptUpload;
+$('receiptForm').onreset=resetReceipt;
+$('receiptReturn').onclick=async()=>{if(receiptBusy)return;$('receiptUpload').hidden=true;await boot();};
+$('receiptForm').onsubmit=async e=>{
+ e.preventDefault();if(receiptBusy)return;
+ if(!receiptFile){$('receiptResult').textContent='Choose a receipt photo or file.';return;}
+ if(receiptFile.size>3000000){$('receiptResult').textContent='Choose a file 3 MB or smaller.';return;}
+ const startNew=e.submitter?.value==='new';receiptBusy=true;
+ const buttons=[...$('receiptForm').querySelectorAll('button,input,select')];buttons.forEach(b=>b.disabled=true);
+ try{
+  if(!receiptId){const bytes=new Uint8Array(16);crypto.getRandomValues(bytes);receiptId=Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');}
+  const body=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(',')[1]);reader.onerror=()=>reject(Error('Unable to read this file.'));reader.readAsDataURL(receiptFile);});
+  const r=await api('receipt-submit',{id:receiptId,category:$('receiptCategory').value,filename:receiptFile.name,body});
+  $('receiptForm').reset();$('receiptResult').textContent='Receipt saved. Email delivery is pending email setup.'+(startNew?' Ready for the next receipt.':' Confirmation: '+r.id);
+  if(startNew)$('receiptGalleryButton').focus();
+ }catch(err){$('receiptResult').textContent=err.message;}
+ finally{receiptBusy=false;buttons.forEach(b=>b.disabled=false);}
+};
+async function loadReceiptSettings(){
+ receiptSettings.hidden=!user?.admin;if(!user?.admin)return;
+ try{const r=await api('receipt-categories');$('receiptCodes').value=r.categories.join('\n');await loadReceipts();}catch(e){$('receiptSettingsResult').textContent=e.message;}
+}
+async function loadReceipts(){try{const r=await api('admin/receipts');$('receiptList').innerHTML=r.receipts.map(x=>`<p>${esc(new Date(x.at*1000).toLocaleString())} · ${esc(x.actor)} · ${esc(x.category)} · <a href="/api/admin/receipt-file/${esc(x.id)}" target="_blank" rel="noopener">${esc(x.filename)}</a> · Email pending</p>`).join('')||'<p>No receipts submitted.</p>';}catch(e){$('receiptSettingsResult').textContent=e.message;}}
+$('refreshReceipts').onclick=loadReceipts;
+$('receiptCategoryForm').onsubmit=async e=>{e.preventDefault();try{await api('admin/receipt-categories',{categories:$('receiptCodes').value.split('\n').map(x=>x.trim()).filter(Boolean)});$('receiptSettingsResult').textContent='Receipt categories saved.';}catch(err){$('receiptSettingsResult').textContent=err.message;}};
