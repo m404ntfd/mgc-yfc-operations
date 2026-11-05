@@ -16,7 +16,7 @@ def run():
     page.goto(f'http://127.0.0.1:{F.port}')
     page.locator('#receiptShortcut').click();expect(page.locator('#receiptUpload')).to_be_visible();expect(page.locator('#auth')).to_be_hidden()
     page.screenshot(path=str(Path(tempfile.gettempdir())/f'receipt-{width}.png'))
-    page.locator('#receiptCategory').select_option('Ministry')
+    page.locator('#receiptCategory').select_option('Ministry');page.locator('#receiptAssignee').select_option(label='Admin')
     page.locator('#receiptFile').set_input_files({'name':'receipt.pdf','mimeType':'application/pdf','buffer':b'%PDF-1.4\nreceipt'})
     page.locator('#receiptSubmitNew').click();expect(page.locator('#receiptResult')).to_contain_text('Ready for the next receipt')
     expect(page.locator('#receiptFilename')).to_have_text('No file selected.');expect(page.locator('#receiptCategory')).to_have_value('')
