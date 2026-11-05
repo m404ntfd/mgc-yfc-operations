@@ -329,7 +329,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send({'ok':True})
                 if self.path=='/api/account/landing':
                     section=d.get('section')
-                    if section not in ('dispatch','paging'): raise Problem('Choose a section.')
+                    if section not in ('dispatch','paging','receipts'): raise Problem('Choose a section.')
                     if section=='paging' and not has_permission(u,'send_pages') and not has_permission(u,'receive_pages'): raise Problem('Paging permission required.',403)
                     c.execute('INSERT OR REPLACE INTO landing_preferences VALUES(?,?)',(u['name'],section))
                     return self.send({'ok':True})
