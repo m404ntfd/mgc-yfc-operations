@@ -149,6 +149,13 @@ class Problem(Exception):
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self,fmt,*args): pass
+    def external_scheme(self):
+        # Only a connector on this server may describe the browser's TLS connection.
+        # Keep Host unchanged: never trust X-Forwarded-Host for origin validation.
+        if self.client_address[0] in ('127.0.0.1','::1') and self.headers.get('X-Forwarded-Proto')=='https':
+            return 'https'
+        return 'http'
+
     def send(self,data,status=200,cookie=None,kind='application/json'):
         raw=json.dumps(data).encode() if kind=='application/json' else data
         self.send_response(status)
@@ -158,7 +165,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('X-Content-Type-Options','nosniff')
         self.send_header('X-Frame-Options','DENY')
         self.send_header('Content-Security-Policy',"default-src 'self'; img-src 'self' data: blob:; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'")
-        if cookie: self.send_header('Set-Cookie',cookie)
+        if cookie: self.send_header('Set-Cookie',cookie+('; Secure' if self.external_scheme()=='https' else ''))
         self.end_headers(); self.wfile.write(raw)
     def user(self):
         cookie=SimpleCookie(); cookie.load(self.headers.get('Cookie',''))
@@ -249,7 +256,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if self.headers.get('X-Dispatch')!='1': raise Problem('Invalid request.',403)
             origin=self.headers.get('Origin')
-            if origin and origin!='http://'+self.headers.get('Host',''): raise Problem('Invalid origin.',403)
+            if origin and origin!=self.external_scheme()+'://'+self.headers.get('Host',''): raise Problem('Invalid origin.',403)
             n=int(self.headers.get('Content-Length','0'))
             if n>4500000: raise Problem('Request too large.')
             d=json.loads(self.rfile.read(n))
@@ -266,7 +273,7 @@ class Handler(BaseHTTPRequestHandler):
                 if self.path in ('/api/setup','/api/login'):
                     name=str(d.get('name','')).strip(); p=str(d.get('password',''))
                     if self.path=='/api/setup':
-                        if self.client_address[0] not in ('127.0.0.1','::1'): raise Problem('Create the first account on the server computer.',403)
+                        if self.client_address[0] not in ('127.0.0.1','::1') or self.headers.get('X-Forwarded-Proto') or self.headers.get('CF-Connecting-IP'): raise Problem('Create the first account on the server computer.',403)
                         if c.execute('SELECT 1 FROM users').fetchone(): raise Problem('Already set up.',409)
                         self.add_user(c,name,p,True)
                     key=self.client_address[0]; attempts=[t for t in ATTEMPTS.get(key,[]) if t>time.time()-300]

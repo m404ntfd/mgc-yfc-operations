@@ -1,3 +1,4 @@
+import http.client
 import http.cookiejar,json,os,socket,subprocess,sys,tempfile,time,unittest,urllib.request,urllib.error
 from pathlib import Path
 class Tests(unittest.TestCase):
@@ -30,6 +31,26 @@ class Tests(unittest.TestCase):
   self.assertEqual(self.call('state',client=anon)[0],401)
   self.assertEqual(self.call('setup',{'name':'Manager','password':'testpassword'})[0],200)
   self.assertEqual(self.call('setup',{'name':'Other','password':'testpassword'})[0],409)
+  # Simulate cloudflared on loopback forwarding the original HTTPS Host and Origin.
+  def tunnel_post(path,data,origin='https://operations.coastyfc.com',proto='https',cookie=None):
+   conn=http.client.HTTPConnection('127.0.0.1',self.port)
+   headers={'Host':'operations.coastyfc.com','Origin':origin,'X-Forwarded-Proto':proto,'X-Dispatch':'1','Content-Type':'application/json'}
+   if cookie: headers['Cookie']=cookie
+   conn.request('POST','/api/'+path,json.dumps(data),headers)
+   response=conn.getresponse(); result=(response.status,json.loads(response.read()),response.getheader('Set-Cookie'));conn.close();return result
+  login={'name':'Manager','password':'testpassword'}
+  for origin in ('https://evil.example','https://operations.coastyfc.com.evil.example','https://operations.coastyfc.com:8443','null','http://operations.coastyfc.com'):
+   self.assertEqual(tunnel_post('login',login,origin=origin)[0],403)
+  self.assertEqual(tunnel_post('login',login,proto='')[0],403)
+  self.assertEqual(tunnel_post('setup',login)[0],403)
+  code,body,cookie=tunnel_post('login',login)
+  self.assertEqual(code,200)
+  self.assertIn('; Secure',cookie)
+  session_cookie=cookie.split(';')[0]
+  self.assertEqual(tunnel_post('account/landing',{'section':'dispatch'},cookie=session_cookie)[0],200)
+  code,body,cookie=tunnel_post('logout',{},cookie=session_cookie)
+  self.assertEqual(code,200)
+  self.assertIn('; Secure',cookie)
   self.assertEqual(self.call('updates')[1]['current'],Path(__file__).with_name('VERSION').read_text().strip())
   self.assertEqual(self.call('update-config',{'repository':'example/store'})[0],200)
   self.assertEqual(self.call('updates')[1]['repository'],'example/store')

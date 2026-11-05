@@ -1,3 +1,5 @@
-# YFC Store Management 0.20.1
+# YFC Store Management 0.20.2
 
-Reports now include an Email report button beside Refresh and Print. Preview and email the current filtered report through your device’s email app. Longer reports can be downloaded as a complete text file and attached manually. Sending requires an email app or email service; no server email configuration is needed.
+Fix Invalid origin during login and saves through Cloudflare Tunnel HTTPS. The server trusts the HTTPS scheme only from a connector on the same computer, keeps exact Host/Origin matching, and marks HTTPS session cookies Secure. Local network HTTP access remains supported. Initial administrator setup is blocked through proxy connections.
+
+Install the update using the local server address, then reopen https://operations.coastyfc.com. Keep Cloudflare Access enabled for approved staff. The tunnel must run on the dispatch server and target http://localhost:8080 without overriding the HTTP Host header.
