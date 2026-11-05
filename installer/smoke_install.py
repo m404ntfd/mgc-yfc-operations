@@ -33,7 +33,7 @@ with tempfile.TemporaryDirectory() as data:
   try:c.probe()
   except Exception:pass
   else:raise AssertionError('Tray Exit left the server running')
-  print('Truck-icon GUI, tray minimize/restore, continued access and graceful exit passed.')
+  print('YFC-icon GUI, tray minimize/restore, continued access and graceful exit passed.')
  finally:
   if p.poll() is None:
    subprocess.run(['taskkill','/PID',str(p.pid),'/T','/F'],capture_output=True);p.wait()
@@ -52,7 +52,7 @@ with tempfile.TemporaryDirectory() as data:
   try:c.probe()
   except Exception:pass
   else:raise AssertionError('Console tray Exit left server running')
-  print('Command window truck icons, actual minimize-to-tray, restore and graceful exit passed.')
+  print('Command window YFC icons, actual minimize-to-tray, restore and graceful exit passed.')
  finally:
   if p.poll() is None:
    subprocess.run(['taskkill','/PID',str(p.pid),'/T','/F'],capture_output=True);p.wait()

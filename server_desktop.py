@@ -25,8 +25,8 @@ class ServerWindow:
             from console_control import ConsoleWindow
             self.console=ConsoleWindow(ASSETS/'dispatch.ico');root.withdraw()
             print('MGC YFC Operations Server — console mode',flush=True)
-            print('Minimize sends this command window to the truck icon in the system tray.',flush=True)
-            print('Double-click the truck to reopen. To stop: right-click truck > Exit server.',flush=True)
+            print('Minimize sends this command window to the YFC rings and building icon in the system tray.',flush=True)
+            print('Double-click the YFC icon to reopen. To stop: right-click the YFC icon > Exit server.',flush=True)
         root.protocol('WM_DELETE_WINDOW',self.hide);root.bind('<Unmap>',self.on_minimize)
         style=ttk.Style();style.theme_use('clam');style.configure('TButton',padding=10);style.configure('TLabel',font=('Segoe UI',10))
         f=ttk.Frame(root,padding=24);f.pack(fill='both',expand=True)
@@ -38,16 +38,16 @@ class ServerWindow:
         address_text='This computer: '+URL+'\nStaff network: '+(', '.join(f'http://{a}:{PORT}' for a in addresses) or 'Check this computer’s network address')
         ttk.Label(f,text=address_text,wraplength=600).pack(anchor='w')
         row=ttk.Frame(f);row.pack(fill='x',pady=18)
-        ttk.Button(row,text='Open schedule',command=self.open_schedule).pack(side='left')
+        ttk.Button(row,text='Login to Operations',command=self.open_login).pack(side='left')
         ttk.Button(row,text='Manage / update server',command=self.manage).pack(side='left',padx=8)
         ttk.Button(row,text='Minimize to tray',command=self.hide).pack(side='left')
-        ttk.Label(f,text='Minimize or close this window to keep the server running in the tray.\nDouble-click the truck icon to reopen. Use Exit server to stop it.',wraplength=600).pack(anchor='w')
+        ttk.Label(f,text='Minimize or close this window to keep the server running in the tray.\nDouble-click the YFC rings and building icon to reopen. Use Exit server to stop it.',wraplength=600).pack(anchor='w')
         bottom=ttk.Frame(f);bottom.pack(fill='x',pady=14)
         ttk.Button(bottom,text='Open server log',command=self.open_log).pack(side='left')
         self.exit_button=ttk.Button(bottom,text='Exit server',command=self.ask_exit);self.exit_button.pack(side='right')
         self.icon=pystray.Icon('ThriftMartDispatch',Image.open(ASSETS/'dispatch.png'),NAME,pystray.Menu(
             pystray.MenuItem('Open server console' if self.console else 'Open server window',lambda icon,item:self.queue.put(('show',None)),default=True),
-            pystray.MenuItem('Open schedule',lambda icon,item:self.queue.put(('schedule',None))),
+            pystray.MenuItem('Login to Operations',lambda icon,item:self.queue.put(('schedule',None))),
             pystray.MenuItem('Manage / update server',lambda icon,item:self.queue.put(('manage',None))),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem('Exit server',lambda icon,item:self.queue.put(('exit',None)))))
@@ -86,10 +86,13 @@ class ServerWindow:
     def show(self):
         if self.console:self.console.show()
         else:self.root.deiconify();self.root.lift();self.root.focus_force()
-    def open_schedule(self):webbrowser.open(URL)
-    def manage(self):
-        try:subprocess.Popen([str(ROOT/'MGC YFC Operations Remote Manager.exe'),'--local-server'],env={**os.environ,'PYINSTALLER_RESET_ENVIRONMENT':'1'})
-        except OSError as e:messagebox.showerror(NAME,'Cannot open administration: '+str(e))
+    def open_page(self,fragment):
+        target=URL+'/'+fragment
+        try:
+            if not webbrowser.open(target,new=2):raise OSError('No browser accepted the request.')
+        except OSError as e:messagebox.showerror(NAME,'Cannot open the browser. Open '+target+' manually.\n'+str(e))
+    def open_login(self):self.open_page('#login')
+    def manage(self):self.open_page('#settings')
     def open_log(self):os.startfile(DATA/'server-console.log')
     def ask_exit(self):
         if self.stopping:return
@@ -116,7 +119,7 @@ class ServerWindow:
             while True:
                 kind,value=self.queue.get_nowait()
                 if kind=='show':self.show()
-                elif kind=='schedule':self.open_schedule()
+                elif kind=='schedule':self.open_login()
                 elif kind=='manage':self.manage()
                 elif kind=='exit':self.ask_exit()
                 elif kind=='ready':self.tray_ready=True
@@ -143,6 +146,13 @@ class ServerWindow:
                             self.smoke_done=True;self.stop()
                     else:
                         self.root.update_idletasks()
+                        assert self.root.title()==NAME
+                        opened=[];original_open=webbrowser.open
+                        try:
+                            webbrowser.open=lambda url,**kw:opened.append(url) or True
+                            self.open_login();self.manage()
+                        finally:webbrowser.open=original_open
+                        assert opened==[URL+'/#login',URL+'/#settings']
                         assert self.exit_button.winfo_rooty()+self.exit_button.winfo_height() <= self.root.winfo_rooty()+self.root.winfo_height()
                         self.hide();self.root.update_idletasks()
                         assert self.root.state()=='withdrawn'
@@ -157,6 +167,6 @@ def main():
     kernel=ctypes.windll.kernel32;kernel.CreateMutexW.restype=ctypes.c_void_p
     mutex=kernel.CreateMutexW(None,False,'ThriftMartDispatchTray')
     if kernel.GetLastError()==183:
-        root=tk.Tk();root.withdraw();messagebox.showinfo(NAME,'The server application is already open. Double-click its white truck icon in the system tray.');root.destroy();return
+        root=tk.Tk();root.withdraw();messagebox.showinfo(NAME,'The server application is already open. Double-click its white YFC rings and building icon in the system tray.');root.destroy();return
     root=tk.Tk();ServerWindow(root,smoke='--smoke-test' in sys.argv,console='--console' in sys.argv);root.mainloop()
 if __name__=='__main__':main()
