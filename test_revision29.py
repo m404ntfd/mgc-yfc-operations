@@ -39,6 +39,10 @@ class Revision29Tests(unittest.TestCase):
   call('login',{'name':'Alice','password':'newpassword'},clients['Alice'])
   self.assertEqual(call('receipts',client=clients['Alice'])[1]['total'],0)
   self.assertEqual(call('login',{'name':'Admin','password':'testpassword','local_admin':True,'local_control_token':'wrong'})[0],403)
+  with sqlite3.connect(Path(F.tmp.name)/'schedule.db') as connection:
+   self.assertEqual(len(connection.execute('PRAGMA table_info(receipts)').fetchall()),8)
+   connection.execute('INSERT INTO receipts VALUES(?,?,?,?,?,?,?,?)',('f'*32,time.time(),'Bob','Office','legacy.pdf','application/pdf',b'%PDF-1.4 legacy','test'))
+  connection.close()
   if os.name=='nt':
    session_path=Path(F.tmp.name)/'native.bin'
    local=Client(f'127.0.0.1:{F.port}',local_control='local-test-control',session_path=session_path)
