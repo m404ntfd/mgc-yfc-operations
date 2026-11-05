@@ -1,4 +1,6 @@
 """Exercise the manager and staff views with simulated mobile geolocation."""
+import csv
+
 from playwright.sync_api import expect, sync_playwright
 from test_server import Tests as Fixture
 
@@ -156,6 +158,50 @@ def run():
             assert quick.request.get(origin+'/api/workforce/quick').status==401
             staff.locator('#headerClock').click()
             expect(staff.locator('#workClockState')).to_contain_text('Clocked in since')
+            expect(staff.locator('[data-work-view=time-cards]')).to_be_hidden()
+            manager.locator('[data-work-view=time-cards]').click()
+            open_card=manager.locator('#workTimeCards article').filter(has_text='Open')
+            open_card.get_by_role('button',name='Edit time card').click()
+            card=manager.locator('#workCardForm')
+            start=card.locator('[name=start]').input_value()
+            card.locator('[name=end]').fill(start)
+            card.locator('[name=reason]').fill('Correct missing clock-out')
+            card.get_by_role('button',name='Save correction').click()
+            expect(manager.locator('#workCardDialog')).to_be_hidden()
+            manager.locator('[data-work-view=time-card-audit]').click()
+            expect(manager.locator('#workTimeAudit')).to_contain_text('Correct missing clock-out')
+            expect(manager.locator('#workTimeAudit')).to_contain_text('Before')
+            expect(manager.locator('#workTimeAudit')).to_contain_text('After')
+            manager.locator('[data-work-view=payroll]').click()
+            manager.route('**/api/workforce/payroll?*',lambda route:route.fulfill(json={
+                'start':'2025-01-05','end':'2025-01-11','unlinked':0,
+                'employees':[{'account':'staff','name':'Staff','gross':162000,'net':154800,'open_punch':False,
+                                           'issues':[{'kind':'no-break-recorded','at':'2025-01-07T08:00'}]},
+                             {'account':'open','name':'Incomplete','gross':1800,'net':1800,'open_punch':True}]
+            }))
+            payroll=manager.locator('#workPayrollForm')
+            payroll.locator('[name=start]').fill('2025-01-05')
+            payroll.locator('[name=threshold]').fill('40')
+            payroll.locator('[name=breaks]').select_option('exclude')
+            payroll.get_by_role('button',name='Preview hours').click()
+            manager.get_by_role('checkbox',name='Include Staff',exact=True).check()
+            manager.get_by_label('Overtime treatment for Staff').select_option('overtime')
+            expect(manager.locator('[data-payroll-account=staff] [data-regular]')).to_have_text('40.00')
+            expect(manager.locator('[data-payroll-account=staff] [data-overtime]')).to_have_text('3.00')
+            expect(manager.locator('#workPayrollRows')).to_contain_text('No break recorded')
+            expect(manager.locator('#workPayrollDownload')).to_be_hidden()
+            manager.get_by_role('checkbox',name='Reviewed flags for Staff').check()
+            expect(manager.locator('#workPayrollDownload')).to_be_visible()
+            manager.get_by_role('checkbox',name='Include Incomplete').check()
+            manager.get_by_label('Overtime treatment for Incomplete').select_option('regular')
+            expect(manager.locator('#workPayrollDownload')).to_be_hidden()
+            manager.get_by_role('checkbox',name='Include Incomplete').uncheck()
+            with manager.expect_download() as exported:
+                manager.locator('#workPayrollDownload').click()
+            with exported.value.path().open(newline='',encoding='utf-8') as file:
+                rows=list(csv.DictReader(file))
+            assert len(rows)==1 and rows[0]['Employee']=='Staff'
+            assert rows[0]['Regular Hours']=='40.00' and rows[0]['Overtime Hours']=='3.00'
             assert not errors,errors
             browser.close()
     finally:

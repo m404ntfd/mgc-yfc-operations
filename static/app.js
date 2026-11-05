@@ -207,7 +207,7 @@ settingsGroups.forEach((group,i)=>{const button=document.createElement('button')
 $('settings').prepend(settingsCategories,settingsTabs,settingsEmpty);settingsCategory(null);
 
 const globalActions=document.querySelector('.bottomActions');document.querySelector('main').append(globalActions);globalActions.hidden=true;
-function updateSignedInUser(){if(!user){commReset();profileReset();}else {renderHeaderAvatar();commPoll();if(isMobileView()||commIsIos())commPreparePush();}$('headerShortcuts').hidden=!user;globalActions.hidden=!user; $('loggedOutStatus').hidden=!!user; $('signedInUser').textContent=user?'Signed in as '+user.name:'';$('signedInUser').hidden=!user; }
+function updateSignedInUser(){if(!user){commReset();profileReset();workPayrollReset();workCardReset();}else {renderHeaderAvatar();commPoll();if(isMobileView()||commIsIos())commPreparePush();}$('headerShortcuts').hidden=!user;globalActions.hidden=!user; $('loggedOutStatus').hidden=!!user; $('signedInUser').textContent=user?'Signed in as '+user.name:'';$('signedInUser').hidden=!user; }
 
 let permissionCatalog={},savedUserGrants={};
 async function loadPermissionList(name){$('savePermissions').disabled=true;$('permissionChecklist').textContent='Loading permissions…';try{const data=await api('admin/permission-catalog');permissionCatalog=data.permissions;savedUserGrants=Object.fromEntries(data.users.map(u=>[u.name,u.grants]));const roleData=await api('roles');populateEmployeeRole(name,roleData);const person=state.users.find(u=>u.name===name);const defaults={view_schedule:true,submit_requests:true,cancel_appointments:true,call_contacts:true,text_contacts:true,navigate:true,change_own_password:true,submit_receipts:true};for(const key of ['create_appointments','edit_appointments','delete_appointments','update_status','review_requests'])defaults[key]=!!person.can_create;defaults.see_requests=!!person.see_requests;const grants={...defaults,...(savedUserGrants[name]||{})};employeeIndividualGrants={...grants};$('permissionChecklist').innerHTML=Object.entries(permissionCatalog).map(([key,label])=>`<label><input type="checkbox" data-grant="${key}" ${person.admin||grants[key]?'checked':''} ${person.admin?'disabled':''}> ${esc(label)}</label>`).join('');setEmployeeRoleMode();$('savePermissions').disabled=false;}catch(e){$('permissionMessage').textContent=e.message;}}
@@ -1180,6 +1180,9 @@ workPanel.innerHTML = `
   <button type="button" data-work-view="requests">My requests</button>
   <button type="button" data-work-view="review" hidden>Review requests</button>
   <button type="button" data-work-view="team" hidden>Manager schedule</button>
+  <button type="button" data-work-view="time-cards" hidden>Time cards</button>
+  <button type="button" data-work-view="time-card-audit" hidden>Time card audit</button>
+  <button type="button" data-work-view="payroll" hidden>Payroll export</button>
   <button type="button" data-work-view="sites" hidden>Work sites</button>
  </nav>
  <p id="workStatus" role="status"></p>
@@ -1252,6 +1255,39 @@ workPanel.innerHTML = `
   <p id="workRequestError" role="alert"></p>
   <div class="actions"><button type="button" id="workRequestCancel">Cancel</button><button class="primary">Submit request</button></div>
  </form></dialog>
+ <section data-work-panel="time-cards" hidden>
+  <h3>Time cards</h3><p>Clock and break times use the server’s local time. A reason is required for each correction.</p>
+  <div id="workTimeCards" class="workList"></div>
+ </section>
+ <section data-work-panel="time-card-audit" hidden>
+  <h3>Time card audit</h3><p>Read-only history of time card corrections.</p>
+  <div id="workTimeAudit" class="workList"></div>
+  <button type="button" id="workAuditOlder" hidden>Load older entries</button>
+ </section>
+ <dialog id="workCardDialog"><form id="workCardForm" class="workForm">
+  <h3>Edit time card</h3><p id="workCardEmployee"></p>
+  <label>Clock in<input type="datetime-local" step="1" name="start" required></label>
+  <label>Clock out<input type="datetime-local" step="1" name="end"></label>
+  <div id="workCardBreaks"></div>
+  <label>Reason for correction<textarea name="reason" rows="2" maxlength="500" required></textarea></label>
+  <p id="workCardError" role="alert"></p>
+  <div class="actions"><button type="button" id="workCardCancel">Cancel</button><button class="primary">Save correction</button></div>
+ </form></dialog>
+ <section data-work-panel="payroll" hidden>
+  <h3>QuickBooks Online Payroll</h3>
+  <p>Preview a completed seven-day workweek using recorded punches. Select employees on one QuickBooks pay schedule and confirm their overtime treatment before downloading.</p>
+  <form id="workPayrollForm" class="workForm">
+   <label>First day of payroll workweek<input name="start" type="date" required></label>
+   <label>Weekly overtime threshold (hours)<input name="threshold" type="number" min="1" max="168" step="0.25" required></label>
+   <label>Flag no recorded break after this many hours<input name="break_after" type="number" min="0" max="48" step="0.25" value="0" required></label>
+   <p>Use 0 to review all worked shifts with no break recorded. A flag does not mean a break was required.</p>
+   <label>Recorded breaks<select name="breaks" required><option value="">Choose how to count breaks</option><option value="exclude">Exclude recorded breaks</option><option value="include">Include recorded breaks</option></select></label>
+   <button type="submit" class="primary">Preview hours</button>
+  </form>
+  <p id="workPayrollStatus" role="status"></p>
+  <div id="workPayrollRows"></div>
+  <button type="button" id="workPayrollDownload" class="primary" hidden>Download QuickBooks CSV</button>
+ </section>
  <section data-work-panel="sites" hidden>
   <h3>Work sites and geofencing</h3>
   <p>Assign sites and location requirements per employee in Settings → Users → Work assignments.</p>
@@ -1327,6 +1363,9 @@ function workRender(data) {
  }
  workPanel.querySelector('[data-work-view=team]').hidden = !data.manage_schedule;
  workPanel.querySelector('[data-work-view=review]').hidden = !data.manage_review;
+ workPanel.querySelector('[data-work-view=time-cards]').hidden = !data.edit_time_cards;
+ workPanel.querySelector('[data-work-view=time-card-audit]').hidden = !user?.admin;
+ workPanel.querySelector('[data-work-view=payroll]').hidden = !data.export_payroll;
  workPanel.querySelector('[data-work-view=sites]').hidden = !data.manage_sites;
  $('workMyShifts').innerHTML = workShiftList(data.shifts, false);
  workTick();
@@ -1336,7 +1375,7 @@ async function workLoad(version = workVersion) {
  try {
   const data=await workApi(workQuick?'quick':'overview'+query);
   if (workPanel.hidden || version!==workVersion || request!==workFetch || user!==signedIn) return;
-  if ((workView==='team'&&!data.manage_schedule)||(workView==='review'&&!data.manage_review)||(workView==='sites'&&!data.manage_sites)) {
+  if ((workView==='time-card-audit'&&!user?.admin)||(workView==='payroll'&&!data.export_payroll)||(workView==='time-cards'&&!data.edit_time_cards)||(workView==='team'&&!data.manage_schedule)||(workView==='review'&&!data.manage_review)||(workView==='sites'&&!data.manage_sites)) {
    workSelect('clock');return;
   }
   workRender(data);
@@ -1347,6 +1386,12 @@ async function workLoad(version = workVersion) {
    $('workAddShift').disabled=false;
    workRenderGrid(result,data.week);
   }
+  if(workView==='time-cards'){
+   const result=await workApi('time-cards?week='+encodeURIComponent(data.week));
+   if (workPanel.hidden||version!==workVersion||request!==workFetch||user!==signedIn)return;
+   workRenderTimeCards(result.cards);
+  }
+  if(workView==='time-card-audit')await workLoadAudit();
   if (['requests','review'].includes(workView)) {
    const review=workView==='review';
    const result=await workApi(review?'review-requests':'requests');
@@ -1374,9 +1419,11 @@ function workSelect(view) {
  workView=view;
  workVersion++;
  workStatus();
- $('workWeekControls').hidden=!['mine','team'].includes(view);
- $('workShiftDialog').close();$('workRequestDialog').close();
+ $('workWeekControls').hidden=!['mine','team','time-cards'].includes(view);
+ $('workShiftDialog').close();$('workRequestDialog').close();$('workCardDialog').close();
  $('workShiftForm').hidden=$('workSiteForm').hidden=true;
+ if(view==='time-cards')$('workTimeCards').textContent='Loading time cards…';
+ if(view==='time-card-audit'){$('workTimeAudit').textContent='Loading audit entries…';$('workAuditOlder').hidden=true;}
  if(view==='team'){
   $('workTeamShifts').textContent='Loading shifts…';
   $('workAddShift').disabled=true;
@@ -1401,13 +1448,14 @@ function workOpen(quick=false,view='clock'){
  $('workQuickBack').hidden=!quick;
  setSectionHeader(quick?'Time Clock':'Scheduling & Time Clock','workforce');
  workWeek='';
+ workPayrollReset();
  workData=null;
  workTeam={people:[],shifts:[]};
  workSites=[];
  $('workClockState').textContent='Loading time clock…';
  for(const id of ['workGeoStatus','workMyShifts','workTeamShifts','workSiteList'])$(id).textContent='';
  for(const id of ['workGross','workNet','workWeekGross','workWeekNet'])$(id).textContent='—';
- for(const button of workPanel.querySelectorAll('[data-work-punch],[data-work-view=team],[data-work-view=sites]'))button.hidden=true;
+ for(const button of workPanel.querySelectorAll('[data-work-punch],[data-work-view=team],[data-work-view=sites],[data-work-view=payroll],[data-work-view=time-cards],[data-work-view=time-card-audit]'))button.hidden=true;
  workSelect(view);
 }
 workMenu.onclick=()=>workOpen();
@@ -1699,7 +1747,10 @@ const profileDialog=document.createElement('dialog');
 profileDialog.innerHTML=`<form id="profilePhotoForm">
  <h2>My profile</h2><div id="profilePhotos" class="profilePhotos"></div>
  <p id="profilePhotoStatus" role="status"></p>
- <label>Choose a profile picture<input type="file" id="profilePhotoInput" accept="image/*" required></label>
+ <label>Upload a profile picture<input type="file" id="profilePhotoInput" accept="image/*"></label>
+ <div class="actions"><button type="button" id="profileStartCamera">Take a picture</button><button type="button" id="profileCapture" hidden>Capture picture</button></div>
+ <video id="profileCamera" autoplay muted playsinline hidden aria-label="Camera preview"></video>
+ <img id="profileCapturePreview" hidden alt="Newly captured profile picture">
  <div class="actions"><button type="button" id="closeProfilePhoto">Close</button><button class="primary" id="profilePhotoSubmit">Submit for approval</button></div>
  </form>`;
 const photoQueueDialog=document.createElement('dialog');
@@ -1709,11 +1760,24 @@ photoQueueDialog.innerHTML=`<h2>Notifications</h2>
  <p id="photoQueueStatus" role="status"></p><div id="photoQueue"></div></section>
  <div class="actions"><button type="button" id="closePhotoQueue">Close</button></div>`;
 document.body.append(profileDialog,photoQueueDialog);
+const profileWelcome=document.createElement('section');
+profileWelcome.id='profileWelcome';
+profileWelcome.className='card';
+profileWelcome.hidden=true;
+profileWelcome.innerHTML='<h2>Add a profile picture</h2><p>Take a picture or upload one so teammates can recognize you.</p><div class="actions"><button type="button" id="profileWelcomeCamera" class="primary">Take a picture</button><button type="button" id="profileWelcomeUpload">Upload a picture</button><button type="button" id="profileWelcomeSkip">Skip for now</button></div>';
+document.querySelector('main').prepend(profileWelcome);
+let profilePromptSkipped=false,profileCameraStream,profileCaptureData='',profileCameraVersion=0;
+$('profileWelcomeSkip').onclick=()=>{profilePromptSkipped=true;profileWelcome.hidden=true;};
+$('profileWelcomeUpload').onclick=()=>profileMenu.click();
+$('profileWelcomeCamera').onclick=()=>{profileMenu.click();profileStartCamera();};
 
 const profileApi=(path,data)=>api('profile/'+path,data);
 let photoPendingCount=0,showPhotoReview=false;
 function profileReset(){
  photoNotifications.hidden=true;
+ profileWelcome.hidden=true;
+ profilePromptSkipped=false;
+ profileStopCamera();
  photoPendingCount=0;
  headerAvatarKey='';
  headerProfile.replaceChildren();
@@ -1725,6 +1789,7 @@ function profileReset(){
 }
 function profileReviewStatus(result){
  renderHeaderAvatar(result.profile_account,result.profile_photo_revision);
+ profileWelcome.hidden=profilePromptSkipped||!!result.profile_photo_revision||!!result.profile_photo_pending;
  const photos=result.pending_photos||0, schedule=result.pending_schedule||0;
  const count=photos+schedule;
  showPhotoReview=result.photo_review;
@@ -1761,6 +1826,7 @@ async function loadProfilePhoto(){
 profileMenu.onclick=async()=>{
  closeStoreMenu();
  $('profilePhotoForm').reset();
+ profileClearCapture();
  $('profilePhotos').replaceChildren();
  $('profilePhotoStatus').textContent='Loading profile…';
  $('profilePhotoSubmit').textContent=user?.admin?'Save profile picture':'Submit for approval';
@@ -1768,6 +1834,73 @@ profileMenu.onclick=async()=>{
  try{await loadProfilePhoto();}catch(e){$('profilePhotoStatus').textContent=e.message;}
 };
 $('closeProfilePhoto').onclick=()=>profileDialog.close();
+profileDialog.addEventListener('close',()=>{profileStopCamera();profileClearCapture();});
+function profileStopCamera(){
+ profileCameraVersion++;
+ profileCameraStream?.getTracks().forEach(track=>track.stop());
+ profileCameraStream=null;
+ const video=$('profileCamera');
+ video.srcObject=null;
+ video.hidden=true;
+ $('profileCapture').hidden=true;
+ $('profileCapture').disabled=true;
+ $('profileStartCamera').disabled=false;
+}
+function profileClearCapture(){
+ profileCaptureData='';
+ $('profileCapturePreview').removeAttribute('src');
+ $('profileCapturePreview').hidden=true;
+}
+async function profileStartCamera(){
+ if(!navigator.mediaDevices?.getUserMedia){
+  $('profilePhotoStatus').textContent='Camera access requires a supported browser and a secure address. You can upload a picture instead.';
+  return;
+ }
+ profileStopCamera();
+ const version=profileCameraVersion;
+ $('profileStartCamera').disabled=true;
+ try{
+  const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'},audio:false});
+  if(!profileDialog.open||version!==profileCameraVersion){stream.getTracks().forEach(track=>track.stop());return;}
+  profileCameraStream=stream;
+  const video=$('profileCamera');
+  video.srcObject=stream;
+  video.hidden=false;
+  $('profileCapture').hidden=false;
+  await video.play();
+  if(version===profileCameraVersion)$('profileCapture').disabled=false;
+ }catch{
+  if(version===profileCameraVersion){
+   profileStopCamera();
+   $('profilePhotoStatus').textContent='Camera unavailable. Check your camera permission or upload a picture.';
+  }
+ }
+}
+$('profileStartCamera').onclick=profileStartCamera;
+$('profilePhotoInput').onchange=()=>{profileStopCamera();profileClearCapture();};
+$('profileCapture').onclick=()=>{
+ const video=$('profileCamera');
+ if(!video.videoWidth)return;
+ try{
+  profileCaptureData=profileEncodeImage(video,video.videoWidth,video.videoHeight);
+  $('profilePhotoInput').value='';
+  const preview=$('profileCapturePreview');
+  preview.src='data:image/jpeg;base64,'+profileCaptureData;
+  preview.hidden=false;
+  profileStopCamera();
+  $('profilePhotoStatus').textContent='Picture captured. Review it, then submit it or take another.';
+ }catch(err){$('profilePhotoStatus').textContent=err.message;}
+};
+function profileEncodeImage(source,width,height){
+ const canvas=document.createElement('canvas');
+ canvas.width=canvas.height=256;
+ const context=canvas.getContext('2d'),side=Math.min(width,height);
+ if(!context||!side)throw Error('This picture could not be opened.');
+ context.fillStyle='#fff';
+ context.fillRect(0,0,256,256);
+ context.drawImage(source,(width-side)/2,(height-side)/2,side,side,0,0,256,256);
+ return canvas.toDataURL('image/jpeg',0.88).split(',')[1];
+}
 async function profilePhotoData(file){
  if(file.size>12000000)throw Error('Choose a picture smaller than 12 MB.');
  const url=URL.createObjectURL(file);
@@ -1775,28 +1908,24 @@ async function profilePhotoData(file){
   const picture=new Image();
   picture.src=url;
   try{await picture.decode();}catch{throw Error('Choose an image your browser can open, such as JPEG or PNG.');}
-  const canvas=document.createElement('canvas');
-  canvas.width=canvas.height=256;
-  const context=canvas.getContext('2d');
-  const side=Math.min(picture.naturalWidth,picture.naturalHeight);
-  if(!context||!side)throw Error('This picture could not be opened.');
-  context.fillStyle='#fff';
-  context.fillRect(0,0,256,256);
-  context.drawImage(picture,(picture.naturalWidth-side)/2,(picture.naturalHeight-side)/2,side,side,0,0,256,256);
-  return canvas.toDataURL('image/jpeg',0.88).split(',')[1];
+  return profileEncodeImage(picture,picture.naturalWidth,picture.naturalHeight);
  }finally{URL.revokeObjectURL(url);}
 }
 $('profilePhotoForm').onsubmit=async e=>{
  e.preventDefault();
  const file=$('profilePhotoInput').files[0], signedIn=user, button=e.submitter;
- if(!file)return;
+ if(!file&&!profileCaptureData){$('profilePhotoStatus').textContent='Take a picture or choose one to upload first.';return;}
  button.disabled=true;
  try{
-  const image=await profilePhotoData(file);
+  const image=profileCaptureData||await profilePhotoData(file);
   if(user!==signedIn)return;
   await profileApi('upload',{image});
   if(user!==signedIn)return;
   $('profilePhotoForm').reset();
+  profileClearCapture();
+  profileStopCamera();
+  profilePromptSkipped=true;
+  profileWelcome.hidden=true;
   await loadProfilePhoto();
   commPoll();
  }catch(err){if(user===signedIn)$('profilePhotoStatus').textContent=err.message;}
@@ -2168,3 +2297,224 @@ workAssignmentForm.onsubmit=async e=>{
  }catch(err){if(user===signedIn&&version===workAssignmentVersion)$('workAssignmentError').textContent=err.message;}
  finally{if(version===workAssignmentVersion)button.disabled=false;}
 };
+
+const workPayrollForm=$('workPayrollForm');
+let workPayrollPreview=null,workPayrollChoices=new Map();
+const workPayrollIssueLabels={
+ 'missing-clock-in':'No clock-in matched this scheduled shift',
+ 'missing-clock-out':'Missing clock-out',
+ 'missing-break-end':'Missing break end',
+ 'no-break-recorded':'No break recorded'
+};
+function workPayrollHardStop(employee){
+ return employee.has_punches===false||employee.open_punch||employee.issues?.some(issue=>issue.kind==='missing-break-end');
+}
+function workPayrollReviewIssues(employee){
+ return employee.issues?.filter(issue=>['missing-clock-in','no-break-recorded'].includes(issue.kind))||[];
+}
+function workPayrollReset(){
+ workPayrollPreview=null;
+ workPayrollChoices.clear();
+ $('workPayrollRows').replaceChildren();
+ $('workPayrollStatus').textContent='';
+ $('workPayrollDownload').hidden=true;
+}
+function workPayrollTotals(employee,treatment){
+ const preview=workPayrollPreview;
+ const seconds=preview.breaks==='include'?employee.gross:employee.net;
+ const overtime=treatment==='overtime'?Math.max(0,seconds-preview.threshold*3600):0;
+ const totalCents=Math.round(seconds/36),overtimeCents=Math.round(overtime/36);
+ return {regular:((totalCents-overtimeCents)/100).toFixed(2),overtime:(overtimeCents/100).toFixed(2)};
+}
+function workPayrollSelection(){
+ if(!workPayrollPreview)return;
+ let selected=0,blocked=workPayrollPreview.unlinked>0;
+ for(const row of $('workPayrollRows').querySelectorAll('[data-payroll-account]')){
+  const employee=workPayrollPreview.employees.find(e=>e.account===row.dataset.payrollAccount);
+  const include=row.querySelector('[data-payroll-include]'), treatment=row.querySelector('select');
+  const review=row.querySelector('[data-payroll-reviewed]');
+  if(review)review.disabled=!include.checked;
+  treatment.disabled=!include.checked;
+  const value=include.checked&&treatment.value?workPayrollTotals(employee,treatment.value):null;
+  row.querySelector('[data-regular]').textContent=value?.regular??'—';
+  row.querySelector('[data-overtime]').textContent=value?.overtime??'—';
+  if(!include.checked)continue;
+  selected++;
+  if(!value||workPayrollHardStop(employee)||(review&&!review.checked))blocked=true;
+ }
+ $('workPayrollDownload').hidden=blocked||selected===0;
+}
+function workPayrollRender(){
+ const result=workPayrollPreview;
+ $('workPayrollStatus').textContent=result.unlinked
+  ? 'This week includes punches for removed accounts. Reconcile those hours before exporting.'
+  : `${result.start} through ${result.end}. Review employee matches and hours in QuickBooks before submitting payroll.`;
+ $('workPayrollRows').innerHTML=result.employees.length?`<div class="workGridScroll"><table class="workPayrollTable">
+  <thead><tr><th>Include</th><th>Employee</th><th>Punch review</th><th>Overtime treatment</th><th>Total hours</th><th>Regular hours</th><th>Overtime hours</th></tr></thead>
+  <tbody>${result.employees.map(employee=>{
+   const choice=workPayrollChoices.get(employee.account);
+   return `<tr data-payroll-account="${esc(employee.account)}">
+    <td><input data-payroll-include type="checkbox" aria-label="Include ${esc(employee.name)}" ${choice?.included?'checked':''}></td>
+    <th scope="row">${esc(employee.name)}</th>
+    <td>${(employee.issues||[]).map(issue=>`<p class="payrollIssue">${esc(workPayrollIssueLabels[issue.kind]||issue.kind)} · ${esc(issue.at.replace('T',' '))}</p>`).join('')||
+      (employee.open_punch?'<p class="payrollIssue">Missing clock-out</p>':'No flags')}
+      ${workPayrollHardStop(employee)?(employee.has_punches===false?'<small>No recorded work hours to export.</small>':'<small>Correct the open punch or break before including these hours.</small>'):
+       workPayrollReviewIssues(employee).length?`<label class="workAssignmentCheck"><input type="checkbox" data-payroll-reviewed aria-label="Reviewed flags for ${esc(employee.name)}" ${choice?.reviewed?'checked':''}> Reviewed flags</label>`:''}</td>
+    <td><select aria-label="Overtime treatment for ${esc(employee.name)}">
+     <option value="">Choose treatment</option><option value="overtime" ${choice?.treatment==='overtime'?'selected':''}>Apply weekly overtime</option>
+     <option value="regular" ${choice?.treatment==='regular'?'selected':''}>All hours regular</option>
+    </select></td><td>${((result.breaks==='include'?employee.gross:employee.net)/3600).toFixed(2)}</td><td data-regular>—</td><td data-overtime>—</td></tr>`;
+  }).join('')}</tbody></table></div>`:'<p>No punches were recorded for this workweek.</p>';
+ workPayrollSelection();
+}
+$('workPayrollRows').onchange=e=>{
+ const row=e.target.closest('[data-payroll-account]');
+ if(!row)return;
+ workPayrollChoices.set(row.dataset.payrollAccount,{included:row.querySelector('[data-payroll-include]').checked,treatment:row.querySelector('select').value,reviewed:row.querySelector('[data-payroll-reviewed]')?.checked??false});
+ workPayrollSelection();
+};
+workPayrollForm.oninput=()=>{
+ workPayrollPreview=null;
+ $('workPayrollRows').replaceChildren();
+ $('workPayrollDownload').hidden=true;
+ $('workPayrollStatus').textContent='';
+};
+workPayrollForm.onsubmit=async e=>{
+ e.preventDefault();
+ const signedIn=user,version=workVersion,button=e.submitter;
+ const data=Object.fromEntries(new FormData(e.currentTarget));
+ button.disabled=true;
+ $('workPayrollStatus').textContent='Loading recorded hours…';
+ try{
+  const result=await workApi(workPayrollQuery(data.start,data.break_after));
+  if(signedIn!==user||version!==workVersion)return;
+  const current=Object.fromEntries(new FormData(workPayrollForm));
+  if(['start','threshold','breaks','break_after'].some(key=>data[key]!==current[key]))return;
+  for(const choice of workPayrollChoices.values())choice.reviewed=false;
+  workPayrollPreview={...result,threshold:Number(data.threshold),breaks:data.breaks,break_after:data.break_after};
+
+  workPayrollRender();
+ }catch(err){if(signedIn===user&&version===workVersion)$('workPayrollStatus').textContent=err.message;}
+ finally{button.disabled=false;}
+};
+function workPayrollCsvCell(value){
+ let text=String(value);
+ if(/^[\s]*[=+@-]|^[\t\r\n]/.test(text))text="'"+text;
+ return '"'+text.replaceAll('"','""')+'"';
+}
+function workPayrollQuery(start,breakAfter){
+ return 'payroll?'+new URLSearchParams({start,break_after:breakAfter}).toString();
+}
+$('workPayrollDownload').onclick=async e=>{
+ if(!workData?.export_payroll||!workPayrollPreview||$('workPayrollDownload').hidden)return;
+ const button=e.currentTarget,signedIn=user,version=workVersion,preview=workPayrollPreview;
+ const {start,end,employees}=preview;
+ button.disabled=true;
+ try{
+  const latest=await workApi(workPayrollQuery(start,preview.break_after));
+  if(user!==signedIn||version!==workVersion||workPayrollPreview!==preview||button.hidden)return;
+  if(latest.unlinked!==preview.unlinked||JSON.stringify(latest.employees)!==JSON.stringify(employees)){
+   for(const choice of workPayrollChoices.values())choice.reviewed=false;
+   workPayrollPreview={...preview,...latest};
+   workPayrollRender();
+   $('workPayrollStatus').textContent='Time records changed since the preview. Review the updated hours and flags before downloading.';
+   return;
+  }
+ }catch(err){
+  if(user===signedIn&&version===workVersion)$('workPayrollStatus').textContent=err.message;
+  return;
+ }finally{button.disabled=false;}
+ const lines=[['Employee','Pay Period Start','Pay Period End','Regular Hours','Overtime Hours']];
+ for(const employee of employees){
+  const choice=workPayrollChoices.get(employee.account);
+  if(!choice?.included)continue;
+  const totals=workPayrollTotals(employee,choice.treatment);
+  lines.push([employee.name,start,end,totals.regular,totals.overtime]);
+ }
+ const file=new Blob([lines.map(line=>line.map(workPayrollCsvCell).join(',')).join('\r\n')+'\r\n'],{type:'text/csv;charset=utf-8'});
+ const url=URL.createObjectURL(file),link=document.createElement('a');
+ link.href=url;
+ link.download=`quickbooks-payroll-${start}.csv`;
+ link.click();
+ setTimeout(()=>URL.revokeObjectURL(url),1000);
+};
+
+let workTimeCards=[],workEditingCard=null,workAuditNext=0;
+function workCardReset(){
+ workTimeCards=[];
+ workEditingCard=null;
+ workAuditNext=0;
+ $('workCardDialog').close();
+ $('workCardForm').reset();
+ for(const id of ['workTimeCards','workTimeAudit','workCardBreaks','workCardEmployee'])$(id).replaceChildren();
+ $('workAuditOlder').hidden=true;
+}
+function workCardWhen(value){return value?value.replace('T',' '):'Open';}
+function workRenderTimeCards(cards){
+ workTimeCards=cards;
+ $('workTimeCards').innerHTML=cards.map(card=>`<article class="workRow"><div><strong>${esc(card.name)}</strong>
+  <p>${esc(workCardWhen(card.start))} → ${esc(workCardWhen(card.end))}</p><p>${card.breaks.length} break${card.breaks.length===1?'':'s'}</p></div>
+  <button type="button" data-edit-card="${card.id}">Edit time card</button></article>`).join('')||'<p>No time cards for this week.</p>';
+}
+$('workTimeCards').onclick=e=>{
+ const button=e.target.closest('[data-edit-card]');
+ if(!button)return;
+ const card=workTimeCards.find(c=>c.id===Number(button.dataset.editCard));
+ if(!card)return;
+ workEditingCard=card;
+ const form=$('workCardForm');
+ form.reset();
+ $('workCardEmployee').textContent=card.name;
+ form.elements.start.value=card.start;
+ form.elements.end.value=card.end;
+ $('workCardError').textContent='';
+ $('workCardBreaks').innerHTML=card.breaks.map((item,i)=>`<fieldset data-break-card="${item.id}"><legend>Break ${i+1}</legend>
+  <label>Start<input data-start type="datetime-local" step="1" value="${esc(item.start)}" required></label>
+  <label>End<input data-end type="datetime-local" step="1" value="${esc(item.end)}"></label></fieldset>`).join('');
+ $('workCardDialog').showModal();
+};
+$('workCardCancel').onclick=()=>$('workCardDialog').close();
+$('workCardForm').onsubmit=async e=>{
+ e.preventDefault();
+ const form=e.currentTarget,card=workEditingCard,signedIn=user,version=workVersion,button=e.submitter;
+ if(!card)return;
+ button.disabled=true;
+ $('workCardError').textContent='';
+ const breaks=[...form.querySelectorAll('[data-break-card]')].map(row=>({
+  id:Number(row.dataset.breakCard),start:row.querySelector('[data-start]').value,end:row.querySelector('[data-end]').value
+ }));
+ try{
+  await workApi('edit-time-card',{id:card.id,revision:card.revision,start:form.elements.start.value,
+   end:form.elements.end.value,reason:form.elements.reason.value,breaks});
+  if(user!==signedIn||version!==workVersion)return;
+  $('workCardDialog').close();
+  workPayrollReset();
+  workStatus('Correction saved and recorded in the audit log.');
+  await workLoad();
+ }catch(err){if(user===signedIn&&version===workVersion)$('workCardError').textContent=err.message;}
+ finally{button.disabled=false;}
+};
+function workAuditSnapshot(label,card){
+ return `<div><strong>${label}</strong><p>Clock: ${esc(workCardWhen(card.start))} → ${esc(workCardWhen(card.end))}</p>
+  ${card.breaks.map((b,i)=>`<p>Break ${i+1}: ${esc(workCardWhen(b.start))} → ${esc(workCardWhen(b.end))}</p>`).join('')}</div>`;
+}
+async function workLoadAudit(before=0){
+ const signedIn=user,version=workVersion,button=$('workAuditOlder');
+ button.disabled=true;
+ try{
+  const result=await workApi('time-card-audit'+(before?'?before='+before:''));
+  if(user!==signedIn||version!==workVersion||workPanel.hidden)return;
+  const content=result.entries.map(entry=>`<article class="workAuditEntry">
+   <h4>${esc(entry.employee)} · Time card #${entry.period}</h4>
+   <p>${esc(entry.actor)} · ${esc(entry.at.replace('T',' '))}</p>
+   <p>${esc(entry.reason)}</p>
+   <div class="workAuditComparison">${workAuditSnapshot('Before',entry.before)}${workAuditSnapshot('After',entry.after)}</div>
+   </article>`).join('');
+  if(before)$('workTimeAudit').insertAdjacentHTML('beforeend',content);
+  else $('workTimeAudit').innerHTML=content||'<p>No corrections have been recorded.</p>';
+  workAuditNext=result.entries.at(-1)?.id??0;
+  button.hidden=!result.more;
+ }catch(err){if(user===signedIn&&version===workVersion)workStatus(err.message);}
+ finally{button.disabled=false;}
+}
+$('workAuditOlder').onclick=()=>{if(workAuditNext)workLoadAudit(workAuditNext);};

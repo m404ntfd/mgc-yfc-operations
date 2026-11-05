@@ -76,6 +76,16 @@ class WorkforceTests(unittest.TestCase):
         monday=(datetime.date.fromisoformat(next_week)+datetime.timedelta(days=1)).isoformat()
         self.assertEqual(absences,[dict(account=staff_id,day=monday,kind='availability',start='08:00',end='12:00')])
 
+        self.assertEqual(call('workforce/payroll?start=2025-01-05',client=staff)[0],403)
+        bookkeeper=call('roles',dict(name='Bookkeeper',grants={'export_payroll':True}))[1]['id']
+        self.assertEqual(call('admin/user-role',dict(name='Staff',role_id=bookkeeper))[0],200)
+        self.assertEqual(call('workforce/payroll?start=2025-01-05',client=staff)[0],200)
+        self.assertEqual(call('workforce/time-cards',client=staff)[0],403)
+        self.assertEqual(call('workforce/time-card-audit',client=staff)[0],403)
+        self.assertEqual(call('admin/user-role',dict(name='Staff',role_id=None))[0],200)
+        self.assertEqual(call('workforce/payroll?start=2025-01-05',client=manager)[0],403)
+        self.assertEqual(call('workforce/payroll?start=2025-01-05')[1]['employees'],[])
+        self.assertEqual(call('workforce/payroll?start='+today)[0],400)
         self.assertFalse(call('workforce/overview',client=staff)[1]['require_location'])
         site=dict(name='Main Office',latitude=30.69,longitude=-88.04,radius=150)
         self.assertEqual(call('workforce/site',site,manager)[0],403)
@@ -106,11 +116,64 @@ class WorkforceTests(unittest.TestCase):
         self.assertEqual(call('workforce/punch',dict(action='out',position=far),staff)[0],403)
         self.assertEqual(call('workforce/punch',dict(action='out',position=near),staff)[0],200)
         self.assertEqual(call('workforce/overview',client=staff)[1]['clock']['state'],'out')
+        self.assertEqual(call('workforce/time-cards',client=manager)[0],403)
+        self.assertEqual(call('roles',dict(id=role,name='Scheduler',grants={'manage_staff_schedule':True,'edit_time_cards':True}))[0],200)
+        card=next(card for card in call('workforce/time-cards',client=manager)[1]['cards'] if card['name']=='Staff')
+        earlier=(datetime.datetime.fromisoformat(card['start'])-datetime.timedelta(minutes=1)).isoformat()
+        correction=dict(id=card['id'],revision=card['revision'],start=earlier,end=card['end'],
+                        breaks=card['breaks'],reason='Correct missed start')
+        self.assertEqual(call('workforce/edit-time-card',correction,staff)[0],403)
+        self.assertEqual(call('workforce/edit-time-card',correction,manager)[0],200)
+        self.assertEqual(call('workforce/edit-time-card',correction,manager)[0],409)
+        self.assertEqual(call('workforce/time-card-audit',client=manager)[0],403)
+        entries=call('workforce/time-card-audit')[1]['entries']
+        self.assertEqual(len(entries),1)
+        self.assertEqual((entries[0]['actor'],entries[0]['before']['start'],entries[0]['after']['start']),
+                         ('Manager',card['start'],earlier))
+        self.assertEqual(call('workforce/time-card-audit',dict(id=entries[0]['id']))[0],404)
+        with closing(sqlite3.connect(fixture.tmp.name+'/schedule.db')) as db:
+            with self.assertRaises(sqlite3.IntegrityError):
+                db.execute("UPDATE work_time_card_audit SET reason='edited'")
+            with self.assertRaises(sqlite3.IntegrityError):
+                db.execute('DELETE FROM work_time_card_audit')
+            with self.assertRaises(sqlite3.IntegrityError):
+                db.execute('INSERT OR REPLACE INTO work_time_card_audit SELECT * FROM work_time_card_audit')
         self.assertEqual(call('admin/rename-user',dict(name='Staff',new_name='Staff Updated'))[0],200)
         self.assertEqual(call('workforce/overview',client=staff)[1]['shifts'][0]['name'],'Staff Updated')
         with closing(sqlite3.connect(fixture.tmp.name+'/schedule.db')) as db:
             self.assertEqual(db.execute('SELECT account,site_in,site_out FROM work_periods WHERE account=?',(staff_id,)).fetchone(),
                              (staff_id,'Main Office','Main Office'))
+
+    def test_payroll_preview_flags_open_and_removed_accounts(self):
+        import datetime
+        c=sqlite3.connect(':memory:')
+        self.addCleanup(c.close)
+        c.row_factory=sqlite3.Row
+        server.init_workforce(c)
+        c.executescript("""CREATE TABLE receipt_profiles(name TEXT,profile_id TEXT);
+            CREATE TABLE users(name TEXT);
+            INSERT INTO users VALUES('Staff'),('Incomplete');
+            INSERT INTO receipt_profiles VALUES('Staff','staff'),('Incomplete','open');""")
+        start=datetime.date(2025,1,5)
+        first,last=server.work_bounds(start,7)
+        c.execute("INSERT INTO work_periods VALUES(1,'staff',?,?,NULL,NULL)",(first-3600,first+3600))
+        c.execute("INSERT INTO work_breaks VALUES(1,1,?,?)",(first+600,first+1200))
+        c.execute("INSERT INTO work_periods VALUES(2,'open',?,NULL,NULL,NULL)",(last-600,))
+        c.execute("INSERT INTO work_periods VALUES(3,'removed',?,?,NULL,NULL)",(first,first+600))
+        c.execute("INSERT INTO work_shifts(account,start,end,location,notes) VALUES('staff',?,?,?,?)",
+                  (first+7200,first+10800,'Office',''))
+        c.execute("INSERT INTO work_periods VALUES(4,'staff',?,?,NULL,NULL)",(first+14400,first+16200))
+        c.execute("INSERT INTO work_breaks VALUES(2,2,?,NULL)",(last-300,))
+        preview=server.work_payroll_preview(c,start.isoformat())
+        records={employee['name']:employee for employee in preview['employees']}
+        self.assertEqual((records['Staff']['gross'],records['Staff']['net']),(5400,4800))
+        self.assertTrue(records['Incomplete']['open_punch'])
+        self.assertEqual({i['kind'] for i in records['Incomplete']['issues']},{'missing-clock-out','missing-break-end'})
+        self.assertEqual({i['kind'] for i in records['Staff']['issues']},{'missing-clock-in','no-break-recorded'})
+        filtered=server.work_payroll_preview(c,start.isoformat(),'2')
+        staff=next(e for e in filtered['employees'] if e['account']=='staff')
+        self.assertEqual([i['kind'] for i in staff['issues']],['missing-clock-in'])
+        self.assertEqual(preview['unlinked'],1)
 
     def test_elapsed_and_net_time_are_clipped_to_the_selected_period(self):
         c=sqlite3.connect(':memory:')

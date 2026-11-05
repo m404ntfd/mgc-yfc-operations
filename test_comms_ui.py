@@ -11,7 +11,7 @@ def run():
         Fixture.call('setup', {'name':'Admin', 'password':'testpassword'})
         Fixture.call('user', {'name':'Alex', 'password':'testpassword'})
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch()
+            browser = playwright.chromium.launch(args=['--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream'])
             base = f'http://127.0.0.1:{Fixture.port}'
             errors = []
 
@@ -31,6 +31,16 @@ def run():
 
             alex = session('Alex', 390)
             admin = session('Admin', 1280)
+            expect(alex.locator('#profileWelcome')).to_be_visible()
+            alex.locator('#profileWelcomeCamera').click()
+            expect(alex.locator('#profileCapture')).to_be_enabled()
+            alex.locator('#profileCapture').click()
+            expect(alex.locator('#profileCapturePreview')).to_be_visible()
+            expect(alex.locator('#profileCamera')).to_be_hidden()
+            assert alex.request.get(base+'/api/profile/mine').json()['status']=='none'
+            alex.locator('#closeProfilePhoto').click()
+            alex.locator('#profileWelcomeSkip').click()
+            expect(alex.locator('#profileWelcome')).to_be_hidden()
             expect(alex.locator('#headerProfile')).to_be_visible()
             expect(alex.locator('#headerProfile')).to_have_text('AL')
             alex.get_by_role('button',name='Open my profile').click()
@@ -40,6 +50,7 @@ def run():
             alex.locator('#profilePhotoInput').set_input_files({'name':'photo.png','mimeType':'image/png','buffer':bytes(png)})
             alex.get_by_role('button',name='Submit for approval').click()
             expect(alex.locator('#profilePhotoStatus')).to_contain_text('waiting for approval')
+            assert alex.request.get(base+'/api/comms/status').json()['profile_photo_pending']
             pending=alex.locator('#profilePhotos img').get_attribute('src')
             photo_id=pending.split('/')[-2]
             assert alex.request.get(base+pending).ok

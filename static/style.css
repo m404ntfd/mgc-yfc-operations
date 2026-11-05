@@ -327,3 +327,22 @@ body{background:var(--page-background,#faf6f5);min-height:100vh;color:var(--page
 
 .workAssignmentCheck {display:flex;align-items:center;gap:8px;margin:8px 0}
 .workAssignmentCheck input[type=checkbox] {width:18px;min-height:18px;flex-shrink:0}
+
+#profileWelcome[hidden],#profileCamera[hidden],#profileCapture[hidden],#profileCapturePreview[hidden] {display:none!important}
+#profileCamera,#profileCapturePreview {display:block;max-width:100%;width:256px;max-height:256px;object-fit:cover;border-radius:12px;margin:10px 0}
+
+.workPayrollTable {width:100%;border-collapse:collapse;min-width:560px}
+.workPayrollTable th,.workPayrollTable td {text-align:left;padding:8px;border-bottom:1px solid var(--work-border)}
+.workPayrollTable small {color:inherit}
+#workPayrollDownload {margin-top:12px}
+
+#workCardDialog {width:min(660px,calc(100vw - 24px))}
+#workCardDialog .workForm {margin:0}
+#workCardBreaks {display:grid;gap:8px}
+.workAuditEntry {border-bottom:1px solid var(--work-border);padding:10px 0}
+.workAuditEntry h4,.workAuditEntry p {margin:4px 0;overflow-wrap:anywhere}
+.workAuditComparison {display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px}
+.workAuditComparison > div {background:var(--work-highlight);border-radius:8px;padding:8px}
+
+.payrollIssue {margin:4px 0;font-weight:650}
+.workPayrollTable td:has(.payrollIssue) {background:var(--work-highlight)}

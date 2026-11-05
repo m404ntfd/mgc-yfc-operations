@@ -413,12 +413,12 @@ def comm_get(handler, c, u, path, query):
         scope,args=request_review_scope(u)
         pending=c.execute(f'SELECT COUNT(*) FROM user_profile_photos WHERE pending_revision IS NOT NULL AND account IN ({scope})',
                           args).fetchone()[0] if review else 0
-        photo=c.execute('SELECT approved_revision FROM user_profile_photos WHERE account=? AND approved IS NOT NULL',
+        photo=c.execute('SELECT approved_revision,approved IS NOT NULL,pending_revision IS NOT NULL FROM user_profile_photos WHERE account=?',
                         (account,)).fetchone()
         schedule_review=review
         schedule_pending=c.execute(f"""SELECT COUNT(*) FROM work_requests q JOIN receipt_profiles p ON p.profile_id=q.account
             JOIN users u ON u.name=p.name WHERE q.status='pending' AND q.account IN ({scope})""",args).fetchone()[0] if schedule_review else 0
-        return handler.send({'schedule_review':schedule_review,'pending_schedule':schedule_pending,'profile_account':account,'profile_photo_revision':(photo[0] or 'existing') if photo else None,'unread': [dict(r) for r in rows], 'alerts': comm_preferences(c, account)['alerts'],
+        return handler.send({'schedule_review':schedule_review,'pending_schedule':schedule_pending,'profile_account':account,'profile_photo_revision':(photo[0] or 'existing') if photo and photo[1] else None,'profile_photo_pending':bool(photo and photo[2]),'unread': [dict(r) for r in rows], 'alerts': comm_preferences(c, account)['alerts'],
                              'photo_review':review,'pending_photos':pending})
     if path == 'inbox':
         threads = [dict(r) for r in c.execute("""SELECT t.id,t.kind,t.title,a.seen,
@@ -609,6 +609,17 @@ def init_workforce(c):
         CREATE TABLE IF NOT EXISTS work_pin_security(
             id INTEGER PRIMARY KEY CHECK(id=1), salt TEXT NOT NULL, window INTEGER NOT NULL, failures INTEGER NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS work_time_card_audit(
+            id INTEGER PRIMARY KEY AUTOINCREMENT, period INTEGER NOT NULL, employee TEXT NOT NULL,
+            actor TEXT NOT NULL, at TEXT NOT NULL, reason TEXT NOT NULL, before TEXT NOT NULL, after TEXT NOT NULL
+        );
+        CREATE TRIGGER IF NOT EXISTS work_audit_no_update BEFORE UPDATE ON work_time_card_audit
+            BEGIN SELECT RAISE(ABORT,'Time card audit entries cannot be changed'); END;
+        CREATE TRIGGER IF NOT EXISTS work_audit_no_replace BEFORE INSERT ON work_time_card_audit
+            WHEN EXISTS(SELECT 1 FROM work_time_card_audit WHERE id=NEW.id)
+            BEGIN SELECT RAISE(ABORT,'Time card audit entries cannot be replaced'); END;
+        CREATE TRIGGER IF NOT EXISTS work_audit_no_delete BEFORE DELETE ON work_time_card_audit
+            BEGIN SELECT RAISE(ABORT,'Time card audit entries cannot be deleted'); END;
         CREATE TABLE IF NOT EXISTS work_assignments(account TEXT PRIMARY KEY,body TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS work_shifts(
             id INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT NOT NULL, start INTEGER NOT NULL,
@@ -933,12 +944,183 @@ def work_set_request_decision(c,row,decision,reviewer):
               (decision,reviewer,dt.datetime.now().isoformat(timespec='seconds'),row['id']))
 
 
+def work_payroll_preview(c,start_value,break_after='0'):
+    try:
+        start=dt.date.fromisoformat(start_value)
+        end=start+dt.timedelta(days=6)
+        if not 2000<=start.year<=2100 or end>=dt.date.today():
+            raise ValueError()
+    except (TypeError,ValueError,OverflowError):
+        raise Problem('Choose the first day of a completed seven-day payroll workweek.')
+    try:
+        break_threshold=float(break_after)
+        if not 0<=break_threshold<=48: raise ValueError()
+    except (TypeError,ValueError):
+        raise Problem('Choose a break review threshold from 0 to 48 hours.')
+    first,last=work_bounds(start,7)
+    periods=c.execute("""SELECT w.*,u.name,
+        EXISTS(SELECT 1 FROM work_breaks b WHERE b.period=w.id) AS has_break,
+        EXISTS(SELECT 1 FROM work_breaks b WHERE b.period=w.id AND b.end IS NULL) AS open_break
+        FROM work_periods w LEFT JOIN receipt_profiles p ON p.profile_id=w.account
+        LEFT JOIN users u ON u.name=p.name WHERE w.start<? AND (w.end IS NULL OR w.end>?)
+        ORDER BY w.start,w.id""",(last,first)).fetchall()
+    shifts=c.execute("""SELECT s.account,s.start,s.end,u.name FROM work_shifts s
+        JOIN receipt_profiles p ON p.profile_id=s.account JOIN users u ON u.name=p.name
+        WHERE s.start<? AND s.end>? ORDER BY s.start,s.id""",(last,first)).fetchall()
+    entries,by_account,unlinked={},{},set()
+    def employee(row):
+        return entries.setdefault(row['account'],dict(account=row['account'],name=row['name'],
+                                  gross=0,net=0,open_punch=False,issues=[]))
+    for period in periods:
+        if not period['name']:
+            unlinked.add(period['account'])
+            continue
+        item=employee(period)
+        by_account.setdefault(period['account'],[]).append(period)
+        at=work_local(period['start'])
+        if period['end'] is None:
+            item['open_punch']=True
+            item['issues'].append(dict(kind='missing-clock-out',at=at))
+        if period['open_break']:
+            item['issues'].append(dict(kind='missing-break-end',at=at))
+        if (period['end'] is not None and not period['has_break'] and period['end']>period['start']
+                and period['end']-period['start']>=break_threshold*3600):
+            item['issues'].append(dict(kind='no-break-recorded',at=at))
+    for shift in shifts:
+        item=employee(shift)
+        if not any(p['start']<min(shift['end'],last) and
+                   (p['end'] if p['end'] is not None else last)>max(first,shift['start'])
+                   for p in by_account.get(shift['account'],[])):
+            item['issues'].append(dict(kind='missing-clock-in',at=work_local(shift['start'])))
+    for item in entries.values():
+        item['has_punches']=item['account'] in by_account
+        item['gross'],item['net']=work_hours(c,item['account'],(first,last),last)
+        item['issues'].sort(key=lambda issue:(issue['at'],issue['kind']))
+    employees=sorted(entries.values(),key=lambda item:(item['name'].casefold(),item['account']))
+    return dict(start=start.isoformat(),end=end.isoformat(),employees=employees,unlinked=len(unlinked))
+
+
+def work_card_time(timestamp):
+    return dt.datetime.fromtimestamp(timestamp).strftime('%Y-%m-%dT%H:%M:%S') if timestamp is not None else ''
+
+
+def work_card_timestamp(value,optional=False):
+    if value=='' and optional:
+        return None
+    if not isinstance(value,str): raise Problem('Enter a valid date and time.')
+    try:
+        local=dt.datetime.fromisoformat(value)
+        if local.tzinfo or local.microsecond or not 2000<=local.year<=2100: raise ValueError()
+        stamp=int(local.timestamp())
+        if dt.datetime.fromtimestamp(stamp)!=local or stamp>int(time.time()): raise ValueError()
+        return stamp
+    except (ValueError,OverflowError,OSError):
+        raise Problem('Choose a valid date and time at or before the current server time.')
+
+
+def work_card_snapshot(c,period):
+    return dict(start=period['start'],end=period['end'],
+                breaks=[dict(row) for row in c.execute('SELECT id,start,end FROM work_breaks WHERE period=? ORDER BY id',
+                                                       (period['id'],))])
+
+
+def work_card_revision(card):
+    return hashlib.sha256(json.dumps(card,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+
+
+def work_card_display(card):
+    return dict(start=work_card_time(card['start']),end=work_card_time(card['end']),
+                breaks=[dict(id=b['id'],start=work_card_time(b['start']),end=work_card_time(b['end'])) for b in card['breaks']])
+
+
+def work_time_cards(c,week):
+    first,last=work_bounds(week,7)
+    rows=c.execute("""SELECT w.*,u.name FROM work_periods w LEFT JOIN receipt_profiles p ON p.profile_id=w.account
+        LEFT JOIN users u ON u.name=p.name WHERE w.start<? AND (w.end IS NULL OR w.end>?)
+        ORDER BY u.name COLLATE NOCASE,w.start,w.id""",(last,first)).fetchall()
+    cards=[]
+    for row in rows:
+        card=work_card_snapshot(c,row)
+        cards.append(dict(id=row['id'],name=row['name'] or 'Former employee',
+                          revision=work_card_revision(card),**work_card_display(card)))
+    return cards
+
+
+def work_edit_time_card(c,u,d):
+    if not has_permission(u,'edit_time_cards'): raise Problem('Edit time cards permission required.',403)
+    ident,reason=d.get('id'),d.get('reason')
+    if type(ident) is not int or not 0<ident<2**63:
+        raise Problem('Choose a time card.')
+    if not isinstance(reason,str) or not 1<=len(reason.strip())<=500:
+        raise Problem('Enter a reason of up to 500 characters.')
+    period=c.execute("""SELECT w.*,u.name FROM work_periods w LEFT JOIN receipt_profiles p ON p.profile_id=w.account
+        LEFT JOIN users u ON u.name=p.name WHERE w.id=?""",(ident,)).fetchone()
+    if not period: raise Problem('Time card not found.',404)
+    before=work_card_snapshot(c,period)
+    if d.get('revision')!=work_card_revision(before):
+        raise Problem('The time card changed. Reload it before saving.',409)
+    raw_breaks=d.get('breaks')
+    if not isinstance(raw_breaks,list) or len(raw_breaks)!=len(before['breaks']):
+        raise Problem('Edit the existing break entries.')
+    # Keep unchanged server timestamps, including ambiguous times during a clock change.
+    displayed=work_card_display(before)
+    def parse_change(value,key,original,display):
+        shown=display[key]
+        if value==shown or (shown.endswith(':00') and value==shown[:-3]):
+            return original[key]
+        return work_card_timestamp(value,key=='end')
+    start=parse_change(d.get('start'),'start',before,displayed)
+    end=parse_change(d.get('end'),'end',before,displayed)
+    if end is not None and end<start: raise Problem('Clock-out must be at or after clock-in.')
+    if c.execute("""SELECT 1 FROM work_periods WHERE account=? AND id!=?
+                    AND (end IS NULL OR end>?) AND (? IS NULL OR start<?)""",
+                 (period['account'],ident,start,end,end)).fetchone():
+        raise Problem('This correction overlaps another time card.',409)
+    corrected=[]
+    for raw,old,shown in zip(raw_breaks,before['breaks'],displayed['breaks']):
+        if not isinstance(raw,dict) or type(raw.get('id')) is not int or raw['id']!=old['id']:
+            raise Problem('Edit the existing break entries.')
+        bs=parse_change(raw.get('start'),'start',old,shown)
+        be=parse_change(raw.get('end'),'end',old,shown)
+        if bs<start or (be is not None and be<bs) or (end is not None and (be is None or be>end)):
+            raise Problem('Each break must start and end within the time card.')
+        corrected.append(dict(id=old['id'],start=bs,end=be))
+    ordered=sorted(corrected,key=lambda b:b['start'])
+    for left,right in zip(ordered,ordered[1:]):
+        if left['end'] is None or left['end']>right['start']:
+            raise Problem('Break entries cannot overlap.')
+    after=dict(start=start,end=end,breaks=corrected)
+    if before==after:
+        raise Problem('Change at least one punch before saving.')
+    c.execute('UPDATE work_periods SET start=?,end=? WHERE id=?',(start,end,ident))
+    # Close an existing open break before opening a different one to satisfy the unique index.
+    for item in sorted(corrected,key=lambda b:b['end'] is None):
+        c.execute('UPDATE work_breaks SET start=?,end=? WHERE id=? AND period=?',
+                  (item['start'],item['end'],item['id'],ident))
+    c.execute("""INSERT INTO work_time_card_audit(period,employee,actor,at,reason,before,after)
+                 VALUES(?,?,?,?,?,?,?)""",(ident,period['name'] or 'Former employee',u['name'],
+                 dt.datetime.now().astimezone().isoformat(timespec='seconds'),reason.strip(),
+                 json.dumps(work_card_display(before)),json.dumps(work_card_display(after))))
+
+
 def work_get(handler,c,u,path,query,clock_only=False):
     account=u['receipt_owner']
     if not account: raise Problem('Staff account required.',403)
     now=int(time.time())
     today=dt.date.fromtimestamp(now)
     week=work_week(query.get('week',[''])[0],today)
+    if path=='time-cards':
+        if not has_permission(u,'edit_time_cards'): raise Problem('Edit time cards permission required.',403)
+        return handler.send({'cards':work_time_cards(c,week)})
+    if path=='time-card-audit':
+        if not u['admin']: raise Problem('Administrator access required.',403)
+        before=comm_number(query.get('before',[''])[0],2**63-1)
+        rows=c.execute('SELECT * FROM work_time_card_audit WHERE id<? ORDER BY id DESC LIMIT 51',(before,)).fetchall()
+        return handler.send({'entries':[{**dict(row),'before':json.loads(row['before']),'after':json.loads(row['after'])}
+                                        for row in rows[:50]],'more':len(rows)>50})
+    if path=='payroll':
+        if not has_permission(u,'export_payroll'): raise Problem('Payroll export permission required.',403)
+        return handler.send(work_payroll_preview(c,query.get('start',[''])[0],query.get('break_after',['0'])[0]))
     if path=='overview':
         gross,worked=work_hours(c,account,work_bounds(today),now)
         week_gross,week_worked=work_hours(c,account,work_bounds(week,7),now)
@@ -950,7 +1132,7 @@ def work_get(handler,c,u,path,query,clock_only=False):
             clock=dict(state=state,since=work_local(period['start']) if period else None,
                        gross=gross,worked=worked,week_gross=week_gross,week_worked=week_worked),
             require_location=assignment['require_location'],sites_ready=bool(work_assigned_sites(c,assignment)),
-            manage_schedule=has_permission(u,'manage_staff_schedule'),manage_review=can_review_requests(u),manage_sites=has_permission(u,'manage_work_sites'),
+            manage_schedule=has_permission(u,'manage_staff_schedule'),edit_time_cards=has_permission(u,'edit_time_cards'),export_payroll=has_permission(u,'export_payroll'),manage_review=can_review_requests(u),manage_sites=has_permission(u,'manage_work_sites'),
             shifts=[] if clock_only else work_shifts(c,week,account)))
     if path=='team':
         if not has_permission(u,'manage_staff_schedule'): raise Problem('Schedule management permission required.',403)
@@ -1010,6 +1192,10 @@ def work_check_location(c,account,position):
 def work_post(handler,c,u,path,d,clock_only=False):
     account=u['receipt_owner']
     if not account: raise Problem('Staff account required.',403)
+    if path=='edit-time-card':
+        work_edit_time_card(c,u,d)
+        c.commit()
+        return handler.send({'ok':True})
     if path in ('request','withdraw-request','review-request'):
         if path=='request': work_submit_request(c,u,d)
         elif path=='review-request': work_review_request(c,u,d)
@@ -1181,7 +1367,7 @@ PERMISSIONS={
  'text_contacts':'Show On Our Way text button', 'navigate':'Show navigation button',
  'manage_roles':'Create and edit permission roles',
  'manage_comms_groups':'Create and manage groups',
- 'manage_staff_schedule':'Create and edit staff shifts', 'manage_work_sites':'Manage time clock work sites and geofencing',
+ 'manage_staff_schedule':'Create and edit staff shifts', 'edit_time_cards':'Edit time cards', 'export_payroll':'View and export payroll', 'manage_work_sites':'Manage time clock work sites and geofencing',
  'manage_vehicles':'Add vehicles', 'manage_users':'Add/remove employees and edit permissions',
  'rename_users':'Edit user names', 'unlock_users':'Unlock employee accounts after failed logins',
  'reset_passwords':'Reset employee passwords/passcodes', 'change_own_password':'Change own password/passcode',
@@ -1206,7 +1392,7 @@ DEFAULT_PAGE_COLORS={name:{'header':color,'light':'#faf6f5','dark':'#101821'} fo
 def permission_groups():
     dispatch={'view_reports','view_schedule','create_appointments','edit_appointments','delete_appointments','update_status','cancel_appointments','submit_requests','review_requests','see_requests','call_contacts','text_contacts','navigate','manage_vehicles','show_vehicle_filter','show_search'}
     paging={'send_pages','receive_pages'};receipts={'submit_receipts','view_all_receipts'}
-    workforce={'manage_staff_schedule','manage_work_sites'}
+    workforce={'manage_staff_schedule','manage_work_sites','edit_time_cards','export_payroll'}
     return {'Application Settings':[k for k in PERMISSIONS if k not in dispatch|paging|receipts|workforce],'Thrift Mart Dispatch':[k for k in PERMISSIONS if k in dispatch],'Store Associate Paging':[k for k in PERMISSIONS if k in paging],'Receipts & Accounting':[k for k in PERMISSIONS if k in receipts],'Print with a Purpose':[],'Scheduling & Time Clock':[k for k in PERMISSIONS if k in workforce]}
 
 def has_permission(u,key): return bool(u['admin'] or u.get('grants',{}).get(key,False))
