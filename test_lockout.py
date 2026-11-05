@@ -1,3 +1,4 @@
+from contextlib import closing
 """Account lockout and delegated-unlock integration tests."""
 import http.cookiejar, urllib.request, sqlite3, subprocess, sys, os, time
 from pathlib import Path
@@ -20,7 +21,7 @@ class LockoutTests(ServerFixture):
   self.assertEqual(self.call('login',{'name':'Brad','password':'1234'},stranger)[0],423)
   locked=self.call('admin/lockouts')[1]['users'];self.assertEqual(locked[0]['name'],'Brad');self.assertEqual(locked[0]['failures'],3)
   # Stored in SQLite, so failures and locks survive process restarts and backups.
-  with sqlite3.connect(self.tmp.name+'/schedule.db') as db:self.assertIsNotNone(db.execute('SELECT locked_at FROM account_lockouts WHERE name="Brad"').fetchone()[0])
+  with closing(sqlite3.connect(self.tmp.name+'/schedule.db')) as db:self.assertIsNotNone(db.execute('SELECT locked_at FROM account_lockouts WHERE name="Brad"').fetchone()[0])
   self.p.terminate();self.p.wait()
   self.__class__.p=subprocess.Popen([sys.executable,str(Path(__file__).with_name('server.py'))],env={**os.environ,'DISPATCH_DATA':self.tmp.name,'DISPATCH_PORT':str(self.port)},stdout=subprocess.DEVNULL)
   for _ in range(100):

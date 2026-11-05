@@ -2,13 +2,14 @@
 Run with the bundled Python on the Windows server, using the server's data folder.
 No network endpoint is exposed; access to the database file is required.
 """
+from contextlib import closing
 import argparse,datetime,os,sqlite3
 from pathlib import Path
 
 def unlock(data,name):
  db=Path(data)/'schedule.db'
  if not db.is_file():raise ValueError('No schedule.db found in the selected data folder.')
- with sqlite3.connect(db,timeout=15) as c:
+ with closing(sqlite3.connect(db,timeout=15)) as c, c:
   user=c.execute('SELECT name FROM users WHERE name=?',(name,)).fetchone()
   if not user:raise ValueError('User not found.')
   c.execute('DELETE FROM account_lockouts WHERE name=?',(user[0],))

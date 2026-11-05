@@ -1,3 +1,4 @@
+from contextlib import closing
 """Data preservation tests for verified backup, journal, restore and retention."""
 import datetime as dt,json,sqlite3,tempfile,unittest,zipfile
 from pathlib import Path
@@ -29,7 +30,7 @@ class JournalTests(unittest.TestCase):
   self.assertEqual(server.archive_dispatch(dt.date(2026,11,5)),0)
   backup=server.complete_backup();status=json.loads((self.data/'backup-status.json').read_text());self.assertTrue(status['verified']);self.assertEqual(status['counts']['total'],7);self.assertEqual(status['counts']['Delivery'],1);self.assertEqual(status['counts']['photos'],7)
   restored=self.root/'restored';restore_backup(backup,restored)
-  with sqlite3.connect(restored/'schedule.db') as c:
+  with closing(sqlite3.connect(restored/'schedule.db')) as c:
    self.assertEqual(c.execute('SELECT COUNT(*) FROM jobs').fetchone()[0],7);self.assertEqual(c.execute('SELECT COUNT(*) FROM photos').fetchone()[0],7);self.assertEqual(c.execute('SELECT COUNT(*) FROM audit').fetchone()[0],7);self.assertEqual(c.execute('SELECT COUNT(*) FROM journal_archives').fetchone()[0],0)
  def test_host_preflight_detects_missing_and_changed_data(self):
   self.job('pickup');self.job('delivery','Delivery');backup=server.complete_backup()
