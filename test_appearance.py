@@ -1,5 +1,7 @@
 """Check saved appearance, live system changes and ordinary employee access."""
 from test_server import Tests as F
+import tempfile
+from pathlib import Path
 from playwright.sync_api import sync_playwright, expect
 
 def run():
@@ -21,7 +23,7 @@ def run():
      page.locator('[name=section][value=dispatch]').check();page.locator('#sectionChooserForm button').click()
     page.locator('#settingsTab').click();page.get_by_role('button',name='Application Settings',exact=True).click();page.get_by_role('button',name='Appearance',exact=True).click()
     expect(page.locator('#appearanceMode')).to_be_visible()
-    expect(page.get_by_role('button',name='Employees',exact=True)).to_be_hidden()
+    expect(page.locator('#settingsSubcategories').get_by_role('button',name='Users',exact=True)).to_be_hidden()
     page.locator('#appearanceMode').select_option('light')
     expect(page.locator('html')).to_have_attribute('data-theme','light')
     page.reload();expect(page.locator('html')).to_have_attribute('data-theme','light')
@@ -30,7 +32,7 @@ def run():
     page.locator('#appearanceMode').select_option('system');expect(page.locator('html')).to_have_attribute('data-theme','light')
     page.emulate_media(color_scheme='dark');expect(page.locator('html')).to_have_attribute('data-theme','dark')
     assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
-    page.screenshot(path=f'/tmp/appearance-{width}.png')
+    page.screenshot(path=str(Path(tempfile.gettempdir()) / f'appearance-{width}.png'))
     assert not errors,errors
     context.close()
    browser.close()

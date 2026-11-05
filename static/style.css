@@ -145,3 +145,88 @@ body{background:var(--page-background,#faf6f5);min-height:100vh;color:var(--page
 #legacyOffline{display:none!important}#offline{position:fixed;inset:0;width:100vw;max-width:none;height:100dvh;max-height:none;margin:0;border:0;border-radius:0;background:rgba(120,0,0,.82);color:white;padding:24px;z-index:99999}#offline[open]{display:grid;place-items:center}#offline::backdrop{background:rgba(90,0,0,.38)}#offline .offlineMessage{text-align:center;max-width:850px}#offline img{display:block;width:min(55vw,260px);height:auto;margin:0 auto 22px}#offline h1{font-size:clamp(24px,5vw,40px);color:white;letter-spacing:0;line-height:1.25}#offline p{font-size:clamp(16px,3vw,23px);color:white;text-align:center}#offline button{margin-top:18px}#receiptResetDialog{max-width:calc(100vw - 32px);width:560px}#receiptResetDialog>button{display:block;width:100%;margin:16px 0 0;white-space:normal;line-height:1.35}#rolesArea{margin-top:24px;border-top:1px solid #8495a7;padding-top:24px}#rolePermissions fieldset{border:1px solid #8495a7;border-radius:10px;padding:16px;margin:18px 0}#rolePermissions label{display:flex;gap:12px;align-items:center;margin:14px 0}#rolePermissions input{width:auto;min-height:24px;flex:none}.roleManaged{opacity:.6}
 
 #mobileIntro{opacity:1;transition:opacity .7s ease}#mobileIntro.introFading{opacity:0;pointer-events:none}@media(prefers-reduced-motion:reduce){#mobileIntro{transition:none}}
+
+/* Communications Hub */
+#comms {
+ --comm-border: #d9e3ed;
+ --comm-surface: #fff;
+ --comm-side: #f4f7fb;
+ --comm-selected: #e3efff;
+ --comm-text: #182c48;
+ --comm-accent: #1258ac;
+ --comm-muted: #526781;
+ color: var(--comm-text);
+}
+:root[data-theme=dark] #comms {
+ --comm-border: #3a4c64;
+ --comm-surface: #1b2737;
+ --comm-side: #223247;
+ --comm-selected: #2b466a;
+ --comm-text: #ecf4ff;
+ --comm-accent: #9ac8ff;
+ --comm-muted: #bacbe2;
+}
+#comms [hidden], .userSettingsTabs [hidden], #userSettingsPanel[hidden], #rolesArea[hidden], #commAlert[hidden] {display:none!important}
+.commLayout {
+ display:grid;grid-template-columns:minmax(220px,28%) minmax(0,1fr);min-height:clamp(32rem,70vh,54rem);
+ border:1px solid var(--comm-border);border-radius:16px;overflow:hidden;background:var(--comm-surface)
+}
+.commSidebar {display:flex;flex-direction:column;gap:14px;padding:16px;background:var(--comm-side);border-right:1px solid var(--comm-border);min-width:0}
+.commSidebarHead {display:flex;gap:6px;align-items:center}
+.commSidebarHead h2 {margin:0 auto 0 0;font-size:1.1rem;letter-spacing:-.025em}
+.commSidebarHead button {min-width:40px;padding:6px 10px}
+#comms .commLinks, #comms .commLists {display:grid;gap:4px}
+.commLinks {padding-bottom:10px;border-bottom:1px solid var(--comm-border)}
+.commLists {max-height:calc(70vh - 12rem);overflow:auto;align-content:start;padding-bottom:3px}
+.commLists h3 {font-size:.75rem;text-transform:uppercase;letter-spacing:.07em;margin:14px 0 4px;color:var(--comm-muted)}
+#comms :is(.commLinks,.commLists) button {display:flex;justify-content:space-between;align-items:center;gap:6px;width:100%;text-align:left;background:transparent;border-color:transparent;color:var(--comm-text);padding:7px 10px;min-width:0}
+#comms :is(.commLinks,.commLists) button:hover,#comms [aria-pressed=true] {background:var(--comm-selected);color:var(--comm-accent)}
+.commLists button span {min-width:0;overflow-wrap:anywhere}
+.commLists p {margin:4px 10px}
+.commBadge {border-radius:999px;padding:3px 7px;font-size:.75rem;background:var(--comm-accent);color:var(--comm-surface)}
+.commWorkspace {display:flex;flex-direction:column;min-width:0}
+.commHeading {border-bottom:1px solid var(--comm-border);padding:17px 22px}
+.commHeading h2 {margin:0;overflow-wrap:anywhere}
+#comms .muted,.commEmpty {color:var(--comm-muted)}
+#commMembers {margin:5px 0 0;overflow-wrap:anywhere}
+#commMembers:empty {display:none}
+#commContent {flex:1;max-height:54vh;min-height:12rem;overflow:auto;padding:14px 22px}
+.commEmpty {margin:24px 0}
+#commError {margin:8px 22px 0;color:var(--comm-text);border-left:3px solid #b26116;padding:4px 10px}
+#commBack {display:none;margin-bottom:10px}
+.commMessage {margin:0 0 12px;padding:12px;border:1px solid var(--comm-border);border-radius:12px;overflow-wrap:anywhere}
+.commMessage.mine {background:var(--comm-side)}
+.commMessageHead {display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.commMessageHead button,.commJump {margin-left:auto;padding:4px 10px;min-height:36px}
+.commMessageHead time {font-size:.8rem;color:var(--comm-muted)}
+.commMessage p {white-space:pre-wrap;margin:5px 0;color:var(--comm-text)}
+.commMessage a {color:var(--comm-accent);display:inline-block;margin:4px 0}
+#commOlder {margin-bottom:12px}
+#commComposer {border-top:1px solid var(--comm-border);padding:12px 22px}
+#commComposer textarea {display:block;margin:5px 0}
+.commComposerActions {display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.commComposerActions label {color:var(--comm-muted);font-size:.8rem}
+#commFile {flex:1;min-width:0;padding:6px;border:none;font-size:.83rem}
+.commDirectory {display:grid;gap:12px;align-content:start}
+#commPeople {display:grid;gap:5px}
+#comms .commPerson {display:flex;align-items:center;gap:10px;padding:8px 12px;text-align:left;margin:0;overflow-wrap:anywhere}
+.commInitial {display:grid;place-items:center;border-radius:100%;width:32px;height:32px;flex:0 0 32px;background:var(--comm-selected);color:var(--comm-accent);font-size:.75rem;font-weight:750}
+#comms input[type=checkbox] {width:18px;height:18px;min-height:0;margin:0;flex-shrink:0}
+#commPrefsDialog {width:min(520px,calc(100vw - 24px))}
+#commPrefsForm {display:grid;gap:12px}
+#commPrefsForm .commCheck {display:flex;align-items:center;gap:8px}
+#commAlert {display:block;margin:0 0 10px auto;color:#fff;background:#135aab;border-color:#135aab}
+#storeMenuButton.commHasUnread::after {content:'';display:inline-block;margin-left:.45rem;width:.55rem;height:.55rem;border-radius:50%;background:#ffce5c;vertical-align:middle}
+.userSettingsTabs {margin-top:8px}
+@media (max-width:720px) {
+ .commLayout {display:block;min-height:unset}
+ .commSidebar {border-right:none}
+ .commLists {max-height:60vh}
+ #comms[data-view=home] .commWorkspace {display:none}
+ #comms:not([data-view=home]) .commSidebar {display:none}
+ #commBack {display:inline-block}
+ #commContent {max-height:52vh;padding:12px 14px}
+ .commHeading,#commComposer {padding:12px 14px}
+ .commComposerActions {align-items:flex-start}
+ .commComposerActions label {width:100%}
+}

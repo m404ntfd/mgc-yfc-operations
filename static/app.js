@@ -34,7 +34,7 @@ $('date').value=localDate(new Date());
 $('mobileLink').href=location.origin+'/mobile';$('mobileLink').textContent=location.origin+'/mobile';
 async function api(path,data){let r;try{r=await fetch('/api/'+path,{method:data?'POST':'GET',headers:data?{'Content-Type':'application/json','X-Dispatch':'1'}:{},body:data?JSON.stringify(data):undefined,signal:AbortSignal.timeout(20000)});if(r.status>=500)throw Error('Server unavailable');setServerConnection(true);}catch(e){setServerConnection(false);throw e;}const v=await r.json();if(!r.ok){if(r.status===401&&user){user=null;updateSignedInUser();clearInterval(timer);$('app').hidden=true;$('paging').hidden=true;$('receipts').hidden=true;$('receiptHistory')?.setAttribute('hidden','');$('printPurpose')?.setAttribute('hidden','');setSectionHeader('Sign in','signin');$('auth').hidden=false;$('editor').close();$('passwordDialog').close();$('statusDialog').close();}throw Object.assign(Error(v.error||'Request failed'),{attemptsRemaining:v.attempts_remaining});}return v;}
 function toast(s){$('toast').textContent=s;$('toast').hidden=false;setTimeout(()=>$('toast').hidden=true,5000);}
-async function boot(){try{const s=await api('session');if(location.hash==='#login'){if(s.user){await api('logout',{});s.user=null;}history.replaceState(null,'',location.pathname+location.search);}setup=s.setup;user=s.user;if(user){const pref=await api('account/appearance');window.appAppearance.set(pref.mode);$('appearanceMode').value=pref.mode;}lockRepository();if(!user){if(typeof stopPaging==='function')stopPaging();$('paging').hidden=true;$('receipts').hidden=true;$('receiptHistory')?.setAttribute('hidden','');$('printPurpose')?.setAttribute('hidden','');setSectionHeader('Sign in','signin');$('sectionChooser').close();expandedAppointments.clear();$('requestsList').hidden=true;}updateSignedInUser();$('authTitle').textContent=setup?'Set up your store':'Welcome back';$('authHelp').textContent=setup?(s.local?'Create the administrator account. Then add your vehicles and employees.':'Open http://localhost:8080 on the server computer to create the first account.'):'Sign in to your operations workspace.';$('auth').hidden=!!user;$('app').hidden=!user;$('connection').textContent=user?'Connected to store':'Store server online';if(user){$('settingsTab').hidden=false;$('serverUpdateButton').hidden=!user.admin;if(!user.admin)tab('day');if(can('view_schedule'))await refresh();else applyPermissions();clearInterval(timer);timer=setInterval(()=>{if(can('view_schedule'))refresh().catch(()=>{});},10000);if(location.hash==='#settings'){tab('settings');if(can('check_updates'))settingsSection(2);history.replaceState(null,'',location.pathname+location.search);}else await chooseLanding();}}catch(e){$('connection').textContent='Server unavailable';$('offline').hidden=false;toast(e.message);}}
+async function boot(){try{const s=await api('session');if(location.hash==='#login'){if(s.user){await api('logout',{pushDevice:commPushId()});s.user=null;}history.replaceState(null,'',location.pathname+location.search);}setup=s.setup;user=s.user;if(user){const pref=await api('account/appearance');window.appAppearance.set(pref.mode);$('appearanceMode').value=pref.mode;}lockRepository();if(!user){if(typeof stopPaging==='function')stopPaging();$('paging').hidden=true;$('receipts').hidden=true;$('receiptHistory')?.setAttribute('hidden','');$('printPurpose')?.setAttribute('hidden','');setSectionHeader('Sign in','signin');$('sectionChooser').close();expandedAppointments.clear();$('requestsList').hidden=true;}updateSignedInUser();$('authTitle').textContent=setup?'Set up your store':'Welcome back';$('authHelp').textContent=setup?(s.local?'Create the administrator account. Then add your vehicles and employees.':'Open http://localhost:8080 on the server computer to create the first account.'):'Sign in to your operations workspace.';$('auth').hidden=!!user;$('app').hidden=!user;$('connection').textContent=user?'Connected to store':'Store server online';if(user){$('settingsTab').hidden=false;$('serverUpdateButton').hidden=!user.admin;if(!user.admin)tab('day');if(can('view_schedule'))await refresh();else applyPermissions();clearInterval(timer);timer=setInterval(()=>{if(can('view_schedule'))refresh().catch(()=>{});},10000);if(location.hash==='#settings'){tab('settings');if(can('check_updates'))settingsSection(2);history.replaceState(null,'',location.pathname+location.search);}else if(location.hash==='#comms'){history.replaceState(null,'',location.pathname+location.search);await commOpen();}else await chooseLanding();}}catch(e){$('connection').textContent='Server unavailable';$('offline').hidden=false;toast(e.message);}}
 async function refresh(){try{state=await api('state');user.can_create=state.permissions.can_create;user.see_requests=state.permissions.see_requests;user.grants=state.permissions.grants;renderRequests();$('connection').textContent='Connected · '+new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});$('offline').hidden=true;const value=$('filter').value;$('filter').innerHTML='<option value="">All vehicles</option>'+state.vehicles.map(v=>`<option>${esc(v)}</option>`).join('');$('filter').value=value;render();applyPermissions();checkUpdateNotice();$('vehicles').innerHTML=state.vehicles.map(v=>`<div class="listRow">${esc(v)}</div>`).join('')||'<p>No vehicles yet.</p>';$('users').innerHTML=state.users.map(v=>`<div class="listRow">${esc(v.name)}${v.admin?' · Administrator':''} <button type="button" data-password="${esc(v.name)}">Edit user / permissions</button></div>`).join('');}catch(e){if(e.message.includes('Schedule access required')){$('connection').textContent='Connected · schedule permission required';$('offline').hidden=true;toast('Ask an administrator to enable View schedule, search and filter in your employee permissions.');}else{$('connection').textContent='Disconnected';$('offline').hidden=false;}throw e;}}
 function filtered(){const q=can('show_search')?$('search').value.toLowerCase():'';return state.jobs.filter(j=>(!$('statusFilter').value||j.status===$('statusFilter').value)&&(!can('show_vehicle_filter')||!$('filter').value||j.vehicle===$('filter').value)&&(!q||Object.values(j).join(' ').toLowerCase().includes(q)));}
 function timeLabel(s){return new Date(s).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});}
@@ -88,7 +88,7 @@ $('employeeDropdown').closest('.employeeField').hidden=!user.can_create;
 if(!user.can_create){form.elements.start.value='';form.elements.end.value='';}
 layoutRequestForm();renderReviewPhotos();$('editor').showModal();}
 $('login').onsubmit=async e=>{e.preventDefault();try{const wasSetup=setup;loginAttempts.textContent='';$('authError').textContent='';await api(setup?'setup':'login',Object.fromEntries(new FormData(e.target)));e.target.reset();await boot();if(wasSetup){tab('settings');settingsSection(3);}}catch(err){$('authError').textContent=err.message;loginAttempts.textContent=Number.isInteger(err.attemptsRemaining)?'Attempts Remaining Until Account Lock: '+err.attemptsRemaining:'';}};
-$('logout').onclick=async()=>{try{await api('logout',{});clearInterval(timer);await boot();}catch(e){toast(e.message);}};
+$('logout').onclick=async()=>{try{await api('logout',{pushDevice:commPushId()});clearInterval(timer);await boot();}catch(e){toast(e.message);}};
 $('dayTab').onclick=()=>quickView(null);$('weekTab').onclick=()=>quickView(0);$('nextWeekTab').onclick=()=>quickView(7);$('settingsTab').onclick=()=>tab('settings');$('addPickup').onclick=()=>openJob(null,'Pickup');$('addDelivery').onclick=()=>openJob(null,'Delivery');$('close').onclick=()=>$('editor').close();$('date').onchange=()=>{if(!$('date').value)$('date').value=localDate(new Date());tab('day');};$('filter').onchange=render;$('statusFilter').onchange=render;$('search').oninput=render;
 for(const [id,step]of [['prev',-1],['next',1]])$(id).onclick=()=>{$('date').value=shiftDate($('date').value,step*(mode==='week'?7:1));render();};
 $('jobs').onclick=e=>{const edit=e.target.closest('[data-edit]');const expand=!edit&&(e.target.closest('[data-expand],[data-toggle-appointment]')||e.target.closest('.job.collapsed'));if(expand){const id=expand.dataset.expand||expand.dataset.toggleAppointment||expand.dataset.appointment;if(expandedAppointments.has(id))expandedAppointments.delete(id);else expandedAppointments.add(id);render();return;}const b=e.target.closest('[data-edit]');if(b&&can('edit_appointments'))openJob(b.dataset.edit);const status=e.target.closest('[data-status]');if(status)openStatus(status.dataset.status);};
@@ -194,7 +194,7 @@ for(const view of ['mobile','desktop']){const field=document.createElement('fiel
 sharingPanel.querySelector('form').insertAdjacentHTML('beforeend','<button type="submit">Save sharing options</button>');$('settings').append(sharingPanel);
 const pageColorPanel=document.createElement('div');pageColorPanel.id='pageColorSettings';pageColorPanel.className='panel';pageColorPanel.innerHTML='<h2>Page Colors</h2><p>Administrator changes apply to everyone. Set each page’s header and backgrounds for light and dark mode. Header text adjusts automatically for contrast.</p><form id="pageColorForm"><div id="pageColorFields"></div><button type="submit">Save page colors</button><button type="button" id="resetPageColors">Restore default colors</button></form><p id="pageColorStatus" role="status"></p>';$('settings').append(pageColorPanel);
 const settingsPanels=[...$('settings').children];settingsPanels[0].remove();
-const settingsNames=['Phone Access','Backups','Updates','Vehicles','Employees','Recent Changes','Login Security','Receipts','Appearance','Mobile View','Sharing','Page Colors'];
+const settingsNames=['Phone Access','Backups','Updates','Vehicles','Users','Recent Changes','Login Security','Receipts','Appearance','Mobile View','Sharing','Page Colors'];
 const settingsGroups=[{name:'Application Settings',panels:[8,9,10,11,1,2,4,6,5]},{name:'Thrift Mart Dispatch',panels:[3]},{name:'Store Associate Paging',panels:[]},{name:'Receipts & Accounting',panels:[7]},{name:'Print with a Purpose',panels:[]}];
 const settingsCategories=document.createElement('nav');settingsCategories.className='settingsTabs';settingsCategories.id='settingsCategories';settingsCategories.setAttribute('aria-label','Settings categories');
 const settingsTabs=document.createElement('nav');settingsTabs.className='settingsTabs settingsSubcategories';settingsTabs.id='settingsSubcategories';settingsTabs.setAttribute('aria-label','Settings subcategories');
@@ -202,12 +202,12 @@ const settingsEmpty=document.createElement('p');settingsEmpty.id='settingsEmpty'
 let selectedSettingsCategory=null;
 function settingsAllowed(i){return i!==0&&(i===8||i===9||!!user?.admin||([[],['backup_settings','create_backups'],['check_updates','configure_updates','install_updates'],['manage_vehicles'],['manage_users','reset_passwords','manage_roles'],['view_audit'],['unlock_users'],[],[],[]][i]||[]).some(can));}
 function settingsCategory(index){selectedSettingsCategory=index;settingsPanels.forEach(panel=>panel.hidden=true);settingsTabs.replaceChildren();settingsEmpty.hidden=true;[...settingsCategories.children].forEach((button,i)=>{button.classList.toggle('selected',i===index);button.setAttribute('aria-pressed',String(i===index));});if(index===null)return;const panels=settingsGroups[index].panels.filter(settingsAllowed);for(const i of panels){const button=document.createElement('button');button.type='button';button.dataset.settingsPanel=i;button.textContent=settingsNames[i];button.onclick=()=>settingsSection(i);settingsTabs.append(button);}if(!panels.length){settingsEmpty.textContent='No settings are currently available in this category.';settingsEmpty.hidden=false;}}
-function settingsSection(index){if(!settingsAllowed(index))return;if(index===10)loadSharingSettings();if(index===11)loadPageColors(true);const group=settingsGroups.findIndex(g=>g.panels.includes(index));if(group!==selectedSettingsCategory)settingsCategory(group);settingsPanels.forEach((panel,i)=>panel.hidden=i!==index);[...settingsTabs.children].forEach(button=>{const selected=Number(button.dataset.settingsPanel)===index;button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected));});}
+function settingsSection(index){if(!settingsAllowed(index))return;if(index===4)selectUserSettings();if(index===10)loadSharingSettings();if(index===11)loadPageColors(true);const group=settingsGroups.findIndex(g=>g.panels.includes(index));if(group!==selectedSettingsCategory)settingsCategory(group);settingsPanels.forEach((panel,i)=>panel.hidden=i!==index);[...settingsTabs.children].forEach(button=>{const selected=Number(button.dataset.settingsPanel)===index;button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected));});}
 settingsGroups.forEach((group,i)=>{const button=document.createElement('button');button.type='button';button.textContent=group.name;button.onclick=()=>settingsCategory(i);settingsCategories.append(button);});
 $('settings').prepend(settingsCategories,settingsTabs,settingsEmpty);settingsCategory(null);
 
 const globalActions=document.querySelector('.bottomActions');document.querySelector('main').append(globalActions);globalActions.hidden=true;
-function updateSignedInUser(){globalActions.hidden=!user; $('loggedOutStatus').hidden=!!user; $('signedInUser').textContent=user?'Signed in as '+user.name:'';$('signedInUser').hidden=!user; }
+function updateSignedInUser(){if(!user)commReset();else {commPoll();if(isMobileView()||commIsIos())commPreparePush();}globalActions.hidden=!user; $('loggedOutStatus').hidden=!!user; $('signedInUser').textContent=user?'Signed in as '+user.name:'';$('signedInUser').hidden=!user; }
 
 let permissionCatalog={},savedUserGrants={};
 async function loadPermissionList(name){$('savePermissions').disabled=true;$('permissionChecklist').textContent='Loading permissions…';try{const data=await api('admin/permission-catalog');permissionCatalog=data.permissions;savedUserGrants=Object.fromEntries(data.users.map(u=>[u.name,u.grants]));const roleData=await api('roles');populateEmployeeRole(name,roleData);const person=state.users.find(u=>u.name===name);const defaults={view_schedule:true,submit_requests:true,cancel_appointments:true,call_contacts:true,text_contacts:true,navigate:true,change_own_password:true,submit_receipts:true};for(const key of ['create_appointments','edit_appointments','delete_appointments','update_status','review_requests'])defaults[key]=!!person.can_create;defaults.see_requests=!!person.see_requests;const grants={...defaults,...(savedUserGrants[name]||{})};employeeIndividualGrants={...grants};$('permissionChecklist').innerHTML=Object.entries(permissionCatalog).map(([key,label])=>`<label><input type="checkbox" data-grant="${key}" ${person.admin||grants[key]?'checked':''} ${person.admin?'disabled':''}> ${esc(label)}</label>`).join('');setEmployeeRoleMode();$('savePermissions').disabled=false;}catch(e){$('permissionMessage').textContent=e.message;}}
@@ -217,7 +217,7 @@ $('savePermissions').onclick=async()=>{try{if(employeeRole.value){await api('adm
 
 function can(key){return !!(user&&(user.admin||user.grants?.[key]));}
 function applyPermissions(){
- $('notifyUpdateSection').hidden=!user.admin;$('openRoles').hidden=!can('manage_roles');
+ $('notifyUpdateSection').hidden=!user.admin;$('openRoles').hidden=!can('manage_roles');if(!can('manage_roles')&&!rolesArea.hidden)selectUserSettings();
  $('filter').hidden=!can('show_vehicle_filter');$('search').hidden=!can('show_search');
  document.querySelectorAll('#jobs .editIcon').forEach(b=>b.hidden=!can('edit_appointments'));
  document.querySelectorAll('#jobs .statusUpdate').forEach(b=>b.hidden=!(can('update_status')||can('cancel_appointments')));
@@ -338,6 +338,7 @@ async function pollPages(){if(!pagingEnabled||pagingBusy||!user)return;pagingBus
 
 function setSectionHeader(title,section){
  section=section===true?'dispatch':section===false?'signin':section;
+ if(section!=='comms'&&!commPanel.hidden){commPanel.hidden=true;commVersion++;$('commPrefsDialog').close();}
  $('currentSection').textContent=title;document.body.dataset.section=section;
  document.querySelector('meta[name="theme-color"]').content=({dispatch:'#b51f2b',paging:'#7a1520',receipts:'#067a06',print:'#073ea6'})[section]||'#215baa';applyPageColors();
 }
@@ -495,6 +496,562 @@ const openRoles=document.createElement('button');openRoles.id='openRoles';openRo
 const rolesArea=document.createElement('section');rolesArea.id='rolesArea';rolesArea.hidden=true;rolesArea.innerHTML='<h2>Permission Roles</h2><p>Assign a role to use one permission set for an employee. Existing individual permissions remain available when a role is removed. Role changes apply to all assigned employees.</p><label>Choose a role<select id="roleSelect"><option value="">Create a new role</option></select></label><form id="roleForm"><label>Role name<input id="roleName" maxlength="80" required></label><nav id="roleCategories" class="settingsTabs" aria-label="Role permission categories"></nav><div id="rolePermissions"></div><button type="submit">Save role</button></form><p id="roleStatus" role="status"></p>';settingsPanels[4].append(rolesArea);
 let rolesData=null;
 function showRole(){const selected=rolesData.roles.find(role=>String(role.id)===$('roleSelect').value);$('roleName').value=selected?selected.name:'';const permissions=$('rolePermissions'),categories=$('roleCategories');permissions.replaceChildren();categories.replaceChildren();for(const [name,keys]of Object.entries(rolesData.groups)){const section=document.createElement('fieldset');section.hidden=true;const legend=document.createElement('legend');legend.textContent=name;section.append(legend);for(const key of keys){const label=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.dataset.roleGrant=key;input.checked=!!selected?.grants[key];input.disabled=!user.admin&&!rolesData.grantable.includes(key);label.append(input,document.createTextNode(' '+rolesData.permissions[key]));section.append(label);}if(!keys.length){const text=document.createElement('p');text.textContent='No permissions are currently defined for this page.';section.append(text);}permissions.append(section);const button=document.createElement('button');button.type='button';button.textContent=name;button.onclick=()=>{for(const panel of permissions.children)panel.hidden=panel!==section;for(const item of categories.children)item.classList.toggle('selected',item===button);};categories.append(button);}$('roleStatus').textContent='';}
-async function loadRoles(selected=''){try{rolesData=await api('roles');$('roleSelect').replaceChildren(new Option('Create a new role',''));for(const role of rolesData.roles)$('roleSelect').add(new Option(role.name,String(role.id)));$('roleSelect').value=String(selected);rolesArea.hidden=false;showRole();}catch(e){$('roleStatus').textContent=e.message;}}
-openRoles.onclick=()=>loadRoles();$('roleSelect').onchange=showRole;
+let rolesLoadVersion=0;
+async function loadRoles(selected=''){
+ const version=++rolesLoadVersion, signedIn=user;
+ const select=$('roleSelect'), fields=[$('roleName'),select,$('roleForm').querySelector('button[type=submit]')];
+ for(const field of fields)field.disabled=true;
+ $('roleCategories').replaceChildren();$('rolePermissions').replaceChildren();
+ $('roleStatus').textContent='Loading roles…';
+ try{
+  const data=await api('roles');
+  if(version!==rolesLoadVersion||signedIn!==user)return;
+  rolesData=data;select.replaceChildren(new Option('Create a new role',''));
+  for(const role of data.roles)select.add(new Option(role.name,String(role.id)));
+  select.value=String(selected);showRole();
+  for(const field of fields)field.disabled=false;
+ }catch(e){if(version===rolesLoadVersion&&signedIn===user)$('roleStatus').textContent=e.message;}
+}
+const userSettingsTabs=document.createElement('nav');userSettingsTabs.className='settingsTabs userSettingsTabs';
+userSettingsTabs.setAttribute('aria-label','Manage users and roles');
+const userSettingsPanel=document.createElement('section');userSettingsPanel.id='userSettingsPanel';
+const usersSettingsButton=document.createElement('button');usersSettingsButton.type='button';usersSettingsButton.id='openUsers';usersSettingsButton.textContent='Users';
+const userSettingsHeading=document.createElement('h2');userSettingsHeading.textContent='Users';
+for(const node of [...settingsPanels[4].childNodes])if(node!==openRoles&&node!==rolesArea)userSettingsPanel.append(node);
+const heading=userSettingsPanel.querySelector('h2');if(heading)heading.textContent='Users';else userSettingsPanel.prepend(userSettingsHeading);
+userSettingsTabs.append(usersSettingsButton,openRoles);
+settingsPanels[4].prepend(userSettingsTabs,userSettingsPanel);
+function selectUserSettings(target){
+ const usersAllowed=can('manage_users')||can('reset_passwords'),rolesAllowed=can('manage_roles');
+ const roles=rolesAllowed&&(target==='roles'||!usersAllowed);
+ usersSettingsButton.hidden=!usersAllowed;openRoles.hidden=!rolesAllowed;
+ userSettingsPanel.hidden=roles||!usersAllowed;rolesArea.hidden=!roles;
+ for(const [button,selected] of [[usersSettingsButton,!roles],[openRoles,roles]]){
+  button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected));
+ }
+ if(roles)loadRoles();
+}
+usersSettingsButton.onclick=()=>selectUserSettings('users');openRoles.onclick=()=>selectUserSettings('roles');$('roleSelect').onchange=showRole;
 $('roleForm').onsubmit=async e=>{e.preventDefault();const grants=Object.fromEntries([...$('rolePermissions').querySelectorAll('[data-role-grant]')].map(input=>[input.dataset.roleGrant,input.checked]));try{const payload={name:$('roleName').value,grants};if($('roleSelect').value)payload.id=Number($('roleSelect').value);const result=await api('roles',payload);await loadRoles(result.id);$('roleStatus').textContent='Role saved. Assigned users receive its updated permissions.';}catch(err){$('roleStatus').textContent=err.message;}};
+
+// Staff communications. Membership and read state are enforced by the server.
+const commMenu = document.createElement('button');
+commMenu.type = 'button';
+commMenu.id = 'commsSection';
+commMenu.textContent = 'Communications Hub';
+$('chooseStartSection').before(commMenu);
+const commAlert = document.createElement('button');
+commAlert.type = 'button';
+commAlert.id = 'commAlert';
+commAlert.hidden = true;
+commAlert.setAttribute('aria-live', 'polite');
+const commPanel = document.createElement('section');
+commPanel.id = 'comms';
+commPanel.hidden = true;
+commPanel.innerHTML = `
+ <div class="commLayout">
+  <aside class="commSidebar" aria-label="Communications">
+   <div class="commSidebarHead"><h2>Comms Hub</h2><button type="button" id="commPreferences" aria-label="Preferences" title="Preferences">⚙</button><button class="primary" type="button" id="commNew" aria-label="New message" title="New message">✎</button></div>
+   <div class="commLinks">
+    <button type="button" data-comm-view="files">Files</button>
+    <button type="button" data-comm-view="saved">Saved messages</button>
+    <button type="button" data-comm-view="team">Team</button>
+   </div>
+   <div class="commLists"><h3>Groups</h3><button type="button" id="commGroup">＋ Create group</button><div id="commGroups"></div>
+   <h3>Direct messages</h3><div id="commDirect"></div></div>
+  </aside>
+  <div class="commWorkspace">
+   <div class="commHeading"><button type="button" id="commBack">‹ Conversations</button><h2 id="commTitle">Communications Hub</h2><p id="commMembers" class="muted"></p></div>
+   <p id="commError" role="status" hidden></p>
+   <div id="commContent"></div>
+   <form id="commComposer" hidden>
+    <label class="commComposeLabel" for="commText">Message</label>
+    <textarea id="commText" rows="2" maxlength="5000" placeholder="Write a message…"></textarea>
+    <div class="commComposerActions"><label for="commFile">Attach a file (up to 3 MB)</label><input id="commFile" type="file"><button type="submit" class="primary">Send</button></div>
+   </form>
+  </div>
+ </div>
+ <dialog id="commPrefsDialog"><form id="commPrefsForm">
+  <h2>Preferences</h2>
+  <label class="commCheck"><input type="checkbox" name="direct"> Allow people to send me direct messages</label>
+  <label>Conversation order<select name="order"><option value="recent">Recent messages first</option><option value="unread">Unread messages first</option></select></label>
+  <label>Direct messages<select name="dm"><option value="all">Show all</option><option value="unread">Unread only</option></select></label>
+  <label>Group messages<select name="group"><option value="all">Show all</option><option value="unread">Unread only</option></select></label>
+  <label class="commCheck"><input type="checkbox" name="alerts"> Show new message alerts</label>
+  <label class="commCheck" id="commMobilePushOption" hidden><input type="checkbox" id="commMobilePush" checked> Mobile notifications on this device</label>
+  <button type="button" id="commBrowserAlerts" hidden>Enable notifications on this device</button>
+  <p id="commDeviceStatus" class="muted" role="status">Check whether this device supports push notifications.</p>
+  <div class="actions"><button type="button" id="commPrefsCancel">Cancel</button><button class="primary">Done</button></div>
+ </form></dialog>`;
+const commPushWelcome = document.createElement('section');
+commPushWelcome.id = 'commPushWelcome';
+commPushWelcome.hidden = true;
+commPushWelcome.className = 'card';
+commPushWelcome.setAttribute('aria-label','Set up mobile notifications');
+commPushWelcome.innerHTML = '<h2>Mobile notifications</h2><p id="commPushWelcomeStatus" role="status"></p><div class="actions"><button type="button" id="commPushLater">Not now</button><button type="button" class="primary" id="commPushAllow">Allow notifications</button></div>';
+document.querySelector('main').prepend(commAlert, commPushWelcome, commPanel);
+
+const commApi = (path, data) => api('comms/' + path, data);
+const commEmpty = () => ({threads: [], team: [], preferences: {}, account: ''});
+let commInbox = commEmpty(), commUnread = new Map(), commView = '', commThread = 0;
+let commRows = [], commOlder = false, commVersion = 0, commPollBusy = false;
+let commSession = null, commHighWater = null, commAlertThread = 0, commAlertTimer;
+
+function commError(message = '') {
+ $('commError').textContent = message;
+ $('commError').hidden = !message;
+}
+function commReset() {
+ commVersion++;
+ commView = ''; commThread = 0; commRows = []; commInbox = commEmpty(); commUnread = new Map();
+ commHighWater = null; commAlertThread = 0; clearTimeout(commAlertTimer);
+ commPushRevision++;
+ commPushRegistration = commPushConfig = commPushDevice = null;
+ commPushWelcome.hidden = true;
+ commAlert.hidden = true; commMenu.textContent = 'Communications Hub';
+ $('storeMenuButton').classList.remove('commHasUnread');
+ $('commContent').replaceChildren(); $('commComposer').reset(); $('commPrefsDialog').close();
+ commPanel.hidden = true;
+}
+function commBadge() {
+ const count = [...commUnread.values()].reduce((sum, row) => sum + row.unread, 0);
+ commMenu.textContent = 'Communications Hub' + (count ? ` (${count} unread)` : '');
+ $('storeMenuButton').classList.toggle('commHasUnread', count > 0);
+ if (!commPanel.hidden) commSidebar();
+}
+function commSidebar() {
+ const {threads, preferences} = commInbox;
+ for (const [kind, list] of [['dm', 'commDirect'], ['group', 'commGroups']]) {
+  const items = threads.filter(t => t.kind === kind && (preferences[kind] !== 'unread' || commUnread.has(t.id) || t.id === commThread));
+  if (preferences.order === 'unread') items.sort((a,b) => Number(commUnread.has(b.id)) - Number(commUnread.has(a.id)));
+  const focused = document.activeElement?.dataset.commThread;
+  $(list).innerHTML = items.map(t => `<button type="button" data-comm-thread="${t.id}" aria-pressed="${t.id===commThread}"><span>${esc(t.title)}</span>${commUnread.has(t.id) ? `<strong class="commBadge" aria-label="Unread messages">${commUnread.get(t.id).unread}</strong>` : ''}</button>`).join('') || '<p class="muted">No conversations to show.</p>';
+  if (focused) $(list).querySelector(`[data-comm-thread="${Number(focused)}"]`)?.focus({preventScroll:true});
+ }
+ for (const b of commPanel.querySelectorAll('[data-comm-view]')) b.setAttribute('aria-pressed', String(b.dataset.commView === commView));
+}
+function commScreen(view, title, id = 0) {
+ commVersion++; commView = view; commThread = id; commRows = []; commOlder = false;
+ commPanel.dataset.view = view;
+ $('commTitle').textContent = title; $('commMembers').textContent = '';
+ $('commContent').replaceChildren(); $('commComposer').reset();
+ $('commComposer').hidden = view !== 'thread';
+ commError(); commSidebar();
+ return commVersion;
+}
+async function commLoadInbox() {
+ const signedIn = user;
+ const data = await commApi('inbox');
+ if (signedIn !== user || commPanel.hidden) return false;
+ commInbox = data; commSidebar(); return true;
+}
+function commMessage(m, list = false) {
+ const title = commInbox.threads.find(t => t.id === m.thread)?.title;
+ return `<article class="commMessage${m.author === commInbox.account ? ' mine' : ''}">
+  <div class="commMessageHead"><strong>${esc(m.sender)}</strong><time datetime="${new Date(m.sent*1000).toISOString()}">${esc(new Date(m.sent*1000).toLocaleString([], {dateStyle:'medium',timeStyle:'short'}))}</time>
+  <button type="button" data-comm-save="${m.id}" aria-pressed="${!!m.saved}">${m.saved ? 'Unsave' : 'Save'}</button></div>
+  ${list && title ? `<button type="button" class="commJump" data-comm-thread="${m.thread}">${esc(title)}</button>` : ''}
+  ${m.text ? `<p>${esc(m.text)}</p>` : ''}
+  ${m.filename ? `<a href="/api/comms/file/${m.id}" download="${esc(m.filename)}">${esc(m.filename)}</a>` : ''}</article>`;
+}
+function commRenderThread(scroll = false) {
+ const body = $('commContent'), y = body.scrollTop, h = body.scrollHeight;
+ const atBottom = h - body.clientHeight - y < 70;
+ body.innerHTML = (commOlder ? '<button type="button" id="commOlder">Load earlier messages</button>' : '') +
+  (commRows.map(m => commMessage(m)).join('') || '<p class="commEmpty">Start the conversation by sending a message.</p>');
+ body.scrollTop = scroll || atBottom ? body.scrollHeight : y;
+}
+async function commRead(version) {
+ const id = commRows.at(-1)?.id, thread = commThread;
+ if (version !== commVersion || !id || document.hidden || !commUnread.has(thread)) return;
+ await commApi('read', {thread, id});
+ if (version === commVersion && commUnread.get(thread)?.latest <= id) {
+  commUnread.delete(thread); commBadge();
+ }
+}
+async function commLoadMessages(version, before = 0) {
+ const thread = commThread;
+ const data = await commApi('messages?thread=' + thread + (before ? '&before=' + before : ''));
+ if (version !== commVersion) return;
+ const oldHeight = $('commContent').scrollHeight;
+ if (before) {
+  commRows = [...data.messages, ...commRows];
+  commOlder = data.older;
+ } else {
+  const first = data.messages[0]?.id;
+  const earlier = commRows.filter(m => m.id < first);
+  commRows = [...earlier, ...data.messages];
+  if (!earlier.length) commOlder = data.older;
+ }
+ commRenderThread(!before && !oldHeight);
+ if (before) $('commContent').scrollTop += $('commContent').scrollHeight - oldHeight;
+ await commRead(version);
+}
+async function commOpenThread(id) {
+ const thread = commInbox.threads.find(t => t.id === id);
+ if (!thread) return;
+ const version = commScreen('thread', thread.title, id);
+ $('commMembers').textContent = thread.kind === 'group' ? ['You', ...thread.members].join(', ') : 'Direct message';
+ $('commTitle').tabIndex = -1; $('commTitle').focus({preventScroll:true});
+ try { await commLoadMessages(version); } catch (e) { if (version === commVersion) commError(e.message); }
+}
+function commTeam(mode) {
+ const isGroup = mode === 'group', isTeam = mode === 'team';
+ commScreen(mode, isGroup ? 'Create group' : isTeam ? 'Team directory' : 'New message');
+ $('commContent').innerHTML = `<div class="commDirectory">
+  ${isGroup ? '<label>Group name<input id="commGroupName" maxlength="80" placeholder="e.g. Volunteer coordinators"></label>' : ''}
+  <label>${isGroup ? 'Find members' : 'Search team members'}<input id="commSearch" type="search" placeholder="Search by name"></label>
+  <div id="commPeople"></div>
+  ${isGroup ? '<button class="primary" type="button" id="commCreateGroup">Create group</button>' : ''}
+ </div>`;
+ const chosen = new Set(), search = $('commSearch');
+ function render() {
+  const matches = commInbox.team.filter(p => p.name.toLowerCase().includes(search.value.trim().toLowerCase()));
+  $('commPeople').innerHTML = matches.map(p => {
+   const label = `<span class="commInitial" aria-hidden="true">${esc(p.name.trim().slice(0, 2).toUpperCase())}</span><span>${esc(p.name)}</span>`;
+   return isGroup ? `<label class="commPerson"><input type="checkbox" value="${esc(p.id)}" ${chosen.has(p.id) ? 'checked' : ''}>${label}</label>`
+    : `<button type="button" class="commPerson" data-comm-person="${esc(p.id)}">${label}</button>`;
+  }).join('') || '<p class="commEmpty">No team members found.</p>';
+  if (isGroup) $('commCreateGroup').textContent = `Create group${chosen.size ? ' (' + chosen.size + ' selected)' : ''}`;
+ }
+ search.oninput = render; render();
+ $('commPeople').onchange = ({target}) => {
+  if (target.checked) chosen.add(target.value); else chosen.delete(target.value);
+  $('commCreateGroup').textContent = `Create group${chosen.size ? ' (' + chosen.size + ' selected)' : ''}`;
+ };
+ if (isGroup) $('commCreateGroup').onclick = e => commCreate(e.currentTarget, 'group', [...chosen], $('commGroupName').value);
+ else $('commPeople').onclick = e => {
+  const b = e.target.closest('[data-comm-person]');
+  if (b) commCreate(b, 'dm', [b.dataset.commPerson]);
+ };
+ search.focus();
+}
+async function commCreate(button, kind, members, title = '') {
+ const version = commVersion;
+ button.disabled = true; commError();
+ try {
+  const result = await commApi('create', {kind, members, title});
+  if (version === commVersion && await commLoadInbox() && version === commVersion) await commOpenThread(result.id);
+ } catch (e) { if (version === commVersion) commError(e.message); }
+ finally { button.disabled = false; }
+}
+async function commCollection(view) {
+ const version = commScreen(view, view === 'files' ? 'Files' : 'Saved messages');
+ try {
+  const data = await commApi(view);
+  if (version === commVersion) $('commContent').innerHTML = data.messages.map(m => commMessage(m, true)).join('') ||
+   (view === 'files' ? '<p class="commEmpty">Files shared in your conversations appear here.</p>' : '<p class="commEmpty">Save a message to find it here later.</p>');
+ } catch (e) { if (version === commVersion) commError(e.message); }
+}
+async function commOpen(thread = 0) {
+ if (!user) return;
+ if (commSession !== user) { commReset(); commSession = user; }
+ commAlert.hidden = true;
+ storeSection('dispatch'); $('app').hidden = true;
+ setSectionHeader('Communications Hub', 'comms');
+ commPanel.hidden = false;
+ const version = commScreen('home', 'Communications Hub');
+ $('commContent').innerHTML = '<p class="commEmpty">Choose a conversation or start a new message.</p>';
+ try { if (await commLoadInbox() && thread && version === commVersion) await commOpenThread(thread); }
+ catch (e) { if (version === commVersion) commError(e.message); }
+}
+commMenu.onclick = () => commOpen();
+commAlert.onclick = () => commOpen(commAlertThread);
+$('commBack').onclick = () => commScreen('home', 'Communications Hub');
+$('commNew').onclick = () => commTeam('new');
+$('commGroup').onclick = () => commTeam('group');
+commPanel.addEventListener('click', async e => {
+ const button = e.target.closest('button');
+ if (!button) return;
+ const {commView: view, commThread: thread, commSave: save} = button.dataset, version = commVersion;
+ if (thread) return commOpenThread(Number(thread));
+ if (view) return view === 'team' ? commTeam(view) : commCollection(view);
+ try {
+  if (button.id === 'commOlder') { button.disabled = true; await commLoadMessages(version, commRows[0]?.id); }
+  if (save) {
+   button.disabled = true;
+   const saving = button.getAttribute('aria-pressed') !== 'true';
+   await commApi('save', {id: Number(save), save: saving});
+   if (version !== commVersion) return;
+   if (commView === 'saved' || commView === 'files') await commCollection(commView);
+   else {
+    const row = commRows.find(m => m.id === Number(save));
+    if (row) row.saved = saving;
+    button.textContent = saving ? 'Unsave' : 'Save';
+    button.setAttribute('aria-pressed', String(saving));
+   }
+  }
+ } catch (err) { if (version === commVersion) commError(err.message); }
+ finally { button.disabled = false; }
+});
+$('commComposer').onsubmit = async e => {
+ e.preventDefault();
+ const version = commVersion, thread = commThread, button = e.submitter;
+ const text = $('commText').value, file = $('commFile').files[0];
+ if (!text.trim() && !file) return commError('Write a message or choose a file.');
+ if (file && (file.size > 3000000 || !file.size)) return commError('Choose a nonempty file of 3 MB or smaller.');
+ button.disabled = true; commError();
+ try {
+  const data = {thread, text};
+  if (file) {
+   data.filename = file.name;
+   data.file = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1]);
+    reader.onerror = () => reject(Error('Could not read the attachment.'));
+    reader.readAsDataURL(file);
+   });
+  }
+  if (version !== commVersion || !user) return;
+  await commApi('send', data);
+  if (version === commVersion) {
+   $('commComposer').reset();
+   await commLoadInbox();
+   if (version === commVersion) { await commLoadMessages(version); $('commContent').scrollTop = $('commContent').scrollHeight; }
+  }
+ } catch (err) { if (version === commVersion) commError(err.message); }
+ finally { button.disabled = false; }
+};
+
+$('commPreferences').onclick = () => {
+ const prefs = commInbox.preferences, form = $('commPrefsForm');
+ form.elements.direct.checked = prefs.direct ?? true;
+ form.elements.alerts.checked = prefs.alerts ?? true;
+ for (const [key, value] of Object.entries({order:'recent',dm:'all',group:'all'})) form.elements[key].value = prefs[key] ?? value;
+ $('commDeviceStatus').textContent = 'Check whether this device supports push notifications.';
+ $('commPrefsDialog').showModal();
+ commPreparePush();
+};
+$('commPrefsCancel').onclick = () => $('commPrefsDialog').close();
+let commPushRegistration, commPushConfig, commPushDevice, commPushRevision = 0;
+let commPushBusy = false;
+const commIsIos = () => /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+ (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const commMobileDevice = () => isMobileView() || commIsIos() || /Android/i.test(navigator.userAgent);
+const commPushChoice = key => {try {return localStorage.getItem(key);} catch {return null;}};
+function commStorePushChoice(key, value) {
+ try {localStorage.setItem(key, value);} catch {return;}
+}
+const commMobilePushOn = () => commPushChoice('yfc-mobile-push') !== 'off';
+const commWelcomeSeen = () => commPushChoice('yfc-mobile-push-seen') === 'yes';
+$('commPushLater').onclick = () => {
+ commStorePushChoice('yfc-mobile-push-seen', 'yes');
+ commPushWelcome.hidden = true;
+};
+
+function commPushId(create = false) {
+ try {
+  let id = localStorage.getItem('yfc-push-device');
+  if (!id && create) {
+   id = crypto.randomUUID().replaceAll('-', '');
+   localStorage.setItem('yfc-push-device', id);
+  }
+  return id;
+ } catch {
+  return null;
+ }
+}
+
+function commPushUi(message, action = '', showInstall = false) {
+ const button = $('commBrowserAlerts');
+ $('commDeviceStatus').textContent = message;
+ button.hidden = !action || (commMobileDevice() && action === 'disable');
+ button.disabled = button.hidden;
+ button.dataset.action = action;
+ button.textContent = action === 'disable' ? 'Turn off on this device' : 'Enable notifications on this device';
+ const welcome = commMobileDevice() && commMobilePushOn() && !commWelcomeSeen() &&
+  (showInstall || (action === 'enable' && window.Notification?.permission !== 'denied'));
+ commPushWelcome.hidden = !welcome;
+ $('commPushWelcomeStatus').textContent = showInstall ? message :
+  'Allow this device to notify you when you receive a new message.';
+ $('commPushAllow').hidden = showInstall;
+}
+
+async function commPreparePush() {
+ if (commPushBusy || !user) return;
+ const revision = ++commPushRevision, signedIn = user;
+ const mobile = commMobileDevice(), mobileToggle = $('commMobilePush');
+ $('commMobilePushOption').hidden = !mobile;
+ mobileToggle.checked = commMobilePushOn();
+ commPushUi('Checking notification support…');
+ if (mobile && !mobileToggle.checked) {
+  commPushUi('Mobile notifications are off on this device.');
+  return;
+ }
+ if (commIsIos() && !navigator.standalone && !matchMedia('(display-mode: standalone)').matches) {
+  commPushUi('On iPhone or iPad, add YFC Operations to your Home Screen, then open it from there to enable notifications.', '', true);
+  return;
+ }
+ if (!window.isSecureContext || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+  commPushUi('Use the secure HTTPS address in a browser that supports push notifications. In-app alerts still work.');
+  return;
+ }
+ try {
+  const device = commPushId(true);
+  if (!device) {
+   commPushUi('This browser could not save the device setting. In-app alerts still work.');
+   return;
+  }
+  const config = await commApi('push?device=' + device);
+  if (revision !== commPushRevision || signedIn !== user) return;
+  if (!config.available) {
+   commPushUi(config.reason === 'runtime'
+    ? 'The server needs the full YFC Operations installer with push support. In-app alerts still work.'
+    : 'Use the secure HTTPS address to enable device notifications.');
+   return;
+  }
+  await navigator.serviceWorker.register('/push-worker.js');
+  const registration = await navigator.serviceWorker.ready;
+  const subscription = await registration.pushManager.getSubscription();
+  if (revision !== commPushRevision || signedIn !== user) return;
+  commPushDevice = device;
+  commPushConfig = config;
+  commPushRegistration = registration;
+  if (config.enabled && subscription && Notification.permission === 'granted') {
+   commPushUi('Notifications are enabled on this device. Turn on new message alerts above to receive them.', 'disable');
+  } else if (Notification.permission === 'denied') {
+   commPushUi('Notifications are blocked. Allow them in your browser or device settings.', config.enabled ? 'disable' : '');
+  } else {
+   commPushUi('Get a system notification for new messages, including while YFC Operations is closed.', 'enable');
+  }
+ } catch {
+  if (revision === commPushRevision && signedIn === user) commPushUi('Device notifications could not be set up. In-app alerts still work.');
+ }
+}
+
+async function commChangePush(enabled) {
+ const signedIn = user, revision = commPushRevision;
+ if (commPushBusy || !signedIn || !commPushRegistration || !commPushConfig || !commPushDevice) return;
+ commPushBusy = true;
+ const button = $('commBrowserAlerts');
+ $('commPushAllow').disabled = true;
+ $('commPushLater').disabled = true;
+ $('commMobilePush').disabled = true;
+ const registration = commPushRegistration, device = commPushDevice, config = commPushConfig;
+ button.disabled = true;
+ try {
+  if (!enabled) {
+   await commApi('push', {device, enabled:false});
+   const subscription = await registration.pushManager.getSubscription();
+   if (subscription) await subscription.unsubscribe();
+  } else {
+   const publicKey = config.publicKey.replaceAll('-', '+').replaceAll('_', '/');
+   const key = Uint8Array.from(atob(publicKey), char => char.charCodeAt(0));
+   // Call subscribe directly from the user's click so iOS can show its permission prompt.
+   const subscription = await registration.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:key});
+   if (signedIn !== user) return;
+   await commApi('push', {device, enabled:true, subscription:subscription.toJSON()});
+   commStorePushChoice('yfc-mobile-push-seen', 'yes');
+   if (revision === commPushRevision) $('commPrefsForm').elements.alerts.checked = true;
+  }
+  commPushBusy = false;
+  if (revision === commPushRevision && signedIn === user) await commPreparePush();
+ } catch (err) {
+  if (revision === commPushRevision && signedIn === user) {
+   if (err.name === 'InvalidStateError') {
+    await commApi('push', {device, enabled:false}).catch(() => {});
+    const old = await registration.pushManager.getSubscription().catch(() => null);
+    if (old) await old.unsubscribe().catch(() => {});
+    if (revision === commPushRevision && signedIn === user)
+     commPushUi('This device had an old subscription. Enable notifications again.', 'enable');
+   } else if (Notification.permission === 'denied') {
+    commStorePushChoice('yfc-mobile-push-seen', 'yes');
+    commPushUi('Notifications are blocked. Allow them in your browser or device settings.');
+   } else {
+    const message = err.message || 'Could not change device notifications. Try again.';
+    $('commDeviceStatus').textContent = message;
+    $('commPushWelcomeStatus').textContent = message;
+    button.disabled = false;
+   }
+  }
+ }
+ finally {
+  commPushBusy = false;
+  $('commPushAllow').disabled = false;
+  $('commPushLater').disabled = false;
+  $('commMobilePush').disabled = false;
+ }
+}
+
+$('commBrowserAlerts').onclick = e => commChangePush(e.currentTarget.dataset.action === 'enable');
+$('commPushAllow').onclick = () => commChangePush(true);
+$('commMobilePush').onchange = async e => {
+ const toggle = e.currentTarget, signedIn = user;
+ if (!signedIn) return;
+ if (toggle.checked) {
+  commStorePushChoice('yfc-mobile-push', 'on');
+  commStorePushChoice('yfc-mobile-push-seen', 'no');
+  await commPreparePush();
+  return;
+ }
+ toggle.disabled = true;
+ $('commBrowserAlerts').disabled = true;
+ try {
+  const device = commPushId();
+  if (device) await commApi('push', {device, enabled:false});
+  if (signedIn !== user) return;
+  commStorePushChoice('yfc-mobile-push', 'off');
+  if (commPushRegistration) {
+   const subscription = await commPushRegistration.pushManager.getSubscription().catch(() => null);
+   if (subscription) await subscription.unsubscribe().catch(() => {});
+  }
+  await commPreparePush();
+ } catch (err) {
+  toggle.checked = true;
+  $('commDeviceStatus').textContent = err.message;
+  $('commBrowserAlerts').disabled = false;
+ } finally {toggle.disabled = false;}
+
+};
+
+$('commPrefsForm').onsubmit = async e => {
+ e.preventDefault();
+ const f = e.target.elements, version = commVersion;
+ try {
+  const preferences = await commApi('preferences', {direct:f.direct.checked, alerts:f.alerts.checked, order:f.order.value, dm:f.dm.value, group:f.group.value});
+  if (version !== commVersion) return;
+  commInbox.preferences = preferences; commSidebar(); $('commPrefsDialog').close();
+ } catch (err) { if (version === commVersion) $('commDeviceStatus').textContent = err.message; }
+};
+if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', event => {
+ if (event.data?.type !== 'open-comms') return;
+ if (user) {
+  $('sectionChooser').close();
+  commOpen();
+ } else {
+  history.replaceState(null, '', location.pathname + location.search + '#comms');
+ }
+});
+
+function commNotify(thread) {
+ commAlertThread = thread; commAlert.textContent = 'New message · Open Communications Hub'; commAlert.hidden = false;
+ clearTimeout(commAlertTimer);
+ commAlertTimer = setTimeout(() => commAlert.hidden = true, 12000);
+
+}
+async function commPoll() {
+ if (commSession !== user) { commReset(); commSession = user; commBadge(); }
+ if (!user || commPollBusy) return;
+ const signedIn = user;
+ commPollBusy = true;
+ try {
+  const result = await commApi('status');
+  if (signedIn !== user) return;
+  const fresh = result.unread.filter(r => commHighWater !== null && r.latest > commHighWater);
+  const alert = fresh.filter(r => document.hidden || commPanel.hidden || r.id !== commThread).sort((a,b) => b.latest-a.latest)[0];
+  commHighWater = Math.max(commHighWater ?? 0, ...result.unread.map(r => r.latest));
+  commUnread = new Map(result.unread.map(r => [r.id, r]));
+  if (result.alerts && alert) commNotify(alert.id);
+  if (!commPanel.hidden) {
+   if (result.unread.some(r => r.latest > (commInbox.threads.find(t => t.id === r.id)?.latest ?? 0))) await commLoadInbox();
+   if (commThread && !document.hidden && commUnread.has(commThread)) {
+    if (commUnread.get(commThread).latest > (commRows.at(-1)?.id ?? 0)) await commLoadMessages(commVersion);
+    else await commRead(commVersion);
+   }
+  }
+  commBadge();
+ } catch (err) { if (!commPanel.hidden) commError(err.message); }
+ finally { commPollBusy = false; }
+}
+setInterval(commPoll, 4500);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) commPoll(); });

@@ -2,12 +2,20 @@
 import datetime as dt
 import hashlib, hmac, json, os, secrets, socket, sqlite3, threading, time
 import updater
-import tempfile, zipfile, base64, re
+import tempfile, zipfile, base64, re, queue
 from contextlib import contextmanager, closing
 from pathlib import Path
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from http.cookies import SimpleCookie
 from urllib.parse import urlsplit,parse_qs
+
+try:
+    import requests
+    from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat, PrivateFormat, NoEncryption
+    from py_vapid import Vapid
+    from pywebpush import webpush as WebPush, WebPushException
+except ImportError:
+    WebPush = None
 
 WEB_ASSETS={} # prepared by prepare_web_assets.py
 
@@ -49,6 +57,382 @@ def connect():
         with c: yield c
     finally: c.close()
 
+# The worker is served from the app root. It never caches application pages or data.
+PUSH_WORKER = b"""
+self.addEventListener('push', event => {
+  event.waitUntil(self.registration.showNotification('YFC Operations', {
+    body: 'You have a new message.',
+    icon: '/app-icon-192.png',
+    tag: 'yfc-message'
+  }));
+});
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  event.waitUntil((async () => {
+    const destination = new URL('/#comms', self.location.origin);
+    const windows = await clients.matchAll({type: 'window', includeUncontrolled: true});
+    const app = windows.find(client => ['/', '/mobile', '/mobile/'].includes(new URL(client.url).pathname));
+    if (app) {
+      await app.focus();
+      app.postMessage({type: 'open-comms'});
+    } else {
+      await clients.openWindow(destination.href);
+    }
+  })());
+});
+"""
+
+PUSH_QUEUE = queue.Queue(maxsize=128)
+
+
+def push_supported(handler):
+    host = handler.headers.get('Host', '')
+    return (handler.external_scheme() == 'https' or
+            re.fullmatch(r'(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?', host, re.I))
+
+
+def push_key(c, *, create=False):
+    if WebPush is None:
+        return None
+    row = c.execute('SELECT private_key FROM comm_push_key WHERE id=1').fetchone()
+    if row:
+        return Vapid.from_string(row[0])
+    if create:
+        key = Vapid()
+        key.generate_keys()
+        der = key.private_key.private_bytes(Encoding.DER, PrivateFormat.PKCS8, NoEncryption())
+        c.execute('INSERT INTO comm_push_key VALUES(1,?)', (base64.urlsafe_b64encode(der).decode(),))
+        c.commit()
+        return key
+    return None
+
+
+def push_device(value):
+    return isinstance(value, str) and bool(re.fullmatch(r'[0-9a-f]{32}', value))
+
+
+def push_subscription(value):
+    """Only send HTTPS requests to known browser push providers."""
+    if not isinstance(value, dict) or not isinstance(value.get('keys'), dict):
+        raise Problem('Invalid notification subscription.')
+    endpoint = value.get('endpoint')
+    if not isinstance(endpoint, str) or not re.fullmatch(r'https://[!-~]{1,2000}', endpoint):
+        raise Problem('Invalid push endpoint.')
+    try:
+        url = urlsplit(endpoint)
+        host = url.hostname or ''
+    except ValueError:
+        raise Problem('Invalid push endpoint.')
+    allowed = (host in ('fcm.googleapis.com', 'updates.push.services.mozilla.com', 'push.services.mozilla.com')
+               or host.endswith(('.push.apple.com', '.notify.windows.com')))
+    if not allowed or url.netloc.lower() != host or not url.path or url.fragment:
+        raise Problem('This browser push service is not supported.')
+    keys = {}
+    for name, length in (('auth', 16), ('p256dh', 65)):
+        key = value['keys'].get(name)
+        if not isinstance(key, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,100}', key):
+            raise Problem('Invalid notification subscription key.')
+        try:
+            decoded = base64.urlsafe_b64decode(key + '=' * (-len(key) % 4))
+        except ValueError:
+            raise Problem('Invalid notification subscription key.')
+        if len(decoded) != length or (name == 'p256dh' and decoded[0] != 4):
+            raise Problem('Invalid notification subscription key.')
+        keys[name] = key
+    return {'endpoint': endpoint, 'keys': keys}
+
+
+def push_settings(handler, c, account, query):
+    if not push_supported(handler) or WebPush is None:
+        return handler.send({'available': False, 'reason': 'runtime' if WebPush is None else 'https'})
+    key = push_key(c, create=True)
+    public = key.public_key.public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
+    device = query.get('device', [''])[0]
+    enabled = c.execute('SELECT 1 FROM comm_push_devices WHERE device=? AND account=?', (device, account)).fetchone()
+    return handler.send({'available': True, 'enabled': bool(enabled),
+                         'publicKey': base64.urlsafe_b64encode(public).decode().rstrip('=')})
+
+
+def push_update(handler, c, account, d):
+    device, enabled = d.get('device'), d.get('enabled')
+    if not push_device(device) or type(enabled) is not bool:
+        raise Problem('Invalid notification settings.')
+    if not enabled:
+        c.execute('DELETE FROM comm_push_devices WHERE device=? AND account=?', (device, account))
+    else:
+        if not push_supported(handler) or not push_key(c):
+            raise Problem('Push notifications are unavailable at this address.', 403)
+        subscription = push_subscription(d.get('subscription'))
+        count = c.execute('SELECT COUNT(*) FROM comm_push_devices WHERE account=? AND device!=?',
+                          (account, device)).fetchone()[0]
+        if count >= 12:
+            raise Problem('This account has reached its device limit. Turn off notifications on an existing device first.')
+        c.execute('INSERT OR REPLACE INTO comm_push_devices VALUES(?,?,?,?)',
+                  (device, account, subscription['endpoint'], json.dumps(subscription)))
+    c.commit()
+    return handler.send({'enabled': enabled})
+
+
+def push_deliver(session, thread, message, author):
+    with LOCK, connect() as c:
+        key = push_key(c)
+        if not key:
+            return
+        devices = c.execute("""SELECT d.* FROM comm_members a
+            JOIN comm_push_devices d ON d.account=a.account
+            JOIN receipt_profiles p ON p.profile_id=d.account JOIN users u ON u.name=p.name
+            WHERE a.thread=? AND a.account!=? AND a.seen<?""", (thread, author, message)).fetchall()
+        devices = [d for d in devices if comm_preferences(c, d['account'])['alerts']]
+    for device in devices:
+        # Check again before sending so sign-out and preference changes take effect.
+        with LOCK, connect() as c:
+            current = c.execute("""SELECT 1 FROM comm_push_devices d JOIN comm_members a ON a.account=d.account
+                WHERE d.device=? AND d.account=? AND d.subscription=? AND a.thread=? AND a.seen<?""",
+                                (device['device'], device['account'], device['subscription'], thread, message)).fetchone()
+            if not current or not comm_preferences(c, device['account'])['alerts']:
+                continue
+        try:
+            WebPush(subscription_info=json.loads(device['subscription']), data='{}', vapid_private_key=key,
+                    vapid_claims={'sub': 'https://operations.coastyfc.com'}, ttl=300,
+                    timeout=5, requests_session=session, headers={'Topic': 'yfc-message'})
+        except WebPushException as error:
+            status = error.response.status_code if error.response is not None else 0
+            if status in (404, 410):
+                with LOCK, connect() as c:
+                    c.execute('DELETE FROM comm_push_devices WHERE device=? AND subscription=?',
+                              (device['device'], device['subscription']))
+            else:
+                print(f'Web Push provider rejected a notification (status {status}).')
+        except Exception:
+            print('Unable to reach a Web Push provider.')
+
+
+def push_worker():
+    class PushSession(requests.Session):
+        def post(self, url, *args, **kwargs):
+            # Keep validation effective even if the push provider redirects.
+            return super().post(url, *args, **{**kwargs, 'allow_redirects': False})
+
+    with PushSession() as session:
+        while True:
+            thread, message, author, queued_at = PUSH_QUEUE.get()
+            try:
+                if time.monotonic() - queued_at < 300:
+                    push_deliver(session, thread, message, author)
+            except Exception:
+                print('Unable to process a Web Push notification.')
+            finally:
+                PUSH_QUEUE.task_done()
+
+
+def init_comms(c):
+    c.executescript("""
+        CREATE TABLE IF NOT EXISTS comm_push_key (id INTEGER PRIMARY KEY, private_key TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS comm_push_devices (
+            device TEXT PRIMARY KEY, account TEXT NOT NULL, endpoint TEXT UNIQUE NOT NULL, subscription TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS comm_push_account ON comm_push_devices(account);
+        CREATE TABLE IF NOT EXISTS comm_threads (
+            id INTEGER PRIMARY KEY, kind TEXT NOT NULL, title TEXT, direct_key TEXT UNIQUE
+        );
+        CREATE TABLE IF NOT EXISTS comm_members (
+            thread INTEGER NOT NULL, account TEXT NOT NULL, seen INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (thread, account)
+        );
+        CREATE INDEX IF NOT EXISTS comm_member_account ON comm_members(account, thread);
+        CREATE TABLE IF NOT EXISTS comm_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, thread INTEGER NOT NULL, author TEXT NOT NULL,
+            author_name TEXT NOT NULL, sent REAL NOT NULL, text TEXT NOT NULL, filename TEXT
+        );
+        CREATE INDEX IF NOT EXISTS comm_message_thread ON comm_messages(thread, id);
+        CREATE TABLE IF NOT EXISTS comm_files (id INTEGER PRIMARY KEY, data BLOB NOT NULL);
+        CREATE TABLE IF NOT EXISTS comm_saved (
+            account TEXT NOT NULL, message INTEGER NOT NULL, PRIMARY KEY (account, message)
+        );
+        CREATE TABLE IF NOT EXISTS comm_prefs (
+            account TEXT PRIMARY KEY, body TEXT NOT NULL
+        );
+    """)
+
+
+COMM_DEFAULTS = dict(direct=True, order='recent', dm='all', group='all', alerts=True)
+COMM_MESSAGES = """SELECT m.*, COALESCE(u.name,m.author_name) AS sender,
+    EXISTS(SELECT 1 FROM comm_saved s WHERE s.account=? AND s.message=m.id) AS saved
+    FROM comm_messages m LEFT JOIN receipt_profiles p ON p.profile_id=m.author
+    LEFT JOIN users u ON u.name=p.name"""
+
+
+def comm_preferences(c, account):
+    row = c.execute('SELECT body FROM comm_prefs WHERE account=?', (account,)).fetchone()
+    return {**COMM_DEFAULTS, **(json.loads(row[0]) if row else {})}
+
+
+def comm_number(value, default=0):
+    if isinstance(value, int) and not isinstance(value, bool) and 0 < value <= 2**63-1:
+        return value
+    if isinstance(value, str) and re.fullmatch(r'[0-9]{1,18}', value):
+        return int(value)
+    return default
+
+
+def comm_member(c, thread, account):
+    row = c.execute('SELECT * FROM comm_threads t JOIN comm_members a ON a.thread=t.id WHERE t.id=? AND a.account=?',
+                    (thread, account)).fetchone()
+    if not row:
+        raise Problem('Conversation not found.', 404)
+    return row
+
+
+def comm_directory(c, account):
+    return [dict(row) for row in c.execute("""SELECT p.profile_id AS id, u.name
+        FROM users u JOIN receipt_profiles p ON p.name=u.name
+        WHERE p.profile_id!=? ORDER BY u.name COLLATE NOCASE""", (account,))]
+
+
+def comm_get(handler, c, u, path, query):
+    account = u['receipt_owner']
+    if not account:
+        raise Problem('Account not found.', 403)
+    if path == 'push':
+        return push_settings(handler, c, account, query)
+    if path == 'status':
+        rows = c.execute("""SELECT a.thread AS id, COUNT(*) AS unread, MAX(m.id) AS latest
+            FROM comm_members a JOIN comm_messages m ON m.thread=a.thread AND m.id>a.seen
+            WHERE a.account=? AND m.author!=? GROUP BY a.thread""", (account, account))
+        return handler.send({'unread': [dict(r) for r in rows], 'alerts': comm_preferences(c, account)['alerts']})
+    if path == 'inbox':
+        threads = [dict(r) for r in c.execute("""SELECT t.id,t.kind,t.title,a.seen,
+            COALESCE((SELECT MAX(m.id) FROM comm_messages m WHERE m.thread=t.id),0) AS latest
+            FROM comm_threads t JOIN comm_members a ON a.thread=t.id WHERE a.account=?
+            ORDER BY latest DESC,t.id DESC""", (account,))]
+        for thread in threads:
+            members = c.execute("""SELECT u.name FROM comm_members a
+                JOIN receipt_profiles p ON p.profile_id=a.account JOIN users u ON u.name=p.name
+                WHERE a.thread=? AND a.account!=? ORDER BY u.name COLLATE NOCASE""", (thread['id'], account))
+            thread['members'] = [r[0] for r in members]
+            if thread['kind'] == 'dm':
+                thread['title'] = next(iter(thread['members']), 'Former user')
+        return handler.send({'threads': threads, 'team': comm_directory(c, account),
+                             'preferences': comm_preferences(c, account), 'account': account})
+    if path == 'messages':
+        thread = comm_number(query.get('thread', [''])[0])
+        before = comm_number(query.get('before', [''])[0], 2**63-1)
+        comm_member(c, thread, account)
+        rows = c.execute(COMM_MESSAGES + ' WHERE m.thread=? AND m.id<? ORDER BY m.id DESC LIMIT 101',
+                         (account, thread, before)).fetchall()
+        return handler.send({'messages': [dict(r) for r in reversed(rows[:100])], 'older': len(rows)>100})
+    if path in ('saved', 'files'):
+        condition = ('EXISTS(SELECT 1 FROM comm_saved s WHERE s.account=a.account AND s.message=m.id)'
+                     if path == 'saved' else 'm.filename IS NOT NULL')
+        rows = c.execute(COMM_MESSAGES + ' JOIN comm_members a ON a.thread=m.thread WHERE a.account=? AND '
+                         + condition + ' ORDER BY m.id DESC', (account, account))
+        return handler.send({'messages': [dict(r) for r in rows]})
+    if path.startswith('file/'):
+        row = c.execute("""SELECT f.data FROM comm_files f JOIN comm_messages m ON m.id=f.id
+            JOIN comm_members a ON a.thread=m.thread WHERE f.id=? AND a.account=?""",
+                        (comm_number(path[5:]), account)).fetchone()
+        if not row:
+            raise Problem('File not found.', 404)
+        return handler.send(row[0], kind='application/octet-stream', attachment=True)
+    raise Problem('Not found.', 404)
+
+
+def comm_post(handler, c, u, path, d):
+    account = u['receipt_owner']
+    if not account:
+        raise Problem('Account not found.', 403)
+    if path == 'push':
+        return push_update(handler, c, account, d)
+    if path == 'preferences':
+        if (set(d) != set(COMM_DEFAULTS) or type(d['direct']) is not bool or type(d['alerts']) is not bool
+                or d['order'] not in ('recent', 'unread') or any(d[k] not in ('all', 'unread') for k in ('dm', 'group'))):
+            raise Problem('Choose valid communication preferences.')
+        c.execute('INSERT OR REPLACE INTO comm_prefs VALUES(?,?)', (account, json.dumps(d)))
+        c.commit()
+        return handler.send(d)
+    if path == 'create':
+        kind, members, title = d.get('kind'), d.get('members'), d.get('title', '')
+        if kind not in ('dm', 'group') or not isinstance(members, list) or not 1 <= len(members) <= 50:
+            raise Problem('Select members for this conversation.')
+        if any(not isinstance(m, str) for m in members) or len(set(members)) != len(members):
+            raise Problem('Select distinct team members.')
+        if not set(members) <= {r['id'] for r in comm_directory(c, account)}:
+            raise Problem('Select current team members.')
+        direct_key = None
+        if kind == 'dm':
+            if len(members) != 1:
+                raise Problem('Choose one recipient.')
+            direct_key = ':'.join(sorted([account, *members]))
+            row = c.execute('SELECT id FROM comm_threads WHERE direct_key=?', (direct_key,)).fetchone()
+            if row:
+                return handler.send({'id': row[0]})
+            if not comm_preferences(c, members[0])['direct']:
+                raise Problem('This person has turned off direct messages.', 403)
+            title = None
+        elif not isinstance(title, str) or not 1 <= len(title.strip()) <= 80:
+            raise Problem('Enter a group name (1–80 characters).')
+        else:
+            title = title.strip()
+        thread = c.execute('INSERT INTO comm_threads(kind,title,direct_key) VALUES(?,?,?)',
+                           (kind, title, direct_key)).lastrowid
+        c.executemany('INSERT INTO comm_members(thread,account) VALUES(?,?)',
+                      [(thread, member) for member in [account, *members]])
+        c.commit()
+        return handler.send({'id': thread})
+    if path == 'save':
+        message, save = comm_number(d.get('id')), d.get('save')
+        if type(save) is not bool:
+            raise Problem('Choose whether to save the message.')
+        row = c.execute('SELECT thread FROM comm_messages WHERE id=?', (message,)).fetchone()
+        comm_member(c, row[0] if row else 0, account)
+        c.execute('INSERT OR IGNORE INTO comm_saved VALUES(?,?)' if save else
+                  'DELETE FROM comm_saved WHERE account=? AND message=?', (account, message))
+        c.commit()
+        return handler.send({'ok': True})
+    if path not in ('send', 'read'):
+        raise Problem('Not found.', 404)
+    thread = comm_number(d.get('thread'))
+    membership = comm_member(c, thread, account)
+    if path == 'read':
+        last = comm_number(d.get('id'))
+        if last and c.execute('SELECT 1 FROM comm_messages WHERE id=? AND thread=?', (last, thread)).fetchone():
+            c.execute('UPDATE comm_members SET seen=MAX(seen,?) WHERE thread=? AND account=?', (last, thread, account))
+        c.commit()
+        return handler.send({'ok': True})
+    if membership['kind'] == 'dm':
+        recipient = c.execute("""SELECT a.account FROM comm_members a JOIN receipt_profiles p ON p.profile_id=a.account
+            JOIN users u ON u.name=p.name WHERE a.thread=? AND a.account!=?""", (thread, account)).fetchone()
+        if not recipient or not comm_preferences(c, recipient[0])['direct']:
+            raise Problem('This person is unavailable for direct messages.', 403)
+    text, filename, attachment = d.get('text', ''), d.get('filename'), None
+    if not isinstance(text, str) or len(text) > 5000:
+        raise Problem('Messages can contain up to 5,000 characters.')
+    if filename is not None:
+        if not isinstance(filename, str) or not 1 <= len(filename) <= 200 or any(
+                ch in '/\\' or ord(ch)<32 or ord(ch)==127 for ch in filename):
+            raise Problem('Choose a file with a valid name.')
+        try:
+            attachment = base64.b64decode(d.get('file', ''), validate=True)
+        except (ValueError, TypeError):
+            raise Problem('Invalid attachment.')
+        if not 1 <= len(attachment) <= 3000000:
+            raise Problem('Attachments must be 3 MB or smaller.')
+    if not text.strip() and attachment is None:
+        raise Problem('Enter a message or attach a file.')
+    message = c.execute('INSERT INTO comm_messages(thread,author,author_name,sent,text,filename) VALUES(?,?,?,?,?,?)',
+                        (thread, account, u['name'], time.time(), text.strip(), filename)).lastrowid
+    if attachment is not None:
+        c.execute('INSERT INTO comm_files VALUES(?,?)', (message, attachment))
+    c.commit()
+    if WebPush is not None:
+        try:
+            PUSH_QUEUE.put_nowait((thread, message, account, time.monotonic()))
+        except queue.Full:
+            print('Web Push queue full. The message is available in Communications Hub.')
+    return handler.send({'id': message})
+
+
 def init():
     with connect() as c:
         c.executescript('''CREATE TABLE IF NOT EXISTS users(name TEXT PRIMARY KEY COLLATE NOCASE, salt TEXT, hash TEXT, admin INTEGER);
@@ -66,6 +450,7 @@ CREATE TABLE IF NOT EXISTS account_lockouts(name TEXT PRIMARY KEY COLLATE NOCASE
 CREATE TABLE IF NOT EXISTS receipt_categories(code TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS receipts(id TEXT PRIMARY KEY, at REAL, actor TEXT, category TEXT, filename TEXT, mime TEXT, body BLOB, source TEXT);
 CREATE TABLE IF NOT EXISTS audit(at TEXT, actor TEXT, action TEXT, job TEXT);''')
+        init_comms(c)
         if 'chosen_on' not in {r[1] for r in c.execute('PRAGMA table_info(landing_preferences)')}:
             c.execute('ALTER TABLE landing_preferences ADD COLUMN chosen_on TEXT')
         c.execute('CREATE TABLE IF NOT EXISTS local_admin_sessions(token_hash TEXT PRIMARY KEY,name TEXT COLLATE NOCASE,version TEXT)')
@@ -353,7 +738,7 @@ class Handler(BaseHTTPRequestHandler):
             return 'https'
         return 'http'
 
-    def send(self,data,status=200,cookie=None,kind='application/json'):
+    def send(self,data,status=200,cookie=None,kind='application/json',attachment=False):
         raw=json.dumps(data).encode() if kind=='application/json' else data
         self.send_response(status)
         self.send_header('Content-Type',kind)
@@ -362,6 +747,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('X-Content-Type-Options','nosniff')
         self.send_header('X-Frame-Options','DENY')
         self.send_header('Content-Security-Policy',"default-src 'self'; img-src 'self' data: blob:; media-src 'self' data:; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'")
+        if attachment: self.send_header('Content-Disposition','attachment')
         if cookie: self.send_header('Set-Cookie',cookie+('; Secure' if self.external_scheme()=='https' else ''))
         self.end_headers(); self.wfile.write(raw)
     def user(self):
@@ -441,6 +827,7 @@ class Handler(BaseHTTPRequestHandler):
             if self.serve_mobile_media():return
             if self.path=='/offline.gif':return self.send(web_asset('gif'),kind='image/gif')
             if self.path in ('/app-icon-180.png','/app-icon-192.png','/app-icon-512.png'):return self.send(web_asset(self.path.split('-')[-1].split('.')[0]),kind='image/png')
+            if self.path=='/push-worker.js':return self.send(PUSH_WORKER,kind='text/javascript; charset=utf-8')
             if self.path=='/manifest.webmanifest':return self.send(json.dumps({'name':'MGC YFC Operations','short_name':'YFC Operations','start_url':'/','scope':'/','display':'standalone','background_color':'#101821','theme_color':'#073ea6','icons':[{'src':'/app-icon-'+str(size)+'.png','sizes':str(size)+'x'+str(size),'type':'image/png','purpose':'any'} for size in (192,512)]}).encode(),kind='application/manifest+json')
             if self.path in ('/favicon.svg','/favicon.ico'):
                 return self.send(FAVICON_SVG.encode(),kind='image/svg+xml')
@@ -474,6 +861,9 @@ class Handler(BaseHTTPRequestHandler):
                 if self.path=='/api/receipt-categories':
                     return self.send({'categories':[r[0] for r in c.execute('SELECT code FROM receipt_categories ORDER BY code')]})
                 u=self.user()
+                request=urlsplit(self.path)
+                if request.path.startswith('/api/comms/'):
+                    return comm_get(self,c,u,request.path[len('/api/comms/'):],parse_qs(request.query))
                 if self.path.startswith('/api/receipt-file/'):
                     row=c.execute('SELECT r.body,r.mime,o.profile_id AS owner FROM receipts r LEFT JOIN receipt_ownership o ON o.receipt_id=r.id WHERE r.id=?',(self.path.rsplit('/',1)[1],)).fetchone()
                     if not row or not (has_permission(u,'view_all_receipts') or row['owner'] and row['owner']==u.get('receipt_owner')):raise Problem('Receipt not found.',404)
@@ -663,6 +1053,8 @@ class Handler(BaseHTTPRequestHandler):
                     c.execute('INSERT INTO receipt_details VALUES(?,?,?)',(ident,int(reimbursement),int(uploader is None)))
                     return self.send({'ok':True,'id':ident,'email_pending':True})
                 u=self.user()
+                if self.path.startswith('/api/comms/'):
+                    return comm_post(self,c,u,self.path[len('/api/comms/'):],d)
                 if self.path=='/api/page-colors':
                     if not u['admin']:raise Problem('Administrator access required.',403)
                     pages=d.get('pages')
@@ -751,6 +1143,10 @@ class Handler(BaseHTTPRequestHandler):
                     c.execute('DELETE FROM pages WHERE at<?',(time.time()-86400,))
                     return self.send({'ok':True})
                 if self.path=='/api/logout':
+                    if push_device(d.get('pushDevice')):
+                        c.execute('DELETE FROM comm_push_devices WHERE device=? AND account=?',
+                                  (d['pushDevice'],u['receipt_owner']))
+                        c.commit()
                     if u.get('local_admin'):c.execute('DELETE FROM local_admin_sessions WHERE token_hash=?',(hashlib.sha256(SimpleCookie(self.headers.get('Cookie',''))['session'].value.encode()).hexdigest(),))
                     for k,v in list(SESSIONS.items()):
                         if v is u: del SESSIONS[k]
@@ -869,6 +1265,7 @@ class Handler(BaseHTTPRequestHandler):
                     if not target: raise Problem('Employee not found.',404)
                     if target['admin']: raise Problem('Administrator accounts cannot be removed here.',403)
                     c.execute('DELETE FROM users WHERE name=?',(target['name'],))
+                    c.execute('DELETE FROM comm_push_devices WHERE account=(SELECT profile_id FROM receipt_profiles WHERE name=?)',(target['name'],))
                     c.execute('DELETE FROM receipt_profiles WHERE name=?',(target['name'],))
                     c.execute('DELETE FROM user_roles WHERE name=?',(target['name'],))
                     c.execute('DELETE FROM account_lockouts WHERE name=?',(target['name'],))
@@ -994,6 +1391,8 @@ if __name__=='__main__':
         if kernel.GetLastError()==183: raise SystemExit('MGC YFC Operations Server is already running.')
     data_lock=hold_data_lock()
     init(); threading.Thread(target=background,daemon=True).start()
+    if WebPush is not None:
+        threading.Thread(target=push_worker,daemon=True).start()
     threading.Thread(target=monitor_release_status,daemon=True).start()
     port=int(os.environ.get('DISPATCH_PORT','8080'))
     print('MGC YFC Operations Server '+updater.current())

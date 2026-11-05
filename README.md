@@ -8,6 +8,16 @@ The installer offers **Server**, **Remote Manager**, or **Both**, with the requi
 
 Choose **MGC YFC Operations Server**, then open its white-truck Start-menu shortcut. The server runs in a desktop window and can be minimized to the system tray. On that PC visit `http://localhost:8080` to create the first administrator. Add vehicles and employees in Settings. Phones use the staff-network address printed in the server window.
 
+## Communications Hub
+
+After signing in, open **Communications Hub** in the section menu. Use **New message** to find someone on the team, or **Create group** to start a conversation with several people. Messages, saved items, and files stay on the store server. Only conversation members can view its messages and download its files (up to 3 MB per attachment).
+
+New messages show an unread indicator and an alert inside the signed-in app. Mobile notifications are on by default. At first sign-in on a supported phone, tap **Allow notifications** to open the device permission prompt. You can turn mobile notifications off in **Comms Hub → Preferences** or use **Enable notifications on this device** there if you skipped setup. On desktop, enable notifications from the same Preferences screen. Keep **Show new message alerts** checked. Repeat on each computer or phone. Use the HTTPS staff address on remote devices. On iPhone or iPad (iOS/iPadOS 16.4 or later), add the site to the Home Screen and open it from its icon before enabling notifications. Supported desktop and Android browsers can also receive notifications after the app tab closes.
+
+Servers upgrading from an installation without Web Push need the full Windows installer. The server needs outbound HTTPS to the browser's push provider. Notifications contain a generic alert, and opening one takes staff to Communications Hub after sign-in. Signing out turns off push for that browser. For a source checkout, install the server dependency with `python -m pip install -r requirements-push.txt`.
+
+Manage staff accounts and reusable permission sets in **Settings → Application Settings → Users**. Use the **Users** tab for accounts or the **Roles** tab for permission sets.
+
 ## Other computer: Remote Manager
 
 Run the same installer and select **MGC YFC Operations Remote Manager**. Enter the server IP/computer name and port (for example `192.168.1.50:8080`), test the connection, and sign in with a server administrator account. The native panel manages status, complete backups, restart and GitHub server updates. Schedule/account editing opens in the default browser and requires a separate browser sign-in.

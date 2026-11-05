@@ -39,7 +39,7 @@ def run():
                 assert vehicle_response.value.status==200, vehicle_response.value.text()
                 expect(page.locator('#vehicles')).to_contain_text('White truck')
                 page.locator('#settingsCategories').get_by_role('button',name='Application Settings',exact=True).click()
-                page.get_by_role('button',name='Employees',exact=True).click()
+                page.locator('#settingsSubcategories').get_by_role('button',name='Users',exact=True).click()
                 page.locator('#userForm [name=name]').fill('Alex')
                 page.locator('#userForm [name=password]').fill('testpassword')
                 page.locator('#userForm button').click()
