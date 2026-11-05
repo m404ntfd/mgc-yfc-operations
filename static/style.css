@@ -233,3 +233,64 @@ body{background:var(--page-background,#faf6f5);min-height:100vh;color:var(--page
  .commComposerActions {align-items:flex-start}
  .commComposerActions label {width:100%}
 }
+
+/* Scheduling and Time Clock */
+#workforce {
+ --work-accent:#cb04cf;
+ --work-hover:#a600ad;
+ --work-highlight:#f9e8f9;
+ --work-text:#3c1640;
+ --work-surface:#fff;
+ --work-border:#e6cde6;
+ background:var(--work-surface);color:var(--work-text);border:1px solid var(--work-border);
+ border-top:5px solid var(--work-accent);border-radius:16px;padding:clamp(12px,3vw,24px)
+}
+:root[data-theme=dark] #workforce {
+ --work-highlight:#46214b;--work-text:#f8e6fa;--work-surface:#24192a;--work-border:#67436b
+}
+#workforce[hidden],#workforce [hidden] {display:none!important}
+#workforce p {color:inherit}
+#workforce .workKicker {font-size:.72rem;letter-spacing:.09em;font-weight:800;margin:0 0 4px}
+.workHead h2 {margin:0 0 12px}
+#workforce .workTabs {margin-bottom:10px;border-color:var(--work-border)}
+#workforce .workTabs button {color:var(--work-text)}
+#workforce .workTabs button[aria-pressed=true],#workforce .workTabs button:hover {background:var(--work-highlight)}
+#workforce .primary {background:var(--work-accent);border-color:var(--work-accent);color:#fff}
+#workforce .primary:hover {background:var(--work-hover);border-color:var(--work-hover)}
+#workStatus {margin:8px 0;min-height:1.5em}
+.workTotals {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:10px 0}
+.workTotals div {background:var(--work-highlight);border-radius:12px;padding:12px;min-width:0}
+.workTotals strong {display:block;font-size:clamp(1rem,3vw,1.45rem);font-variant-numeric:tabular-nums;margin-top:5px}
+.workWeek,.workWeek label {display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.workWeek {margin-bottom:12px}
+.workWeek input {width:auto;max-width:100%;min-width:0}
+.workList {margin:10px 0}
+.workRow {display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;border-bottom:1px solid var(--work-border);padding:10px 0;overflow-wrap:anywhere}
+.workRow p {margin:3px 0}
+.workForm {margin-top:12px;padding:12px;background:var(--work-highlight);border-radius:10px;display:grid;gap:8px}
+.workCheck {display:flex;align-items:center;gap:8px}
+#workforce input[type=checkbox] {width:18px;min-height:18px;flex-shrink:0}
+
+#headerShortcuts {display:flex;align-items:center;gap:6px}
+#headerShortcuts[hidden] {display:none!important}
+#headerShortcuts button {display:grid;place-items:center;min-width:38px;min-height:38px;padding:6px}
+#headerShortcuts svg {width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+#auth #login :is(button.primary,#loginTimeClock) {width:100%;min-height:46px;padding:12px 16px;line-height:20px}
+#auth #loginTimeClock {display:flex;align-items:center;justify-content:center;margin-top:8px;border:1px solid #cb04cf;border-radius:10px;background:#cb04cf;color:#fff;text-decoration:none;font-weight:700}
+#auth #loginTimeClock:hover {background:#a600ad;border-color:#a600ad}
+#auth #loginTimeClock:focus-visible {outline:2px solid currentColor;outline-offset:3px}
+#workQuickBack {margin-bottom:12px}
+
+.commGroupControls {display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.commGroupControls button {min-height:36px;padding:4px 10px}
+
+#photoNotifications[hidden],#photoReviewCount[hidden] {display:none!important}
+#photoNotifications {position:relative}
+#photoReviewCount {position:absolute;right:-3px;top:-4px;padding:1px 5px;border-radius:12px;background:#9fcf04;color:#1e2804;font-size:.72rem}
+#headerShortcuts {flex-wrap:wrap;justify-content:flex-end}
+.profilePhotos,.profileReviewRow {display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.profilePhotos figure {margin:0}
+.profilePhotos figcaption {font-size:.85rem;margin-top:4px}
+.profilePhotos img,.profileReviewRow img {width:72px;height:72px;border-radius:50%;object-fit:cover}
+.profileReviewRow {padding:10px 0;border-bottom:1px solid #9995}
+.commInitial {object-fit:cover}

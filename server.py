@@ -2,7 +2,7 @@
 import datetime as dt
 import hashlib, hmac, json, os, secrets, socket, sqlite3, threading, time
 import updater
-import tempfile, zipfile, base64, re, queue
+import tempfile, zipfile, base64, re, queue, math
 from contextlib import contextmanager, closing
 from pathlib import Path
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
@@ -33,6 +33,7 @@ LOCK=threading.RLock()
 SESSIONS={}
 MOBILE_MEDIA={}
 ATTEMPTS={}
+CLOCK_SESSIONS={}
 RESTART=False
 STOPPING=False
 STARTED=time.time()
@@ -188,8 +189,10 @@ def push_deliver(session, thread, message, author):
         # Check again before sending so sign-out and preference changes take effect.
         with LOCK, connect() as c:
             current = c.execute("""SELECT 1 FROM comm_push_devices d JOIN comm_members a ON a.account=d.account
-                WHERE d.device=? AND d.account=? AND d.subscription=? AND a.thread=? AND a.seen<?""",
-                                (device['device'], device['account'], device['subscription'], thread, message)).fetchone()
+                WHERE d.device=? AND d.account=? AND d.subscription=? AND a.thread=? AND a.seen<?
+                AND NOT EXISTS(SELECT 1 FROM comm_hidden_groups h WHERE h.account=a.account AND h.thread=a.thread)
+                AND NOT EXISTS(SELECT 1 FROM comm_hidden_messages h WHERE h.account=a.account AND h.message=?)""",
+                                (device['device'], device['account'], device['subscription'], thread, message, message)).fetchone()
             if not current or not comm_preferences(c, device['account'])['alerts']:
                 continue
         try:
@@ -226,8 +229,74 @@ def push_worker():
                 PUSH_QUEUE.task_done()
 
 
+def profile_get(handler,c,u,path):
+    account=u['receipt_owner']
+    review=has_permission(u,'approve_profile_photos')
+    if path=='mine':
+        row=c.execute("""SELECT account,approved IS NOT NULL AS approved,pending_revision,status
+                         FROM user_profile_photos WHERE account=?""",(account,)).fetchone()
+        return handler.send(dict(row) if row else {'approved':False,'pending_revision':None,'status':'none'})
+    if path=='queue':
+        if not review: raise Problem('Profile photo approval permission required.',403)
+        rows=c.execute("""SELECT p.account,u.name,p.pending_revision FROM user_profile_photos p
+            JOIN receipt_profiles r ON r.profile_id=p.account JOIN users u ON u.name=r.name
+            WHERE p.pending_revision IS NOT NULL ORDER BY u.name""")
+        return handler.send({'requests':[{**dict(row),'own':row['account']==account} for row in rows]})
+    parts=path.split('/')
+    if len(parts)==2 and parts[0]=='photo':
+        target=parts[1]
+        row=c.execute("""SELECT p.approved FROM user_profile_photos p JOIN receipt_profiles r ON r.profile_id=p.account
+            JOIN users u ON u.name=r.name WHERE p.account=?""",(target,)).fetchone()
+        if row and row[0]: return handler.send(row[0],kind='image/jpeg')
+    if len(parts)==3 and parts[0]=='pending' and (review or parts[1]==account):
+        row=c.execute('SELECT pending FROM user_profile_photos WHERE account=? AND pending_revision=?',tuple(parts[1:])).fetchone()
+        if row and row[0]: return handler.send(row[0],kind='image/jpeg')
+    raise Problem('Profile photo not found.',404)
+
+
+def profile_post(handler,c,u,path,d):
+    account=u['receipt_owner']
+    if path=='upload':
+        encoded=d.get('image')
+        if not isinstance(encoded,str) or len(encoded)>400000:
+            raise Problem('Choose a profile photo smaller than 300 KB.')
+        try: raw=base64.b64decode(encoded,validate=True)
+        except ValueError: raise Problem('Invalid profile photo.')
+        if not 16<=len(raw)<=300000 or not raw.startswith(b'\xff\xd8\xff') or not raw.endswith(b'\xff\xd9'):
+            raise Problem('Choose a valid JPEG profile photo.')
+        revision=secrets.token_hex(12)
+        c.execute("""INSERT INTO user_profile_photos(account,pending,pending_revision,status) VALUES(?,?,?,'pending')
+            ON CONFLICT(account) DO UPDATE SET pending=excluded.pending,pending_revision=excluded.pending_revision,status='pending'""",
+                  (account,raw,revision))
+    elif path=='review':
+        if not has_permission(u,'approve_profile_photos'):
+            raise Problem('Profile photo approval permission required.',403)
+        target,revision,decision=d.get('account'),d.get('revision'),d.get('decision')
+        if not isinstance(target,str) or not isinstance(revision,str) or decision not in ('approve','reject'):
+            raise Problem('Invalid review decision.')
+        if target==account: raise Problem('Another reviewer must approve or reject your photo.',403)
+        if decision=='approve':
+            query="""UPDATE user_profile_photos SET approved=pending,pending=NULL,pending_revision=NULL,status='approved'
+                     WHERE account=? AND pending_revision=?"""
+        else:
+            query="""UPDATE user_profile_photos SET pending=NULL,pending_revision=NULL,status='rejected'
+                     WHERE account=? AND pending_revision=?"""
+        if not c.execute(query,(target,revision)).rowcount:
+            raise Problem('This request has changed or was already reviewed. Refresh the list.',409)
+        c.execute('INSERT INTO audit VALUES(?,?,?,?)',(dt.datetime.now().isoformat(timespec='seconds'),
+                  u['name'],f'Profile photo review: {decision}',target))
+    else:
+        raise Problem('Not found.',404)
+    c.commit()
+    return handler.send({'ok':True})
+
+
 def init_comms(c):
     c.executescript("""
+        CREATE TABLE IF NOT EXISTS user_profile_photos (
+            account TEXT PRIMARY KEY, approved BLOB, pending BLOB,
+            pending_revision TEXT, status TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS comm_push_key (id INTEGER PRIMARY KEY, private_key TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS comm_push_devices (
             device TEXT PRIMARY KEY, account TEXT NOT NULL, endpoint TEXT UNIQUE NOT NULL, subscription TEXT NOT NULL
@@ -250,6 +319,12 @@ def init_comms(c):
         CREATE TABLE IF NOT EXISTS comm_saved (
             account TEXT NOT NULL, message INTEGER NOT NULL, PRIMARY KEY (account, message)
         );
+        CREATE TABLE IF NOT EXISTS comm_hidden_groups (
+            account TEXT NOT NULL, thread INTEGER NOT NULL, PRIMARY KEY(account,thread)
+        );
+        CREATE TABLE IF NOT EXISTS comm_hidden_messages (
+            account TEXT NOT NULL, message INTEGER NOT NULL, PRIMARY KEY(account,message)
+        );
         CREATE TABLE IF NOT EXISTS comm_prefs (
             account TEXT PRIMARY KEY, body TEXT NOT NULL
         );
@@ -258,6 +333,7 @@ def init_comms(c):
 
 COMM_DEFAULTS = dict(direct=True, order='recent', dm='all', group='all', alerts=True)
 COMM_MESSAGES = """SELECT m.*, COALESCE(u.name,m.author_name) AS sender,
+    EXISTS(SELECT 1 FROM user_profile_photos f WHERE f.account=p.profile_id AND u.name IS NOT NULL AND f.approved IS NOT NULL) AS photo,
     EXISTS(SELECT 1 FROM comm_saved s WHERE s.account=? AND s.message=m.id) AS saved
     FROM comm_messages m LEFT JOIN receipt_profiles p ON p.profile_id=m.author
     LEFT JOIN users u ON u.name=p.name"""
@@ -285,7 +361,8 @@ def comm_member(c, thread, account):
 
 
 def comm_directory(c, account):
-    return [dict(row) for row in c.execute("""SELECT p.profile_id AS id, u.name
+    return [dict(row) for row in c.execute("""SELECT p.profile_id AS id, u.name,
+        EXISTS(SELECT 1 FROM user_profile_photos f WHERE f.account=p.profile_id AND f.approved IS NOT NULL) AS photo
         FROM users u JOIN receipt_profiles p ON p.name=u.name
         WHERE p.profile_id!=? ORDER BY u.name COLLATE NOCASE""", (account,))]
 
@@ -299,38 +376,53 @@ def comm_get(handler, c, u, path, query):
     if path == 'status':
         rows = c.execute("""SELECT a.thread AS id, COUNT(*) AS unread, MAX(m.id) AS latest
             FROM comm_members a JOIN comm_messages m ON m.thread=a.thread AND m.id>a.seen
-            WHERE a.account=? AND m.author!=? GROUP BY a.thread""", (account, account))
-        return handler.send({'unread': [dict(r) for r in rows], 'alerts': comm_preferences(c, account)['alerts']})
+            WHERE a.account=? AND m.author!=?
+              AND NOT EXISTS(SELECT 1 FROM comm_hidden_groups h WHERE h.account=a.account AND h.thread=a.thread)
+              AND NOT EXISTS(SELECT 1 FROM comm_hidden_messages h WHERE h.account=a.account AND h.message=m.id)
+            GROUP BY a.thread""", (account, account))
+        review=has_permission(u,'approve_profile_photos')
+        pending=c.execute('SELECT COUNT(*) FROM user_profile_photos WHERE pending_revision IS NOT NULL AND account!=?',
+                          (account,)).fetchone()[0] if review else 0
+        return handler.send({'unread': [dict(r) for r in rows], 'alerts': comm_preferences(c, account)['alerts'],
+                             'photo_review':review,'pending_photos':pending})
     if path == 'inbox':
         threads = [dict(r) for r in c.execute("""SELECT t.id,t.kind,t.title,a.seen,
+            EXISTS(SELECT 1 FROM comm_hidden_groups h WHERE h.account=a.account AND h.thread=t.id) AS hidden,
             COALESCE((SELECT MAX(m.id) FROM comm_messages m WHERE m.thread=t.id),0) AS latest
             FROM comm_threads t JOIN comm_members a ON a.thread=t.id WHERE a.account=?
             ORDER BY latest DESC,t.id DESC""", (account,))]
         for thread in threads:
-            members = c.execute("""SELECT u.name FROM comm_members a
+            members = c.execute("""SELECT u.name,a.account FROM comm_members a
                 JOIN receipt_profiles p ON p.profile_id=a.account JOIN users u ON u.name=p.name
                 WHERE a.thread=? AND a.account!=? ORDER BY u.name COLLATE NOCASE""", (thread['id'], account))
-            thread['members'] = [r[0] for r in members]
+            people = members.fetchall()
+            thread['members'] = [r['name'] for r in people]
+            if thread['kind'] == 'group' and has_permission(u,'manage_comms_groups'):
+                thread['member_ids'] = [r['account'] for r in people]
             if thread['kind'] == 'dm':
                 thread['title'] = next(iter(thread['members']), 'Former user')
         return handler.send({'threads': threads, 'team': comm_directory(c, account),
-                             'preferences': comm_preferences(c, account), 'account': account})
+                             'preferences': comm_preferences(c, account), 'account': account,
+                             'manage_groups': has_permission(u,'manage_comms_groups')})
     if path == 'messages':
         thread = comm_number(query.get('thread', [''])[0])
         before = comm_number(query.get('before', [''])[0], 2**63-1)
         comm_member(c, thread, account)
-        rows = c.execute(COMM_MESSAGES + ' WHERE m.thread=? AND m.id<? ORDER BY m.id DESC LIMIT 101',
-                         (account, thread, before)).fetchall()
+        rows = c.execute(COMM_MESSAGES + ''' WHERE m.thread=? AND m.id<?
+                         AND NOT EXISTS(SELECT 1 FROM comm_hidden_messages h WHERE h.account=? AND h.message=m.id)
+                         ORDER BY m.id DESC LIMIT 101''', (account, thread, before, account)).fetchall()
         return handler.send({'messages': [dict(r) for r in reversed(rows[:100])], 'older': len(rows)>100})
     if path in ('saved', 'files'):
         condition = ('EXISTS(SELECT 1 FROM comm_saved s WHERE s.account=a.account AND s.message=m.id)'
                      if path == 'saved' else 'm.filename IS NOT NULL')
         rows = c.execute(COMM_MESSAGES + ' JOIN comm_members a ON a.thread=m.thread WHERE a.account=? AND '
-                         + condition + ' ORDER BY m.id DESC', (account, account))
+                         + condition + ''' AND NOT EXISTS(SELECT 1 FROM comm_hidden_messages h
+                         WHERE h.account=a.account AND h.message=m.id) ORDER BY m.id DESC''', (account, account))
         return handler.send({'messages': [dict(r) for r in rows]})
     if path.startswith('file/'):
         row = c.execute("""SELECT f.data FROM comm_files f JOIN comm_messages m ON m.id=f.id
-            JOIN comm_members a ON a.thread=m.thread WHERE f.id=? AND a.account=?""",
+            JOIN comm_members a ON a.thread=m.thread WHERE f.id=? AND a.account=?
+            AND NOT EXISTS(SELECT 1 FROM comm_hidden_messages h WHERE h.account=a.account AND h.message=m.id)""",
                         (comm_number(path[5:]), account)).fetchone()
         if not row:
             raise Problem('File not found.', 404)
@@ -351,8 +443,12 @@ def comm_post(handler, c, u, path, d):
         c.execute('INSERT OR REPLACE INTO comm_prefs VALUES(?,?)', (account, json.dumps(d)))
         c.commit()
         return handler.send(d)
-    if path == 'create':
+    if path in ('create','manage-group'):
         kind, members, title = d.get('kind'), d.get('members'), d.get('title', '')
+        if path=='manage-group' or kind=='group':
+            if not has_permission(u,'manage_comms_groups'):
+                raise Problem('Create and manage groups permission required.',403)
+            kind='group'
         if kind not in ('dm', 'group') or not isinstance(members, list) or not 1 <= len(members) <= 50:
             raise Problem('Select members for this conversation.')
         if any(not isinstance(m, str) for m in members) or len(set(members)) != len(members):
@@ -374,12 +470,45 @@ def comm_post(handler, c, u, path, d):
             raise Problem('Enter a group name (1–80 characters).')
         else:
             title = title.strip()
+        if path=='manage-group':
+            thread=comm_number(d.get('thread'))
+            if comm_member(c,thread,account)['kind']!='group':
+                raise Problem('Group not found.',404)
+            c.execute('UPDATE comm_threads SET title=? WHERE id=?',(title,thread))
+            current={r[0] for r in c.execute('SELECT account FROM comm_members WHERE thread=? AND account!=?',(thread,account))}
+            removed=current-set(members)
+            c.executemany('DELETE FROM comm_members WHERE thread=? AND account=?',[(thread,p) for p in removed])
+            latest=c.execute('SELECT COALESCE(MAX(id),0) FROM comm_messages WHERE thread=?',(thread,)).fetchone()[0]
+            c.executemany('INSERT INTO comm_members(thread,account,seen) VALUES(?,?,?)',
+                          [(thread,p,latest) for p in members if p not in current])
+            c.commit()
+            return handler.send({'id':thread})
         thread = c.execute('INSERT INTO comm_threads(kind,title,direct_key) VALUES(?,?,?)',
                            (kind, title, direct_key)).lastrowid
         c.executemany('INSERT INTO comm_members(thread,account) VALUES(?,?)',
                       [(thread, member) for member in [account, *members]])
         c.commit()
         return handler.send({'id': thread})
+    if path=='hide-group':
+        thread=comm_number(d.get('thread'))
+        hidden=d.get('hidden')
+        if type(hidden) is not bool: raise Problem('Choose whether to hide the group.')
+        if comm_member(c,thread,account)['kind']!='group': raise Problem('Group not found.',404)
+        if hidden:
+            c.execute('INSERT OR IGNORE INTO comm_hidden_groups VALUES(?,?)',(account,thread))
+        else:
+            c.execute('DELETE FROM comm_hidden_groups WHERE account=? AND thread=?',(account,thread))
+        c.commit()
+        return handler.send({'ok':True})
+    if path=='delete-message':
+        message=comm_number(d.get('id'))
+        row=c.execute('SELECT thread FROM comm_messages WHERE id=?',(message,)).fetchone()
+        if comm_member(c,row['thread'] if row else 0,account)['kind']!='dm':
+            raise Problem('Only direct messages can be deleted from your view.',403)
+        c.execute('INSERT OR IGNORE INTO comm_hidden_messages VALUES(?,?)',(account,message))
+        c.execute('DELETE FROM comm_saved WHERE account=? AND message=?',(account,message))
+        c.commit()
+        return handler.send({'ok':True})
     if path == 'save':
         message, save = comm_number(d.get('id')), d.get('save')
         if type(save) is not bool:
@@ -433,6 +562,315 @@ def comm_post(handler, c, u, path, d):
     return handler.send({'id': message})
 
 
+def init_workforce(c):
+    c.executescript("""
+        CREATE TABLE IF NOT EXISTS work_clock_pins(account TEXT PRIMARY KEY, pin_hash TEXT UNIQUE NOT NULL);
+        CREATE TABLE IF NOT EXISTS work_pin_security(
+            id INTEGER PRIMARY KEY CHECK(id=1), salt TEXT NOT NULL, window INTEGER NOT NULL, failures INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS work_shifts(
+            id INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT NOT NULL, start INTEGER NOT NULL,
+            end INTEGER NOT NULL CHECK(end>start), location TEXT NOT NULL, notes TEXT NOT NULL,
+            revision INTEGER NOT NULL DEFAULT 1
+        );
+        CREATE INDEX IF NOT EXISTS work_shift_account ON work_shifts(account,start);
+        CREATE TABLE IF NOT EXISTS work_periods(
+            id INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT NOT NULL, start INTEGER NOT NULL,
+            end INTEGER CHECK(end>=start), site_in TEXT, site_out TEXT
+        );
+        CREATE INDEX IF NOT EXISTS work_period_account ON work_periods(account,start);
+        CREATE UNIQUE INDEX IF NOT EXISTS work_one_open ON work_periods(account) WHERE end IS NULL;
+        CREATE TABLE IF NOT EXISTS work_breaks(
+            id INTEGER PRIMARY KEY AUTOINCREMENT, period INTEGER NOT NULL, start INTEGER NOT NULL,
+            end INTEGER CHECK(end>=start)
+        );
+        CREATE INDEX IF NOT EXISTS work_break_period ON work_breaks(period);
+        CREATE UNIQUE INDEX IF NOT EXISTS work_one_open_break ON work_breaks(period) WHERE end IS NULL;
+        CREATE TABLE IF NOT EXISTS work_sites(
+            id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE COLLATE NOCASE,
+            latitude REAL NOT NULL, longitude REAL NOT NULL, radius REAL NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS work_clock_settings(
+            id INTEGER PRIMARY KEY CHECK(id=1), require_location INTEGER NOT NULL
+        );
+        INSERT OR IGNORE INTO work_clock_settings VALUES(1,1);
+    """)
+
+
+def clock_pin_hash(c, pin):
+    row=c.execute('SELECT salt FROM work_pin_security WHERE id=1').fetchone()
+    if not row:
+        salt=secrets.token_hex(16)
+        c.execute('INSERT INTO work_pin_security VALUES(1,?,0,0)',(salt,))
+    else:
+        salt=row['salt']
+    return password(pin,salt)
+
+
+def clock_pin_cookie(handler):
+    cookies=SimpleCookie()
+    cookies.load(handler.headers.get('Cookie',''))
+    value=cookies.get('clock_session')
+    return value.value if value else ''
+
+
+def clock_pin_user(handler,c):
+    token=clock_pin_cookie(handler)
+    session=CLOCK_SESSIONS.get(token)
+    if session and session[1]>time.time():
+        row=c.execute("""SELECT u.name,p.profile_id FROM receipt_profiles p JOIN users u ON u.name=p.name
+            JOIN work_clock_pins pin ON pin.account=p.profile_id
+            LEFT JOIN account_lockouts l ON l.name=u.name
+            WHERE p.profile_id=? AND l.locked_at IS NULL AND pin.pin_hash=?""",(session[0],session[2])).fetchone()
+        if row:
+            return dict(name=row['name'],receipt_owner=row['profile_id'],admin=False)
+    CLOCK_SESSIONS.pop(token,None)
+    raise Problem('Enter your Time Clock PIN again.',401)
+
+
+def clock_pin_login(handler,c,d):
+    if handler.external_scheme()!='https' and handler.client_address[0] not in ('127.0.0.1','::1'):
+        raise Problem('Use the secure staff address for PIN access.',403)
+    pin=d.get('pin')
+    if not isinstance(pin,str) or not re.fullmatch(r'[0-9]{6}',pin):
+        raise Problem('Enter your six-digit Time Clock PIN.')
+    now=int(time.time())
+    state=c.execute('SELECT window,failures FROM work_pin_security WHERE id=1').fetchone()
+    window,failures=(state['window'],state['failures']) if state and now-state['window']<300 else (now,0)
+    if failures>=8:
+        raise Problem('Too many PIN attempts. Try again in a few minutes, or sign in with your username.',429)
+    digest=clock_pin_hash(c,pin)
+    row=c.execute("""SELECT pin.account FROM work_clock_pins pin JOIN receipt_profiles p ON p.profile_id=pin.account
+        JOIN users u ON u.name=p.name LEFT JOIN account_lockouts l ON l.name=u.name
+        WHERE pin.pin_hash=? AND l.locked_at IS NULL""",(digest,)).fetchone()
+    if not row:
+        c.execute('UPDATE work_pin_security SET window=?,failures=? WHERE id=1',(window,failures+1))
+        c.commit()
+        raise Problem('That Time Clock PIN could not be used.',403)
+    CLOCK_SESSIONS.pop(clock_pin_cookie(handler),None)
+    for token,session in list(CLOCK_SESSIONS.items()):
+        if session[1]<=now or session[0]==row['account']:
+            del CLOCK_SESSIONS[token]
+    token=secrets.token_urlsafe(32)
+    CLOCK_SESSIONS[token]=(row['account'],now+180,digest)
+    return handler.send({'ok':True},cookie=f'clock_session={token}; HttpOnly; SameSite=Strict; Path=/api/workforce/quick; Max-Age=180')
+
+
+def work_bounds(day, length=1):
+    return tuple(int(dt.datetime.combine(day+dt.timedelta(days=offset),dt.time()).timestamp())
+                 for offset in (0,length))
+
+
+def work_week(value, today):
+    if value:
+        try:
+            day=dt.date.fromisoformat(value)
+            if not 1970<=day.year<=2100: raise ValueError()
+        except ValueError:
+            raise Problem('Choose a valid schedule date.')
+    else:
+        day=today
+    return day-dt.timedelta(days=day.weekday())
+
+
+def work_local(timestamp):
+    return dt.datetime.fromtimestamp(timestamp).strftime('%Y-%m-%dT%H:%M')
+
+
+def work_time(value):
+    if not isinstance(value,str):
+        raise Problem('Enter a start and end date and time.')
+    try:
+        parsed=dt.datetime.strptime(value,'%Y-%m-%dT%H:%M')
+        if not 1970<=parsed.year<=2100: raise ValueError()
+        timestamp=int(parsed.timestamp())
+        if dt.datetime.fromtimestamp(timestamp)!=parsed: raise ValueError()
+        return timestamp
+    except (ValueError,OverflowError,OSError):
+        raise Problem('Choose a valid date and time in the server time zone.')
+
+
+def work_hours(c, account, bounds, now):
+    first,last=bounds
+    last=min(last,now)
+    if first>=last:
+        return 0,0
+    periods=c.execute("""SELECT id,start,end FROM work_periods
+        WHERE account=? AND start<? AND (end IS NULL OR end>?)""",(account,last,first)).fetchall()
+    gross=breaks=0
+    for period in periods:
+        end=min(last,period['end'] if period['end'] is not None else last)
+        start=max(first,period['start'])
+        gross+=max(0,end-start)
+        for pause in c.execute('SELECT start,end FROM work_breaks WHERE period=? AND start<? AND (end IS NULL OR end>?)',
+                               (period['id'],end,start)):
+            breaks+=max(0,min(end,pause['end'] if pause['end'] is not None else end)-max(start,pause['start']))
+    return gross,max(0,gross-breaks)
+
+
+def work_open(c, account):
+    period=c.execute('SELECT id,start FROM work_periods WHERE account=? AND end IS NULL',(account,)).fetchone()
+    pause=c.execute('SELECT id,start FROM work_breaks WHERE period=? AND end IS NULL',
+                    (period['id'],)).fetchone() if period else None
+    return period,pause
+
+
+def work_require_location(c):
+    return bool(c.execute('SELECT require_location FROM work_clock_settings WHERE id=1').fetchone()[0])
+
+
+def work_shifts(c, week, account=None):
+    first,last=work_bounds(week,7)
+    args=(last,first)
+    query="""SELECT s.*,u.name FROM work_shifts s JOIN receipt_profiles p ON p.profile_id=s.account
+             JOIN users u ON u.name=p.name WHERE s.start<? AND s.end>?"""
+    if account is not None:
+        query+=' AND s.account=?'
+        args+= (account,)
+    return [{**dict(row),'start':work_local(row['start']),'end':work_local(row['end'])}
+            for row in c.execute(query+' ORDER BY s.start,u.name,s.id',args)]
+
+
+def work_get(handler,c,u,path,query,clock_only=False):
+    account=u['receipt_owner']
+    if not account: raise Problem('Staff account required.',403)
+    now=int(time.time())
+    today=dt.date.fromtimestamp(now)
+    week=work_week(query.get('week',[''])[0],today)
+    if path=='overview':
+        gross,worked=work_hours(c,account,work_bounds(today),now)
+        week_gross,week_worked=work_hours(c,account,work_bounds(week,7),now)
+        period,pause=work_open(c,account)
+        state='break' if pause else 'working' if period else 'out'
+        return handler.send(dict(week=week.isoformat(),today=today.isoformat(),now=now,
+            day_end=work_bounds(today)[1],week_end=work_bounds(week,7)[1],week_start=work_bounds(week,7)[0],
+            clock=dict(state=state,since=work_local(period['start']) if period else None,
+                       gross=gross,worked=worked,week_gross=week_gross,week_worked=week_worked),
+            require_location=work_require_location(c),sites_ready=bool(c.execute('SELECT 1 FROM work_sites LIMIT 1').fetchone()),
+            manage_schedule=has_permission(u,'manage_staff_schedule'),manage_sites=has_permission(u,'manage_work_sites'),
+            shifts=[] if clock_only else work_shifts(c,week,account)))
+    if path=='team':
+        if not has_permission(u,'manage_staff_schedule'): raise Problem('Schedule management permission required.',403)
+        people=[dict(row) for row in c.execute("""SELECT p.profile_id AS id,u.name FROM users u
+                    JOIN receipt_profiles p ON p.name=u.name ORDER BY u.name""")]
+        return handler.send(dict(people=people,shifts=work_shifts(c,week)))
+    if path=='sites':
+        if not has_permission(u,'manage_work_sites'): raise Problem('Work site management permission required.',403)
+        return handler.send(dict(required=work_require_location(c),
+                                 sites=[dict(row) for row in c.execute('SELECT * FROM work_sites ORDER BY name')]))
+    raise Problem('Not found.',404)
+
+
+def work_number(value, low, high):
+    if type(value) not in (int,float) or not low<=value<=high:
+        raise Problem('Enter valid location coordinates, accuracy and radius.')
+    return float(value)
+
+
+def work_check_location(c,position):
+    if not work_require_location(c):
+        return None
+    sites=c.execute('SELECT * FROM work_sites').fetchall()
+    if not sites:
+        raise Problem('A manager must add a work site before you can clock in or out.',409)
+    if not isinstance(position,dict):
+        raise Problem('Allow location access to clock in or out at a work site.',403)
+    lat=work_number(position.get('latitude'),-90,90)
+    lon=work_number(position.get('longitude'),-180,180)
+    accuracy=work_number(position.get('accuracy'),0,100000)
+    matched=[]
+    for site in sites:
+        lat1,lat2=math.radians(lat),math.radians(site['latitude'])
+        a=math.sin((lat2-lat1)/2)**2+math.cos(lat1)*math.cos(lat2)*math.sin(math.radians(site['longitude']-lon)/2)**2
+        distance=12742000*math.asin(math.sqrt(min(1,a)))
+        if distance+accuracy<=site['radius']:
+            matched.append((distance,site['name']))
+    if not matched:
+        raise Problem('Your location is outside an approved work site or too imprecise. Move closer and try again.',403)
+    return min(matched)[1]
+
+
+def work_post(handler,c,u,path,d,clock_only=False):
+    account=u['receipt_owner']
+    if not account: raise Problem('Staff account required.',403)
+    if path=='punch':
+        action=d.get('action')
+        period,pause=work_open(c,account)
+        allowed=('in',) if not period else ('out','end_break') if pause else ('out','start_break')
+        if action not in allowed: raise Problem('This punch is no longer available. Refresh and check your clock status.',409)
+        site=work_check_location(c,d.get('position')) if action in ('in','out') else None
+        now=int(time.time())
+        if (period and now<period['start']) or (pause and now<pause['start']):
+            raise Problem('The server clock changed. Ask a manager to check it before punching again.',409)
+        if action=='in':
+            c.execute('INSERT INTO work_periods(account,start,site_in) VALUES(?,?,?)',(account,now,site))
+        elif action=='start_break':
+            c.execute('INSERT INTO work_breaks(period,start) VALUES(?,?)',(period['id'],now))
+        else:
+            if pause: c.execute('UPDATE work_breaks SET end=? WHERE id=?',(now,pause['id']))
+            if action=='out': c.execute('UPDATE work_periods SET end=?,site_out=? WHERE id=?',(now,site,period['id']))
+        c.commit()
+        if clock_only:
+            CLOCK_SESSIONS.pop(clock_pin_cookie(handler),None)
+            return handler.send({'ok':True},cookie='clock_session=; HttpOnly; SameSite=Strict; Path=/api/workforce/quick; Max-Age=0')
+        return handler.send({'ok':True})
+    if path=='shift':
+        if not has_permission(u,'manage_staff_schedule'): raise Problem('Schedule management permission required.',403)
+        ident=d.get('id')
+        if ident is not None and (type(ident) is not int or not 0<ident<2**63): raise Problem('Invalid shift.')
+        if ident is not None:
+            old=c.execute('SELECT revision FROM work_shifts WHERE id=?',(ident,)).fetchone()
+            if not old or d.get('revision')!=old['revision']: raise Problem('This shift changed. Refresh the schedule and try again.',409)
+        if d.get('remove') is True:
+            if ident is None: raise Problem('Choose a shift to remove.')
+            c.execute('DELETE FROM work_shifts WHERE id=?',(ident,))
+        else:
+            employee=d.get('account')
+            if not isinstance(employee,str) or not c.execute("""SELECT 1 FROM receipt_profiles p JOIN users u
+                    ON u.name=p.name WHERE p.profile_id=?""",(employee,)).fetchone():
+                raise Problem('Choose a current employee.')
+            start,end=work_time(d.get('start')),work_time(d.get('end'))
+            if not 0<end-start<=48*3600: raise Problem('End the shift after it starts and within 48 hours.')
+            if c.execute('SELECT 1 FROM work_shifts WHERE account=? AND start<? AND end>? AND id!=?',
+                         (employee,end,start,ident or 0)).fetchone():
+                raise Problem('This employee already has a shift during those hours.',409)
+            location,notes=d.get('location',''),d.get('notes','')
+            if not isinstance(location,str) or not isinstance(notes,str) or len(location)>100 or len(notes)>500:
+                raise Problem('Use up to 100 characters for location and 500 for notes.')
+            fields=(employee,start,end,location.strip(),notes.strip())
+            if ident:
+                c.execute('UPDATE work_shifts SET account=?,start=?,end=?,location=?,notes=?,revision=revision+1 WHERE id=?',
+                          fields+(ident,))
+            else:
+                c.execute('INSERT INTO work_shifts(account,start,end,location,notes) VALUES(?,?,?,?,?)',fields)
+        c.commit()
+        return handler.send({'ok':True})
+    if path in ('site','site-policy'):
+        if not has_permission(u,'manage_work_sites'): raise Problem('Work site management permission required.',403)
+        if path=='site-policy':
+            if type(d.get('required')) is not bool: raise Problem('Choose whether to require location.')
+            c.execute('UPDATE work_clock_settings SET require_location=? WHERE id=1',(d['required'],))
+        else:
+            ident=d.get('id')
+            if ident is not None and (type(ident) is not int or not 0<ident<2**63): raise Problem('Invalid work site.')
+            if ident and not c.execute('SELECT 1 FROM work_sites WHERE id=?',(ident,)).fetchone():
+                raise Problem('Work site not found.',404)
+            if d.get('remove') is True:
+                if ident is None: raise Problem('Choose a work site to remove.')
+                c.execute('DELETE FROM work_sites WHERE id=?',(ident,))
+            else:
+                name=d.get('name')
+                if not isinstance(name,str) or not 1<=len(name.strip())<=80: raise Problem('Enter a work site name.')
+                fields=(name.strip(),work_number(d.get('latitude'),-90,90),
+                        work_number(d.get('longitude'),-180,180),work_number(d.get('radius'),30,2000))
+                if ident: c.execute('UPDATE work_sites SET name=?,latitude=?,longitude=?,radius=? WHERE id=?',fields+(ident,))
+                else: c.execute('INSERT INTO work_sites(name,latitude,longitude,radius) VALUES(?,?,?,?)',fields)
+        c.commit()
+        return handler.send({'ok':True})
+    raise Problem('Not found.',404)
+
+
+
 def init():
     with connect() as c:
         c.executescript('''CREATE TABLE IF NOT EXISTS users(name TEXT PRIMARY KEY COLLATE NOCASE, salt TEXT, hash TEXT, admin INTEGER);
@@ -451,6 +889,7 @@ CREATE TABLE IF NOT EXISTS receipt_categories(code TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS receipts(id TEXT PRIMARY KEY, at REAL, actor TEXT, category TEXT, filename TEXT, mime TEXT, body BLOB, source TEXT);
 CREATE TABLE IF NOT EXISTS audit(at TEXT, actor TEXT, action TEXT, job TEXT);''')
         init_comms(c)
+        init_workforce(c)
         if 'chosen_on' not in {r[1] for r in c.execute('PRAGMA table_info(landing_preferences)')}:
             c.execute('ALTER TABLE landing_preferences ADD COLUMN chosen_on TEXT')
         c.execute('CREATE TABLE IF NOT EXISTS local_admin_sessions(token_hash TEXT PRIMARY KEY,name TEXT COLLATE NOCASE,version TEXT)')
@@ -487,6 +926,9 @@ PERMISSIONS={
  'see_requests':'Show flashing Pending Requests button', 'call_contacts':'Show customer call button',
  'text_contacts':'Show On Our Way text button', 'navigate':'Show navigation button',
  'manage_roles':'Create and edit permission roles',
+ 'manage_comms_groups':'Create and manage groups',
+ 'approve_profile_photos':'Approve profile pictures',
+ 'manage_staff_schedule':'Create and edit staff shifts', 'manage_work_sites':'Manage time clock work sites and geofencing',
  'manage_vehicles':'Add vehicles', 'manage_users':'Add/remove employees and edit permissions',
  'rename_users':'Edit user names', 'unlock_users':'Unlock employee accounts after failed logins',
  'reset_passwords':'Reset employee passwords/passcodes', 'change_own_password':'Change own password/passcode',
@@ -511,7 +953,8 @@ DEFAULT_PAGE_COLORS={name:{'header':color,'light':'#faf6f5','dark':'#101821'} fo
 def permission_groups():
     dispatch={'view_reports','view_schedule','create_appointments','edit_appointments','delete_appointments','update_status','cancel_appointments','submit_requests','review_requests','see_requests','call_contacts','text_contacts','navigate','manage_vehicles','show_vehicle_filter','show_search'}
     paging={'send_pages','receive_pages'};receipts={'submit_receipts','view_all_receipts'}
-    return {'Application Settings':[k for k in PERMISSIONS if k not in dispatch|paging|receipts],'Thrift Mart Dispatch':[k for k in PERMISSIONS if k in dispatch],'Store Associate Paging':[k for k in PERMISSIONS if k in paging],'Receipts & Accounting':[k for k in PERMISSIONS if k in receipts],'Print with a Purpose':[]}
+    workforce={'manage_staff_schedule','manage_work_sites'}
+    return {'Application Settings':[k for k in PERMISSIONS if k not in dispatch|paging|receipts|workforce],'Thrift Mart Dispatch':[k for k in PERMISSIONS if k in dispatch],'Store Associate Paging':[k for k in PERMISSIONS if k in paging],'Receipts & Accounting':[k for k in PERMISSIONS if k in receipts],'Print with a Purpose':[],'Scheduling & Time Clock':[k for k in PERMISSIONS if k in workforce]}
 
 def has_permission(u,key): return bool(u['admin'] or u.get('grants',{}).get(key,False))
 def route_allowed(u,path): return has_permission(u,ROUTE_PERMISSIONS.get(path,''))
@@ -860,8 +1303,14 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send({'users':people})
                 if self.path=='/api/receipt-categories':
                     return self.send({'categories':[r[0] for r in c.execute('SELECT code FROM receipt_categories ORDER BY code')]})
+                if urlsplit(self.path).path=='/api/workforce/quick':
+                    return work_get(self,c,clock_pin_user(self,c),'overview',{},clock_only=True)
                 u=self.user()
                 request=urlsplit(self.path)
+                if request.path.startswith('/api/profile/'):
+                    return profile_get(self,c,u,request.path[len('/api/profile/'):])
+                if request.path.startswith('/api/workforce/'):
+                    return work_get(self,c,u,request.path[len('/api/workforce/'):],parse_qs(request.query))
                 if request.path.startswith('/api/comms/'):
                     return comm_get(self,c,u,request.path[len('/api/comms/'):],parse_qs(request.query))
                 if self.path.startswith('/api/receipt-file/'):
@@ -983,6 +1432,14 @@ class Handler(BaseHTTPRequestHandler):
                     self.send({'ok':True})
                     threading.Thread(target=self.server.shutdown,daemon=True).start()
                     return
+                if self.path=='/api/workforce/quick/login':
+                    return clock_pin_login(self,c,d)
+                if self.path=='/api/workforce/quick/close':
+                    CLOCK_SESSIONS.pop(clock_pin_cookie(self),None)
+                    return self.send({'ok':True},cookie='clock_session=; HttpOnly; SameSite=Strict; Path=/api/workforce/quick; Max-Age=0')
+                if self.path=='/api/workforce/quick/punch':
+                    clock_user=clock_pin_user(self,c)
+                    return work_post(self,c,clock_user,'punch',d,clock_only=True)
                 if self.path in ('/api/setup','/api/login'):
                     name=str(d.get('name','')).strip(); p=str(d.get('password',''))
                     if self.path=='/api/setup':
@@ -1054,6 +1511,10 @@ class Handler(BaseHTTPRequestHandler):
                     c.execute('INSERT INTO receipt_details VALUES(?,?,?)',(ident,int(reimbursement),int(uploader is None)))
                     return self.send({'ok':True,'id':ident,'email_pending':True})
                 u=self.user()
+                if self.path.startswith('/api/profile/'):
+                    return profile_post(self,c,u,self.path[len('/api/profile/'):],d)
+                if self.path.startswith('/api/workforce/'):
+                    return work_post(self,c,u,self.path[len('/api/workforce/'):],d)
                 if self.path.startswith('/api/comms/'):
                     return comm_post(self,c,u,self.path[len('/api/comms/'):],d)
                 if self.path=='/api/page-colors':
@@ -1260,6 +1721,27 @@ class Handler(BaseHTTPRequestHandler):
                 elif self.path=='/api/user':
                     if not route_allowed(u,self.path): raise Problem('Administrator access required.',403)
                     self.add_user(c,str(d.get('name','')).strip(),str(d.get('password','')),False)
+                elif self.path=='/api/admin/clock-pin':
+                    if not has_permission(u,'reset_passwords'): raise Problem('Password reset permission required.',403)
+                    name,pin=d.get('name'),d.get('pin')
+                    if not isinstance(name,str) or not isinstance(pin,str) or (pin and not re.fullmatch(r'[0-9]{6}',pin)):
+                        raise Problem('Enter a six-digit Time Clock PIN.')
+                    target=c.execute('SELECT p.profile_id,u.admin FROM users u JOIN receipt_profiles p ON p.name=u.name WHERE u.name=?',
+                                     (name,)).fetchone()
+                    if not target: raise Problem('User not found.',404)
+                    if target['admin'] and not u['admin']: raise Problem('Only an administrator can manage this PIN.',403)
+                    account=target['profile_id']
+                    if pin:
+                        digest=clock_pin_hash(c,pin)
+                        if c.execute('SELECT 1 FROM work_clock_pins WHERE pin_hash=? AND account!=?',(digest,account)).fetchone():
+                            raise Problem('That PIN is in use. Choose another PIN.',409)
+                        c.execute('INSERT INTO work_clock_pins VALUES(?,?) ON CONFLICT(account) DO UPDATE SET pin_hash=excluded.pin_hash',
+                                  (account,digest))
+                    else:
+                        c.execute('DELETE FROM work_clock_pins WHERE account=?',(account,))
+                    c.commit()
+                    for token,session in list(CLOCK_SESSIONS.items()):
+                        if session[0]==account: del CLOCK_SESSIONS[token]
                 elif self.path=='/api/admin/rename-user':
                     if not has_permission(u,'rename_users'):
                         raise Problem('Edit user names permission required.',403)
@@ -1309,6 +1791,8 @@ class Handler(BaseHTTPRequestHandler):
                     if target['admin']: raise Problem('Administrator accounts cannot be removed here.',403)
                     c.execute('DELETE FROM users WHERE name=?',(target['name'],))
                     c.execute('DELETE FROM comm_push_devices WHERE account=(SELECT profile_id FROM receipt_profiles WHERE name=?)',(target['name'],))
+                    c.execute('DELETE FROM work_clock_pins WHERE account=(SELECT profile_id FROM receipt_profiles WHERE name=?)',(target['name'],))
+                    c.execute('DELETE FROM user_profile_photos WHERE account=(SELECT profile_id FROM receipt_profiles WHERE name=?)',(target['name'],))
                     c.execute('DELETE FROM receipt_profiles WHERE name=?',(target['name'],))
                     c.execute('DELETE FROM user_roles WHERE name=?',(target['name'],))
                     c.execute('DELETE FROM account_lockouts WHERE name=?',(target['name'],))

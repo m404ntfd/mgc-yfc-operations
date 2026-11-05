@@ -60,9 +60,22 @@ class CommunicationTests(unittest.TestCase):
         prefs = dict(direct=False, order='unread', dm='all', group='all', alerts=False)
         self.assertEqual(call('comms/preferences', prefs, blair), (200, prefs))
         self.assertEqual(call('comms/send', dict(thread=thread, text='Blocked'), alex)[0], 403)
-        group = call('comms/create', dict(kind='group', title='Volunteers',
-            members=[people['Blair'], people['Casey']]), alex)[1]['id']
-        self.assertEqual(call('comms/send', dict(thread=group, text='Group update'), alex)[0], 200)
+        group_data=dict(kind='group', title='Volunteers', members=[people['Blair'],people['Casey']])
+        self.assertEqual(call('comms/create',group_data,alex)[0],403)
+        groups_role=call('roles',dict(name='Group manager',grants={'manage_comms_groups':True}))[1]['id']
+        self.assertEqual(call('admin/user-role',dict(name='Alex',role_id=groups_role))[0],200)
+        group=call('comms/create',group_data,alex)[1]['id']
+        group_message=call('comms/send',dict(thread=group,text='Group update'),alex)[1]['id']
+        self.assertEqual(call('comms/delete-message',dict(id=group_message),blair)[0],403)
+        self.assertEqual(call('comms/manage-group',dict(group_data,thread=group),blair)[0],403)
+        self.assertEqual(call('comms/hide-group',dict(thread=group,hidden=True),casey)[0],200)
+        casey_group=call('comms/inbox',client=casey)[1]['threads'][0]
+        self.assertTrue(casey_group['hidden'])
+        self.assertEqual(call('comms/status',client=casey)[1]['unread'],[])
+        self.assertEqual(call('comms/hide-group',dict(thread=group,hidden=False),casey)[0],200)
+        self.assertEqual(call(f'comms/messages?thread={group}',client=casey)[1]['messages'][0]['id'],group_message)
+        self.assertEqual(call('comms/manage-group',dict(group_data,thread=group,title='Volunteer Team'),alex)[0],200)
+        self.assertEqual(call('comms/inbox',client=casey)[1]['threads'][0]['title'],'Volunteer Team')
         self.assertEqual(call('comms/status', client=blair)[1]['alerts'], False)
         self.assertEqual(call('comms/status', client=casey)[1]['unread'][0]['id'], group)
         self.assertEqual(call(f'comms/messages?thread={group}')[0], 404)
@@ -78,6 +91,33 @@ class CommunicationTests(unittest.TestCase):
         self.assertEqual(call('comms/inbox', client=login('Blair Morgan'))[1]['account'], people['Blair'])
         self.assertEqual(call('comms/saved', client=blair)[1]['messages'][0]['id'], message)
         self.assertEqual(call('comms/inbox', client=blair)[1]['preferences'], prefs)
+        self.assertEqual(call('comms/delete-message',dict(id=message),casey)[0],404)
+        self.assertEqual(call('comms/delete-message',dict(id=message),blair)[0],200)
+        self.assertEqual(call(f'comms/messages?thread={thread}',client=blair)[1]['messages'],[])
+        self.assertEqual(call('comms/saved',client=blair)[1]['messages'],[])
+        self.assertEqual(call(f'comms/messages?thread={thread}',client=alex)[1]['messages'][0]['id'],message)
+        raw=b'\xff\xd8\xff'+b'profile-test'+b'\xff\xd9'
+        self.assertEqual(call('profile/upload',dict(image=base64.b64encode(raw).decode()),alex)[0],200)
+        pending=call('profile/mine',client=alex)[1]
+        profile_id,revision=pending['account'],pending['pending_revision']
+        review_data=dict(account=profile_id,revision=revision,decision='approve')
+        self.assertEqual(call('profile/review',review_data,casey)[0],403)
+        base=f'http://127.0.0.1:{Fixture.port}/api/profile'
+        url=f'{base}/pending/{profile_id}/{revision}'
+        with self.assertRaises(urllib.error.HTTPError) as hidden_photo:
+            casey.open(url)
+        self.assertEqual(hidden_photo.exception.code,404)
+        hidden_photo.exception.close()
+        reviewer=call('roles',dict(name='Photo reviewer',grants={'approve_profile_photos':True}))[1]['id']
+        self.assertEqual(call('admin/user-role',dict(name='Casey',role_id=reviewer))[0],200)
+        self.assertEqual(call('comms/status',client=casey)[1]['pending_photos'],1)
+        self.assertEqual(call('comms/status')[1]['pending_photos'],1)
+        with casey.open(url) as photo:
+            self.assertEqual(photo.read(),raw)
+        self.assertEqual(call('profile/review',review_data,casey)[0],200)
+        self.assertEqual(call('profile/review',review_data)[0],409)
+        with blair.open(f'{base}/photo/{profile_id}') as photo:
+            self.assertEqual(photo.read(),raw)
         # A reused name does not inherit the old account's conversations.
         self.assertEqual(call('admin/remove-user', dict(name='Casey'))[0], 200)
         self.assertEqual(call('user', dict(name='Casey', password=password))[0], 200)

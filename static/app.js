@@ -207,7 +207,7 @@ settingsGroups.forEach((group,i)=>{const button=document.createElement('button')
 $('settings').prepend(settingsCategories,settingsTabs,settingsEmpty);settingsCategory(null);
 
 const globalActions=document.querySelector('.bottomActions');document.querySelector('main').append(globalActions);globalActions.hidden=true;
-function updateSignedInUser(){if(!user)commReset();else {commPoll();if(isMobileView()||commIsIos())commPreparePush();}globalActions.hidden=!user; $('loggedOutStatus').hidden=!!user; $('signedInUser').textContent=user?'Signed in as '+user.name:'';$('signedInUser').hidden=!user; }
+function updateSignedInUser(){if(!user){commReset();profileReset();}else {commPoll();if(isMobileView()||commIsIos())commPreparePush();}$('headerShortcuts').hidden=!user;globalActions.hidden=!user; $('loggedOutStatus').hidden=!!user; $('signedInUser').textContent=user?'Signed in as '+user.name:'';$('signedInUser').hidden=!user; }
 
 let permissionCatalog={},savedUserGrants={};
 async function loadPermissionList(name){$('savePermissions').disabled=true;$('permissionChecklist').textContent='Loading permissions…';try{const data=await api('admin/permission-catalog');permissionCatalog=data.permissions;savedUserGrants=Object.fromEntries(data.users.map(u=>[u.name,u.grants]));const roleData=await api('roles');populateEmployeeRole(name,roleData);const person=state.users.find(u=>u.name===name);const defaults={view_schedule:true,submit_requests:true,cancel_appointments:true,call_contacts:true,text_contacts:true,navigate:true,change_own_password:true,submit_receipts:true};for(const key of ['create_appointments','edit_appointments','delete_appointments','update_status','review_requests'])defaults[key]=!!person.can_create;defaults.see_requests=!!person.see_requests;const grants={...defaults,...(savedUserGrants[name]||{})};employeeIndividualGrants={...grants};$('permissionChecklist').innerHTML=Object.entries(permissionCatalog).map(([key,label])=>`<label><input type="checkbox" data-grant="${key}" ${person.admin||grants[key]?'checked':''} ${person.admin?'disabled':''}> ${esc(label)}</label>`).join('');setEmployeeRoleMode();$('savePermissions').disabled=false;}catch(e){$('permissionMessage').textContent=e.message;}}
@@ -338,9 +338,13 @@ async function pollPages(){if(!pagingEnabled||pagingBusy||!user)return;pagingBus
 
 function setSectionHeader(title,section){
  section=section===true?'dispatch':section===false?'signin':section;
+ if(section!=='workforce'&&$('workforce')&&!workPanel.hidden){
+  workPanel.hidden=true;
+  workVersion++;
+ }
  if(section!=='comms'&&!commPanel.hidden){commPanel.hidden=true;commVersion++;$('commPrefsDialog').close();}
  $('currentSection').textContent=title;document.body.dataset.section=section;
- document.querySelector('meta[name="theme-color"]').content=({dispatch:'#b51f2b',paging:'#7a1520',receipts:'#067a06',print:'#073ea6',comms:'#9fcf04'})[section]||'#215baa';applyPageColors();
+ document.querySelector('meta[name="theme-color"]').content=({dispatch:'#b51f2b',paging:'#7a1520',receipts:'#067a06',print:'#073ea6',comms:'#9fcf04',workforce:'#cb04cf'})[section]||'#215baa';applyPageColors();
 }
 let requestedReceipts=false;
 function populateDailySections(preference){
@@ -525,9 +529,11 @@ function renderUserList(){
  const edit=can('manage_users')||can('reset_passwords');
  $('users').innerHTML=state.users.map(person=>{
   const name=esc(person.name);
+  const pin=can('reset_passwords')&&(!person.admin||user.admin);
   const rename=can('rename_users')&&(!person.admin||user.admin);
   return `<div class="listRow"><span>${name}${person.admin?' · Administrator':''}</span>
    <span>${rename?`<button type="button" data-rename-user="${name}">Edit name</button>`:''}
+   ${pin?`<button type="button" data-clock-pin="${name}">Time Clock PIN</button>`:''}
    ${edit?`<button type="button" data-password="${name}">Edit user / permissions</button>`:''}</span></div>`;
  }).join('');
 }
@@ -607,7 +613,7 @@ commPanel.innerHTML = `
     <button type="button" data-comm-view="saved">Saved messages</button>
     <button type="button" data-comm-view="team">Team</button>
    </div>
-   <div class="commLists"><h3>Groups</h3><button type="button" id="commGroup">＋ Create group</button><div id="commGroups"></div>
+   <div class="commLists"><h3>Groups</h3><button type="button" id="commGroup">＋ Create group</button><div id="commGroups"></div><button type="button" id="commHiddenGroups" hidden>Hidden groups</button>
    <h3>Direct messages</h3><div id="commDirect"></div></div>
   </aside>
   <div class="commWorkspace">
@@ -671,8 +677,10 @@ function commBadge() {
 }
 function commSidebar() {
  const {threads, preferences} = commInbox;
+ $('commGroup').hidden = !commInbox.manage_groups;
+ $('commHiddenGroups').hidden = !threads.some(t=>t.kind==='group'&&t.hidden);
  for (const [kind, list] of [['dm', 'commDirect'], ['group', 'commGroups']]) {
-  const items = threads.filter(t => t.kind === kind && (preferences[kind] !== 'unread' || commUnread.has(t.id) || t.id === commThread));
+  const items = threads.filter(t => !t.hidden && t.kind === kind && (preferences[kind] !== 'unread' || commUnread.has(t.id) || t.id === commThread));
   if (preferences.order === 'unread') items.sort((a,b) => Number(commUnread.has(b.id)) - Number(commUnread.has(a.id)));
   const focused = document.activeElement?.dataset.commThread;
   $(list).innerHTML = items.map(t => `<button type="button" data-comm-thread="${t.id}" aria-pressed="${t.id===commThread}"><span>${esc(t.title)}</span>${commUnread.has(t.id) ? `<strong class="commBadge" aria-label="Unread messages">${commUnread.get(t.id).unread}</strong>` : ''}</button>`).join('') || '<p class="muted">No conversations to show.</p>';
@@ -696,10 +704,12 @@ async function commLoadInbox() {
  commInbox = data; commSidebar(); return true;
 }
 function commMessage(m, list = false) {
- const title = commInbox.threads.find(t => t.id === m.thread)?.title;
+ const thread = commInbox.threads.find(t => t.id === m.thread);
+ const title = thread?.hidden ? '' : thread?.title;
  return `<article class="commMessage${m.author === commInbox.account ? ' mine' : ''}">
-  <div class="commMessageHead"><strong>${esc(m.sender)}</strong><time datetime="${new Date(m.sent*1000).toISOString()}">${esc(new Date(m.sent*1000).toLocaleString([], {dateStyle:'medium',timeStyle:'short'}))}</time>
-  <button type="button" data-comm-save="${m.id}" aria-pressed="${!!m.saved}">${m.saved ? 'Unsave' : 'Save'}</button></div>
+  <div class="commMessageHead">${commAvatar(m.author,m.sender,m.photo)}<strong>${esc(m.sender)}</strong><time datetime="${new Date(m.sent*1000).toISOString()}">${esc(new Date(m.sent*1000).toLocaleString([], {dateStyle:'medium',timeStyle:'short'}))}</time>
+  <button type="button" data-comm-save="${m.id}" aria-pressed="${!!m.saved}">${m.saved ? 'Unsave' : 'Save'}</button>
+  ${thread?.kind==='dm' ? `<button type="button" data-comm-delete="${m.id}">Delete for me</button>` : ''}</div>
   ${list && title ? `<button type="button" class="commJump" data-comm-thread="${m.thread}">${esc(title)}</button>` : ''}
   ${m.text ? `<p>${esc(m.text)}</p>` : ''}
   ${m.filename ? `<a href="/api/comms/file/${m.id}" download="${esc(m.filename)}">${esc(m.filename)}</a>` : ''}</article>`;
@@ -739,48 +749,57 @@ async function commLoadMessages(version, before = 0) {
 }
 async function commOpenThread(id) {
  const thread = commInbox.threads.find(t => t.id === id);
- if (!thread) return;
+ if (!thread || thread.hidden) return;
  const version = commScreen('thread', thread.title, id);
  $('commMembers').textContent = thread.kind === 'group' ? ['You', ...thread.members].join(', ') : 'Direct message';
+ if(thread.kind==='group'){
+  const controls=document.createElement('span');
+  controls.className='commGroupControls';
+  controls.innerHTML=`<button type="button" data-comm-hide-group="${id}">Hide group</button>${commInbox.manage_groups?'<button type="button" id="commManageGroup">Manage group</button>':''}`;
+  $('commMembers').append(controls);
+ }
  $('commTitle').tabIndex = -1; $('commTitle').focus({preventScroll:true});
  try { await commLoadMessages(version); } catch (e) { if (version === commVersion) commError(e.message); }
 }
-function commTeam(mode) {
+function commTeam(mode, group = null) {
  const isGroup = mode === 'group', isTeam = mode === 'team';
- commScreen(mode, isGroup ? 'Create group' : isTeam ? 'Team directory' : 'New message');
+ if(isGroup&&!commInbox.manage_groups)return;
+ commScreen(mode, isGroup ? (group?'Manage group':'Create group') : isTeam ? 'Team directory' : 'New message');
  $('commContent').innerHTML = `<div class="commDirectory">
   ${isGroup ? '<label>Group name<input id="commGroupName" maxlength="80" placeholder="e.g. Volunteer coordinators"></label>' : ''}
   <label>${isGroup ? 'Find members' : 'Search team members'}<input id="commSearch" type="search" placeholder="Search by name"></label>
   <div id="commPeople"></div>
   ${isGroup ? '<button class="primary" type="button" id="commCreateGroup">Create group</button>' : ''}
  </div>`;
- const chosen = new Set(), search = $('commSearch');
+ const chosen = new Set(group?.member_ids ?? []), search = $('commSearch');
+ const action=group?'Save group':'Create group';
+ if(group)$('commGroupName').value=group.title;
  function render() {
   const matches = commInbox.team.filter(p => p.name.toLowerCase().includes(search.value.trim().toLowerCase()));
   $('commPeople').innerHTML = matches.map(p => {
-   const label = `<span class="commInitial" aria-hidden="true">${esc(p.name.trim().slice(0, 2).toUpperCase())}</span><span>${esc(p.name)}</span>`;
+   const label = `${commAvatar(p.id,p.name,p.photo)}<span>${esc(p.name)}</span>`;
    return isGroup ? `<label class="commPerson"><input type="checkbox" value="${esc(p.id)}" ${chosen.has(p.id) ? 'checked' : ''}>${label}</label>`
     : `<button type="button" class="commPerson" data-comm-person="${esc(p.id)}">${label}</button>`;
   }).join('') || '<p class="commEmpty">No team members found.</p>';
-  if (isGroup) $('commCreateGroup').textContent = `Create group${chosen.size ? ' (' + chosen.size + ' selected)' : ''}`;
+  if (isGroup) $('commCreateGroup').textContent = `${action}${chosen.size ? ' (' + chosen.size + ' selected)' : ''}`;
  }
  search.oninput = render; render();
  $('commPeople').onchange = ({target}) => {
   if (target.checked) chosen.add(target.value); else chosen.delete(target.value);
-  $('commCreateGroup').textContent = `Create group${chosen.size ? ' (' + chosen.size + ' selected)' : ''}`;
+  $('commCreateGroup').textContent = `${action}${chosen.size ? ' (' + chosen.size + ' selected)' : ''}`;
  };
- if (isGroup) $('commCreateGroup').onclick = e => commCreate(e.currentTarget, 'group', [...chosen], $('commGroupName').value);
+ if (isGroup) $('commCreateGroup').onclick = e => commCreate(e.currentTarget, 'group', [...chosen], $('commGroupName').value, group?.id);
  else $('commPeople').onclick = e => {
   const b = e.target.closest('[data-comm-person]');
   if (b) commCreate(b, 'dm', [b.dataset.commPerson]);
  };
  search.focus();
 }
-async function commCreate(button, kind, members, title = '') {
+async function commCreate(button, kind, members, title = '', thread) {
  const version = commVersion;
  button.disabled = true; commError();
  try {
-  const result = await commApi('create', {kind, members, title});
+  const result = await commApi(thread?'manage-group':'create', {kind, members, title, thread});
   if (version === commVersion && await commLoadInbox() && version === commVersion) await commOpenThread(result.id);
  } catch (e) { if (version === commVersion) commError(e.message); }
  finally { button.disabled = false; }
@@ -810,6 +829,13 @@ commAlert.onclick = () => commOpen(commAlertThread);
 $('commBack').onclick = () => commScreen('home', 'Communications Hub');
 $('commNew').onclick = () => commTeam('new');
 $('commGroup').onclick = () => commTeam('group');
+function commShowHiddenGroups(){
+ commScreen('hidden-groups','Hidden groups');
+ $('commContent').innerHTML=commInbox.threads.filter(t=>t.kind==='group'&&t.hidden)
+  .map(t=>`<article class="commMessage"><strong>${esc(t.title)}</strong> <button type="button" data-comm-restore-group="${t.id}">Restore group</button></article>`)
+  .join('')||'<p class="commEmpty">No hidden groups.</p>';
+}
+$('commHiddenGroups').onclick=commShowHiddenGroups;
 commPanel.addEventListener('click', async e => {
  const button = e.target.closest('button');
  if (!button) return;
@@ -817,6 +843,35 @@ commPanel.addEventListener('click', async e => {
  if (thread) return commOpenThread(Number(thread));
  if (view) return view === 'team' ? commTeam(view) : commCollection(view);
  try {
+  if(button.id==='commManageGroup'){
+   const group=commInbox.threads.find(t=>t.id===commThread);
+   if(group)commTeam('group',group);
+   return;
+  }
+  const {commDelete,commHideGroup,commRestoreGroup}=button.dataset;
+  if(commDelete){
+   if(!confirm('Delete this direct message from your view?'))return;
+   button.disabled=true;
+   const id=Number(commDelete);
+   await commApi('delete-message',{id});
+   if(version!==commVersion)return;
+   if(commView==='thread'){commRows=commRows.filter(m=>m.id!==id);commRenderThread();}
+   else await commCollection(commView);
+   return;
+  }
+  if(commHideGroup||commRestoreGroup){
+   button.disabled=true;
+   const id=Number(commHideGroup||commRestoreGroup);
+   await commApi('hide-group',{thread:id,hidden:!!commHideGroup});
+   if(version!==commVersion)return;
+   if(commHideGroup)commUnread.delete(id);
+   if(await commLoadInbox()&&version===commVersion){
+    if(commHideGroup)commScreen('home','Communications Hub');
+    else await commOpenThread(id);
+    commBadge();
+   }
+   return;
+  }
   if (button.id === 'commOlder') { button.disabled = true; await commLoadMessages(version, commRows[0]?.id); }
   if (save) {
    button.disabled = true;
@@ -1087,6 +1142,7 @@ async function commPoll() {
  try {
   const result = await commApi('status');
   if (signedIn !== user) return;
+  profileReviewStatus(result);
   const fresh = result.unread.filter(r => commHighWater !== null && r.latest > commHighWater);
   const alert = fresh.filter(r => document.hidden || commPanel.hidden || r.id !== commThread).sort((a,b) => b.latest-a.latest)[0];
   commHighWater = Math.max(commHighWater ?? 0, ...result.unread.map(r => r.latest));
@@ -1105,3 +1161,581 @@ async function commPoll() {
 }
 setInterval(commPoll, 4500);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) commPoll(); });
+
+// Staff scheduling and time clock.
+const workMenu = document.createElement('button');
+workMenu.type = 'button';
+workMenu.id = 'workforceSection';
+workMenu.textContent = 'Scheduling & Time Clock';
+$('commsSection').after(workMenu);
+const workPanel = document.createElement('section');
+workPanel.id = 'workforce';
+workPanel.hidden = true;
+workPanel.innerHTML = `
+ <div class="workHead"><p class="workKicker">STAFF OPERATIONS</p><h2>Scheduling &amp; Time Clock</h2></div>
+ <nav class="workTabs" aria-label="Scheduling and time clock">
+  <button type="button" data-work-view="clock">Time clock</button>
+  <button type="button" data-work-view="mine">My schedule</button>
+  <button type="button" data-work-view="team" hidden>Manager schedule</button>
+  <button type="button" data-work-view="sites" hidden>Work sites</button>
+ </nav>
+ <p id="workStatus" role="status"></p>
+ <button id="workQuickBack" type="button" hidden>Back to sign in</button>
+ <div id="workWeekControls" class="workWeek" hidden>
+  <button type="button" id="workPrev" aria-label="Previous week">‹</button>
+  <label>Week of <input type="date" id="workWeekDate"></label>
+  <button type="button" id="workNext" aria-label="Next week">›</button>
+  <button type="button" id="workThisWeek">This week</button>
+ </div>
+ <section data-work-panel="clock">
+  <h3 id="workClockState">Loading time clock…</h3>
+  <div class="workTotals">
+   <div><span>Clocked in today</span><strong id="workGross">—</strong></div>
+   <div><span>Worked today, excluding breaks</span><strong id="workNet">—</strong></div>
+  </div>
+  <p id="workGeoStatus"></p>
+  <div class="actions" id="workPunches">
+   <button type="button" class="primary" data-work-punch="in" hidden>Clock in</button>
+   <button type="button" data-work-punch="start_break" hidden>Start break</button>
+   <button type="button" class="primary" data-work-punch="end_break" hidden>End break</button>
+   <button type="button" data-work-punch="out" hidden>Clock out</button>
+  </div>
+ </section>
+ <section data-work-panel="mine" hidden>
+  <h3>My schedule</h3>
+  <div class="workTotals">
+   <div><span>Clocked in this week</span><strong id="workWeekGross">—</strong></div>
+   <div><span>Worked this week, excluding breaks</span><strong id="workWeekNet">—</strong></div>
+  </div>
+  <div id="workMyShifts" class="workList"></div>
+ </section>
+ <section data-work-panel="team" hidden>
+  <h3>Manager schedule</h3>
+  <p>Shift dates and times use the server’s local time.</p>
+  <div id="workTeamShifts" class="workList"></div>
+  <button type="button" id="workAddShift" class="primary">Add shift</button>
+  <form id="workShiftForm" class="workForm" hidden>
+   <h3 id="workShiftTitle">Add shift</h3>
+   <label>Employee<select name="account" required></select></label>
+   <label>Start<input type="datetime-local" name="start" required></label>
+   <label>End<input type="datetime-local" name="end" required></label>
+   <label>Location<input name="location" maxlength="100"></label>
+   <label>Notes<textarea name="notes" maxlength="500" rows="2"></textarea></label>
+   <div class="actions"><button type="button" id="workCancelShift">Cancel</button><button class="primary">Save shift</button></div>
+  </form>
+ </section>
+ <section data-work-panel="sites" hidden>
+  <h3>Work sites and geofencing</h3>
+  <form id="workPolicyForm">
+   <label class="workCheck"><input type="checkbox" name="required"> Require a location check at clock-in and clock-out</label>
+   <p>Location is checked only when clocking in or out. Starting and ending breaks do not require it.</p>
+   <button type="submit" class="primary">Save location policy</button>
+  </form>
+  <div id="workSiteList" class="workList"></div>
+  <button type="button" id="workAddSite">Add work site</button>
+  <form id="workSiteForm" class="workForm" hidden>
+   <h3 id="workSiteTitle">Add work site</h3>
+   <label>Site name<input name="name" maxlength="80" required></label>
+   <label>Latitude<input name="latitude" type="number" min="-90" max="90" step="any" required></label>
+   <label>Longitude<input name="longitude" type="number" min="-180" max="180" step="any" required></label>
+   <label>Radius (meters)<input name="radius" type="number" min="30" max="2000" step="any" required value="150"></label>
+   <div class="actions"><button type="button" id="workUseLocation">Use my current location</button><button type="button" id="workCancelSite">Cancel</button><button class="primary">Save work site</button></div>
+  </form>
+ </section>`;
+document.querySelector('main').append(workPanel);
+
+const workApi = (path, data) => api('workforce/' + path, data);
+let workQuick=false,workQuickTimeout;
+let workView = 'clock', workWeek = '', workData, workLoadedAt = 0, workVersion = 0, workFetch = 0, workBusy = false;
+let workTeam = {people:[],shifts:[]}, workSites = [], workEditingShift = null, workEditingSite = null;
+
+function workStatus(message = '') { $('workStatus').textContent = message; }
+function workDuration(value) {
+ const seconds = Math.floor(Math.max(0,value));
+ return `${Math.floor(seconds/3600)}h ${String(Math.floor(seconds/60)%60).padStart(2,'0')}m ${String(seconds%60).padStart(2,'0')}s`;
+}
+function workTick() {
+ if (!workData || (!user&&!workQuick) || workPanel.hidden) return;
+ const elapsed = Math.floor((performance.now() - workLoadedAt)/1000);
+ const clock = workData.clock;
+ const dayDelta = Math.max(0,Math.min(elapsed,workData.day_end-workData.now));
+ const weekDelta = workData.now >= workData.week_start && workData.now < workData.week_end
+  ? Math.max(0,Math.min(elapsed,workData.week_end-workData.now)) : 0;
+ $('workGross').textContent = workDuration(clock.gross + (clock.state!=='out' ? dayDelta : 0));
+ $('workNet').textContent = workDuration(clock.worked + (clock.state==='working' ? dayDelta : 0));
+ $('workWeekGross').textContent = workDuration(clock.week_gross + (clock.state!=='out' ? weekDelta : 0));
+ $('workWeekNet').textContent = workDuration(clock.week_worked + (clock.state==='working' ? weekDelta : 0));
+}
+function workShiftList(shifts, editable) {
+ return shifts.map(shift=>`<article class="workRow">
+  <div><strong>${editable?esc(shift.name):esc(shift.location || 'Scheduled shift')}</strong>
+  <p>${esc(shift.start.replace('T',' '))} – ${esc(shift.end.replace('T',' '))}</p>
+  ${editable&&shift.location?`<p>${esc(shift.location)}</p>`:''}
+  ${shift.notes?`<p>${esc(shift.notes)}</p>`:''}</div>
+  ${editable?`<div class="actions"><button type="button" data-edit-shift="${shift.id}">Edit</button><button type="button" data-remove-shift="${shift.id}">Remove</button></div>`:''}
+ </article>`).join('') || '<p>No shifts scheduled for this week.</p>';
+}
+function workRender(data) {
+ workData = data;
+ workLoadedAt = performance.now();
+ workWeek = data.week;
+ $('workWeekDate').value = data.week;
+ $('workClockState').textContent = ({out:'Clocked out',working:'Clocked in',break:'On break'})[data.clock.state]
+  + (data.clock.since ? ' since ' + data.clock.since.replace('T',' ') : '');
+ $('workGeoStatus').textContent = data.require_location
+  ? (data.sites_ready ? 'Clock in and out from an approved work site.' : 'A manager needs to add a work site before clock-in and clock-out.')
+  : 'Location checks are off.';
+ const allowed = ({out:['in'],working:['out','start_break'],break:['out','end_break']})[data.clock.state];
+ for (const button of workPanel.querySelectorAll('[data-work-punch]')) {
+  const punch=button.dataset.workPunch;
+  button.hidden=!allowed.includes(punch);
+  button.disabled=workBusy || (data.require_location&&!data.sites_ready&&['in','out'].includes(punch));
+ }
+ workPanel.querySelector('[data-work-view=team]').hidden = !data.manage_schedule;
+ workPanel.querySelector('[data-work-view=sites]').hidden = !data.manage_sites;
+ $('workMyShifts').innerHTML = workShiftList(data.shifts, false);
+ workTick();
+}
+async function workLoad(version = workVersion) {
+ const signedIn=user, request=++workFetch, query='?week='+encodeURIComponent(workWeek);
+ try {
+  const data=await workApi(workQuick?'quick':'overview'+query);
+  if (workPanel.hidden || version!==workVersion || request!==workFetch || user!==signedIn) return;
+  if ((workView==='team'&&!data.manage_schedule)||(workView==='sites'&&!data.manage_sites)) {
+   workSelect('clock');return;
+  }
+  workRender(data);
+  if (workView==='team') {
+   const result=await workApi('team'+query);
+   if (workPanel.hidden || version!==workVersion || request!==workFetch || user!==signedIn) return;
+   workTeam=result;
+   $('workAddShift').disabled=false;
+   $('workTeamShifts').innerHTML=workShiftList(result.shifts,true);
+  }
+  if (workView==='sites') {
+   const result=await workApi('sites');
+   if (workPanel.hidden || version!==workVersion || request!==workFetch || user!==signedIn) return;
+   workSites=result.sites;
+   $('workAddSite').disabled=false;
+   $('workPolicyForm').querySelector('button').disabled=false;
+   $('workPolicyForm').elements.required.checked=result.required;
+   $('workSiteList').innerHTML=result.sites.map(site=>`<article class="workRow">
+    <div><strong>${esc(site.name)}</strong><p>${site.radius} m radius</p></div>
+    <div class="actions"><button type="button" data-edit-site="${site.id}">Edit</button><button type="button" data-remove-site="${site.id}">Remove</button></div>
+   </article>`).join('') || '<p>No work sites configured.</p>';
+  }
+ } catch (err) {
+  if (version===workVersion && request===workFetch && user===signedIn && !workPanel.hidden) {
+   if(workQuick&&err.message==='Enter your Time Clock PIN again.')workCloseQuick(err.message);
+   else workStatus(err.message);
+  }
+ }
+}
+function workSelect(view) {
+ workView=view;
+ workVersion++;
+ workStatus();
+ $('workWeekControls').hidden=!['mine','team'].includes(view);
+ $('workShiftForm').hidden=$('workSiteForm').hidden=true;
+ if(view==='team'){
+  $('workTeamShifts').textContent='Loading shifts…';
+  $('workAddShift').disabled=true;
+ }
+ if(view==='sites'){
+  $('workSiteList').textContent='Loading work sites…';
+  $('workAddSite').disabled=true;
+  $('workPolicyForm').querySelector('button').disabled=true;
+ }
+ for (const tab of workPanel.querySelectorAll('[data-work-view]')) tab.setAttribute('aria-pressed',String(tab.dataset.workView===view));
+ for (const panel of workPanel.querySelectorAll('[data-work-panel]')) panel.hidden=panel.dataset.workPanel!==view;
+ workLoad();
+}
+function workOpen(quick=false){
+ if (!quick&&!user) return;
+ workQuick=quick;
+ if(quick)$('auth').hidden=true;
+ else storeSection('dispatch');
+ $('app').hidden=true;
+ workPanel.hidden=false;
+ workPanel.querySelector('.workHead h2').textContent=quick?'Time Clock':'Scheduling & Time Clock';
+ workPanel.querySelector('.workTabs').hidden=quick;
+ $('workQuickBack').hidden=!quick;
+ setSectionHeader(quick?'Time Clock':'Scheduling & Time Clock','workforce');
+ workWeek='';
+ workData=null;
+ workTeam={people:[],shifts:[]};
+ workSites=[];
+ $('workClockState').textContent='Loading time clock…';
+ for(const id of ['workGeoStatus','workMyShifts','workTeamShifts','workSiteList'])$(id).textContent='';
+ for(const id of ['workGross','workNet','workWeekGross','workWeekNet'])$(id).textContent='—';
+ for(const button of workPanel.querySelectorAll('[data-work-punch],[data-work-view=team],[data-work-view=sites]'))button.hidden=true;
+ workSelect('clock');
+}
+workMenu.onclick=()=>workOpen();
+function workMoveWeek(days) {
+ if (!workWeek) return;
+ const next=new Date(workWeek+'T12:00:00Z');
+ next.setUTCDate(next.getUTCDate()+days);
+ workWeek=next.toISOString().slice(0,10);
+ workSelect(workView);
+}
+$('workPrev').onclick=()=>workMoveWeek(-7);
+$('workNext').onclick=()=>workMoveWeek(7);
+$('workThisWeek').onclick=()=>{workWeek='';workSelect(workView);};
+$('workWeekDate').onchange=e=>{workWeek=e.target.value;workSelect(workView);};
+
+function workPosition() {
+ if (!window.isSecureContext || !navigator.geolocation)
+  return Promise.reject(Error('Open the secure HTTPS staff address to share your location.'));
+ return new Promise((resolve,reject)=>navigator.geolocation.getCurrentPosition(position=>{
+  const {latitude,longitude,accuracy}=position.coords;
+  resolve({latitude,longitude,accuracy});
+ },error=>reject(Error(error.code===1 ? 'Allow location access for this site and try again.' :
+  'Could not get an accurate location. Move to a spot with better reception and try again.')),
+ {enableHighAccuracy:true,maximumAge:0,timeout:15000}));
+}
+async function workPunch(action) {
+ if (!workData || workBusy) return;
+ const signedIn=user,version=workVersion;
+ workBusy=true;
+ for(const button of workPanel.querySelectorAll('[data-work-punch]')) button.disabled=true;
+ workStatus();
+ try {
+  const data={action};
+  if (workData.require_location && ['in','out'].includes(action)) {
+   workStatus('Checking your location…');
+   data.position=await workPosition();
+  }
+  if (user!==signedIn || version!==workVersion || workPanel.hidden) return;
+  await workApi(workQuick?'quick/punch':'punch',data);
+  if (user===signedIn && version===workVersion) {
+   if(workQuick)workCloseQuick('Punch recorded.');
+   else workStatus('Punch recorded.');
+  }
+ } catch (err) {
+  if (user===signedIn && version===workVersion) workStatus(err.message);
+ } finally {
+  workBusy=false;
+  if (!workPanel.hidden && user===signedIn) await workLoad();
+ }
+}
+function workEditShift(shift) {
+ const form=$('workShiftForm');
+ form.reset();
+ workEditingShift=shift;
+ $('workShiftTitle').textContent=shift?'Edit shift':'Add shift';
+ const fields=form.elements;
+ fields.account.replaceChildren(new Option('Choose an employee',''),...workTeam.people.map(p=>new Option(p.name,p.id)));
+ if (shift) for (const key of ['account','start','end','location','notes']) fields[key].value=shift[key];
+ form.hidden=false;
+ fields.account.focus();
+}
+function workEditSite(site) {
+ const form=$('workSiteForm');
+ form.reset();
+ workEditingSite=site;
+ $('workSiteTitle').textContent=site?'Edit work site':'Add work site';
+ if (site) for (const key of ['name','latitude','longitude','radius']) form.elements.namedItem(key).value=site[key];
+ form.hidden=false;
+ form.elements.namedItem('name').focus();
+}
+async function workSave(path,data,button,form) {
+ const signedIn=user,version=workVersion;
+ if (button) button.disabled=true;
+ workStatus();
+ try {
+  await workApi(path,data);
+  if (user!==signedIn || version!==workVersion || workPanel.hidden) return;
+  if(form) form.hidden=true;
+  workStatus('Saved.');
+  await workLoad(version);
+ } catch(err) { if(user===signedIn&&version===workVersion)workStatus(err.message); }
+ finally { if(button)button.disabled=false; }
+}
+$('workAddShift').onclick=()=>workEditShift(null);
+$('workCancelShift').onclick=()=>$('workShiftForm').hidden=true;
+$('workAddSite').onclick=()=>workEditSite(null);
+$('workCancelSite').onclick=()=>$('workSiteForm').hidden=true;
+$('workUseLocation').onclick=async e=>{
+ const button=e.currentTarget,version=workVersion,form=$('workSiteForm');
+ button.disabled=true;
+ try{
+  const position=await workPosition();
+  if(version!==workVersion||form.hidden)return;
+  for(const field of ['latitude','longitude'])form.elements[field].value=position[field].toFixed(7);
+  workStatus('Location filled in. Review the site and radius, then save.');
+ }catch(err){if(version===workVersion)workStatus(err.message);}
+ finally{button.disabled=false;}
+};
+$('workShiftForm').onsubmit=e=>{
+ e.preventDefault();
+ const data=Object.fromEntries(new FormData(e.currentTarget));
+ if(workEditingShift)Object.assign(data,{id:workEditingShift.id,revision:workEditingShift.revision});
+ workSave('shift',data,e.submitter,e.currentTarget);
+};
+$('workSiteForm').onsubmit=e=>{
+ e.preventDefault();
+ const data=Object.fromEntries(new FormData(e.currentTarget));
+ for(const field of ['latitude','longitude','radius'])data[field]=Number(data[field]);
+ if(workEditingSite)data.id=workEditingSite.id;
+ workSave('site',data,e.submitter,e.currentTarget);
+};
+$('workPolicyForm').onsubmit=e=>{
+ e.preventDefault();
+ workSave('site-policy',{required:e.currentTarget.elements.required.checked},e.submitter);
+};
+workPanel.addEventListener('click',e=>{
+ const button=e.target.closest('button');
+ if(!button)return;
+ const {workView:view,workPunch:punch,editShift,removeShift,editSite,removeSite}=button.dataset;
+ if(view){workSelect(view);return;}
+ if(punch){workPunch(punch);return;}
+ if(editShift)workEditShift(workTeam.shifts.find(s=>s.id===Number(editShift)));
+ if(removeShift&&confirm('Remove this scheduled shift?')){
+  const shift=workTeam.shifts.find(s=>s.id===Number(removeShift));
+  if(shift)workSave('shift',{id:shift.id,revision:shift.revision,remove:true},button);
+ }
+ if(editSite)workEditSite(workSites.find(s=>s.id===Number(editSite)));
+ if(removeSite&&confirm('Remove this approved work site?'))workSave('site',{id:Number(removeSite),remove:true},button);
+});
+setInterval(workTick,1000);
+setInterval(()=>{
+ if((user||workQuick)&&!workPanel.hidden&&!workBusy&&['clock','mine'].includes(workView))workLoad();
+},20000);
+
+const headerShortcuts=document.createElement('div');
+headerShortcuts.id='headerShortcuts';
+headerShortcuts.hidden=true;
+headerShortcuts.innerHTML=`
+ <button type="button" id="headerHome" title="Return to Home" aria-label="Return to Home">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10h-6v-6H9v6H3z"/></svg>
+ </button>
+ <button type="button" id="headerClock" title="Time Clock" aria-label="Open Time Clock">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+ </button>`;
+$('connection').after(headerShortcuts);
+$('headerHome').onclick=()=>$('accountButton').click();
+$('headerClock').onclick=()=>workOpen();
+
+const loginClock=document.createElement('a');
+loginClock.id='loginTimeClock';
+loginClock.href='#time-clock';
+loginClock.setAttribute('role','button');
+loginClock.textContent='Time Clock';
+$('login').querySelector('button.primary').after(loginClock);
+loginClock.onkeydown=e=>{if(e.key===' '){e.preventDefault();loginClock.click();}};
+const quickClockDialog=document.createElement('dialog');
+quickClockDialog.innerHTML='<form id="quickClockForm"><h2>Time Clock</h2><label>Time Clock PIN<input name="pin" type="password" inputmode="numeric" autocomplete="off" pattern="[0-9]{6}" maxlength="6" required></label><p id="quickClockError" role="alert"></p><div class="actions"><button type="button" id="quickClockCancel">Cancel</button><button class="primary">Open Time Clock</button></div></form>';
+document.body.append(quickClockDialog);
+loginClock.onclick=e=>{
+ e.preventDefault();
+ $('quickClockForm').reset();
+ $('quickClockError').textContent='';
+ quickClockDialog.showModal();
+};
+$('quickClockCancel').onclick=()=>quickClockDialog.close();
+$('quickClockForm').onsubmit=async e=>{
+ e.preventDefault();
+ const form=e.currentTarget,button=e.submitter;
+ button.disabled=true;
+ $('quickClockError').textContent='';
+ try{
+  await workApi('quick/login',{pin:form.elements.pin.value});
+  form.reset();
+  if(!quickClockDialog.open){await workApi('quick/close',{});return;}
+  quickClockDialog.close();
+  workOpen(true);
+  clearTimeout(workQuickTimeout);
+  workQuickTimeout=setTimeout(()=>workCloseQuick('Enter your Time Clock PIN again.'),180000);
+ }catch(err){$('quickClockError').textContent=err.message;}
+ finally{button.disabled=false;}
+};
+function workCloseQuick(message=''){
+ if(!workQuick)return;
+ clearTimeout(workQuickTimeout);
+ workQuick=false;
+ workData=null;
+ setSectionHeader('Sign in','signin');
+ $('auth').hidden=false;
+ loginClock.focus();
+ workApi('quick/close',{}).catch(()=>{});
+ if(message)toast(message);
+}
+$('workQuickBack').onclick=()=>workCloseQuick();
+
+const clockPinDialog=document.createElement('dialog');
+clockPinDialog.innerHTML='<form id="clockPinForm"><h2>Time Clock PIN</h2><p id="clockPinPerson"></p><label>New six-digit PIN<input name="pin" type="password" inputmode="numeric" autocomplete="off" pattern="[0-9]{6}" maxlength="6" required></label><p id="clockPinError" role="alert"></p><div class="actions"><button type="button" id="clockPinRemove">Remove PIN</button><button type="button" id="clockPinCancel">Cancel</button><button class="primary">Save PIN</button></div></form>';
+document.body.append(clockPinDialog);
+let clockPinTarget;
+$('users').addEventListener('click',e=>{
+ const button=e.target.closest('[data-clock-pin]');
+ if(!button)return;
+ clockPinTarget=button.dataset.clockPin;
+ $('clockPinForm').reset();
+ $('clockPinPerson').textContent=clockPinTarget;
+ $('clockPinError').textContent='';
+ clockPinDialog.showModal();
+});
+$('clockPinCancel').onclick=()=>clockPinDialog.close();
+async function setClockPin(pin,button){
+ button.disabled=true;
+ $('clockPinError').textContent='';
+ try{
+  await api('admin/clock-pin',{name:clockPinTarget,pin});
+  clockPinDialog.close();
+  toast(pin?'Time Clock PIN saved.':'Time Clock PIN removed.');
+ }catch(err){$('clockPinError').textContent=err.message;}
+ finally{button.disabled=false;}
+}
+$('clockPinForm').onsubmit=e=>{
+ e.preventDefault();
+ setClockPin(e.currentTarget.elements.pin.value,e.submitter);
+};
+$('clockPinRemove').onclick=e=>setClockPin('',e.currentTarget);
+
+const profileMenu=document.createElement('button');
+profileMenu.type='button';
+profileMenu.textContent='My profile';
+$('chooseStartSection').before(profileMenu);
+const photoNotifications=document.createElement('button');
+photoNotifications.type='button';
+photoNotifications.id='photoNotifications';
+photoNotifications.hidden=true;
+photoNotifications.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 5 2 7 2 7H4s2-2 2-7m4 10a2 2 0 0 0 4 0"/></svg><span id="photoReviewCount" hidden></span>';
+photoNotifications.title='Notifications';
+photoNotifications.setAttribute('aria-label','Notifications');
+headerShortcuts.append(photoNotifications);
+
+const profileDialog=document.createElement('dialog');
+profileDialog.innerHTML=`<form id="profilePhotoForm">
+ <h2>My profile</h2><div id="profilePhotos" class="profilePhotos"></div>
+ <p id="profilePhotoStatus" role="status"></p>
+ <label>Choose a profile picture<input type="file" id="profilePhotoInput" accept="image/*" required></label>
+ <div class="actions"><button type="button" id="closeProfilePhoto">Close</button><button class="primary">Submit for approval</button></div>
+ </form>`;
+const photoQueueDialog=document.createElement('dialog');
+photoQueueDialog.innerHTML=`<h2>Notifications</h2><h3>Profile picture approvals</h3>
+ <p id="photoQueueStatus" role="status"></p><div id="photoQueue"></div>
+ <div class="actions"><button type="button" id="closePhotoQueue">Close</button></div>`;
+document.body.append(profileDialog,photoQueueDialog);
+
+const profileApi=(path,data)=>api('profile/'+path,data);
+let photoPendingCount=0;
+function profileReset(){
+ photoNotifications.hidden=true;
+ photoPendingCount=0;
+ profileDialog.close();
+ photoQueueDialog.close();
+ $('profilePhotos').replaceChildren();
+ $('photoQueue').replaceChildren();
+ $('profilePhotoForm').reset();
+}
+function profileReviewStatus(result){
+ const count=result.pending_photos||0;
+ photoNotifications.hidden=!result.photo_review;
+ $('photoReviewCount').hidden=!count;
+ $('photoReviewCount').textContent=count;
+ photoNotifications.setAttribute('aria-label',count?`Notifications, ${count} profile picture approvals`:'Notifications');
+ if(!result.photo_review&&photoQueueDialog.open)photoQueueDialog.close();
+ if(result.photo_review&&count!==photoPendingCount&&photoQueueDialog.open)loadPhotoQueue();
+ photoPendingCount=count;
+}
+function commAvatar(id,name,photo){
+ if(photo)return `<img class="commInitial" src="/api/profile/photo/${encodeURIComponent(id)}" alt="" loading="lazy">`;
+ return `<span class="commInitial" aria-hidden="true">${esc(name.trim().slice(0,2).toUpperCase())}</span>`;
+}
+async function loadProfilePhoto(){
+ const signedIn=user;
+ const photo=await profileApi('mine');
+ if(user!==signedIn||!profileDialog.open)return;
+ const id=encodeURIComponent(photo.account||'');
+ $('profilePhotos').innerHTML=(photo.approved?`<figure><img alt="Approved profile picture" src="/api/profile/photo/${id}"><figcaption>Current picture</figcaption></figure>`:'')+
+  (photo.pending_revision?`<figure><img alt="Pending profile picture" src="/api/profile/pending/${id}/${encodeURIComponent(photo.pending_revision)}"><figcaption>Awaiting approval</figcaption></figure>`:'');
+ $('profilePhotoStatus').textContent=({
+  pending:'Your submitted picture is waiting for approval.',
+  approved:'Your picture is approved and visible to signed-in staff.',
+  rejected:'Your last submission was declined. You can submit another picture.',
+  none:'Your picture will appear after a reviewer approves it.'
+ })[photo.status]||'';
+}
+profileMenu.onclick=async()=>{
+ closeStoreMenu();
+ $('profilePhotoForm').reset();
+ $('profilePhotos').replaceChildren();
+ $('profilePhotoStatus').textContent='Loading profile…';
+ profileDialog.showModal();
+ try{await loadProfilePhoto();}catch(e){$('profilePhotoStatus').textContent=e.message;}
+};
+$('closeProfilePhoto').onclick=()=>profileDialog.close();
+async function profilePhotoData(file){
+ if(file.size>12000000)throw Error('Choose a picture smaller than 12 MB.');
+ const url=URL.createObjectURL(file);
+ try{
+  const picture=new Image();
+  picture.src=url;
+  try{await picture.decode();}catch{throw Error('Choose an image your browser can open, such as JPEG or PNG.');}
+  const canvas=document.createElement('canvas');
+  canvas.width=canvas.height=256;
+  const context=canvas.getContext('2d');
+  const side=Math.min(picture.naturalWidth,picture.naturalHeight);
+  if(!context||!side)throw Error('This picture could not be opened.');
+  context.fillStyle='#fff';
+  context.fillRect(0,0,256,256);
+  context.drawImage(picture,(picture.naturalWidth-side)/2,(picture.naturalHeight-side)/2,side,side,0,0,256,256);
+  return canvas.toDataURL('image/jpeg',0.88).split(',')[1];
+ }finally{URL.revokeObjectURL(url);}
+}
+$('profilePhotoForm').onsubmit=async e=>{
+ e.preventDefault();
+ const file=$('profilePhotoInput').files[0], signedIn=user, button=e.submitter;
+ if(!file)return;
+ button.disabled=true;
+ try{
+  const image=await profilePhotoData(file);
+  if(user!==signedIn)return;
+  await profileApi('upload',{image});
+  if(user!==signedIn)return;
+  $('profilePhotoForm').reset();
+  await loadProfilePhoto();
+  commPoll();
+ }catch(err){if(user===signedIn)$('profilePhotoStatus').textContent=err.message;}
+ finally{button.disabled=false;}
+};
+async function loadPhotoQueue(){
+ const signedIn=user;
+ try{
+  const {requests}=await profileApi('queue');
+  if(user!==signedIn||!photoQueueDialog.open)return;
+  $('photoQueue').innerHTML=requests.map(request=>{
+   const id=encodeURIComponent(request.account),revision=encodeURIComponent(request.pending_revision);
+   return `<article class="profileReviewRow"><img alt="" src="/api/profile/pending/${id}/${revision}">
+    <div><strong>${esc(request.name)}</strong><p>Profile picture approval</p>
+     ${request.own?'<p>Another reviewer will review your photo.</p>':
+     `<div class="actions"><button type="button" data-decision="reject" data-account="${id}" data-revision="${revision}">Decline</button><button type="button" class="primary" data-decision="approve" data-account="${id}" data-revision="${revision}">Approve</button></div>`}
+    </div></article>`;
+  }).join('')||'<p>No profile pictures are waiting for approval.</p>';
+ }catch(err){if(user===signedIn&&photoQueueDialog.open)$('photoQueueStatus').textContent=err.message;}
+}
+photoNotifications.onclick=()=>{
+ $('photoQueue').replaceChildren();
+ $('photoQueueStatus').textContent='';
+ photoQueueDialog.showModal();
+ loadPhotoQueue();
+};
+$('closePhotoQueue').onclick=()=>photoQueueDialog.close();
+$('photoQueue').onclick=async e=>{
+ const button=e.target.closest('[data-decision]');
+ if(!button)return;
+ const row=button.closest('article'),signedIn=user;
+ const {decision,account,revision}=button.dataset;
+ for(const control of row.querySelectorAll('button'))control.disabled=true;
+ try{
+  await profileApi('review',{decision,account,revision});
+  if(user!==signedIn)return;
+  $('photoQueueStatus').textContent=decision==='approve'?'Picture approved.':'Picture declined.';
+  await loadPhotoQueue();
+  commPoll();
+ }catch(err){
+  if(user===signedIn){$('photoQueueStatus').textContent=err.message;await loadPhotoQueue();}
+ }
+};

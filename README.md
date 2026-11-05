@@ -14,9 +14,21 @@ After signing in, open **Communications Hub** in the section menu. Use **New mes
 
 New messages show an unread indicator and an alert inside the signed-in app. Mobile notifications are on by default. At first sign-in on a supported phone, tap **Allow notifications** to open the device permission prompt. You can turn mobile notifications off in **Communications Hub → Preferences** or use **Enable notifications on this device** there if you skipped setup. On desktop, enable notifications from the same Preferences screen. Keep **Show new message alerts** checked. Repeat on each computer or phone. Use the HTTPS staff address on remote devices. On iPhone or iPad (iOS/iPadOS 16.4 or later), add the site to the Home Screen and open it from its icon before enabling notifications. Supported desktop and Android browsers can also receive notifications after the app tab closes.
 
+Use **Delete for me** on a direct message to remove it from your own conversation, saved messages, and files. **Hide group** removes the group from your conversation list and pauses its alerts. Restore it from **Hidden groups** to see the same history. Administrators can grant **Create and manage groups** in Roles. This permission lets a member rename a group and change its membership. Added members can see the group's existing messages.
+
+Upload a picture from **My profile** in the section menu. The submitted picture is visible to you and reviewers until approved, and your current approved picture stays in place while a replacement is pending. Give designated staff **Approve profile pictures** in Roles. Pending requests appear in the reviewers' **Notifications** area.
+
 Servers upgrading from an installation without Web Push need the full Windows installer. The server needs outbound HTTPS to the browser's push provider. Notifications contain a generic alert, and opening one takes staff to Communications Hub after sign-in. Signing out turns off push for that browser. For a source checkout, install the server dependency with `python -m pip install -r requirements-push.txt`.
 
 Manage staff accounts and reusable permission sets in **Settings → Application Settings → Users**. Use the **Users** tab for accounts or the **Roles** tab for permission sets.
+
+## Scheduling & Time Clock
+
+Open **Scheduling & Time Clock** from the section menu. Staff can view their own shifts and weekly hours in **My schedule**. The **Time clock** tab shows the current punch state, total time clocked in today and hours worked excluding recorded breaks. Use **Clock in**, **Start break**, **End break**, and **Clock out** to record time. Shifts, punches and weekly totals use the server's local calendar and time.
+
+Administrators can assign **Create and edit staff shifts** or **Manage time clock work sites and geofencing** in Roles. Use **Manager schedule** to add, edit or remove shifts. In **Work sites**, save at least one approved site and its radius before staff punch in or out. Location checks start enabled. Staff must use the secure address and allow location access at the time of a geofenced shift punch. Breaks do not require location. The server stores the matched work-site name rather than the device coordinates.
+
+Signed-in users have **Home** and **Time Clock** shortcuts below the connection status. On the sign-in screen, **Time Clock** accepts a separate six-digit PIN without a username. In **Users**, an administrator or someone with password reset permission assigns a unique Time Clock PIN. PIN access is limited to one punch, and regular location rules still apply. Open the HTTPS staff address on remote devices.
 
 ## Other computer: Remote Manager
 
