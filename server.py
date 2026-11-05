@@ -23,6 +23,7 @@ DATA.mkdir(parents=True, exist_ok=True)
 DB=DATA/'schedule.db'
 LOCK=threading.RLock()
 SESSIONS={}
+MOBILE_MEDIA={}
 ATTEMPTS={}
 RESTART=False
 STOPPING=False
@@ -400,8 +401,44 @@ class Handler(BaseHTTPRequestHandler):
         session['can_create']=has_permission(session,'create_appointments')
         session['see_requests']=has_permission(session,'see_requests')
         return session
+    def serve_mobile_media(self,head_only=False):
+        path=urlsplit(self.path).path
+        if path not in ('/media/mobile-intro.mp4','/media/mobile-intro.webm'):return False
+        extension=path.rsplit('.',1)[1]
+        if extension not in MOBILE_MEDIA:
+            html=(ROOT/'static/index.html').read_text(encoding='utf-8')
+            match=re.search(r'<script[^>]*id="splashMedia"[^>]*>(.*?)</script>',html,re.S)
+            MOBILE_MEDIA[extension]=base64.b64decode(json.loads(match.group(1))['mobile'+extension].split(',',1)[1])
+        raw=MOBILE_MEDIA[extension];total=len(raw);start=0;end=total-1;status=200
+        etag='"'+hashlib.sha256(raw).hexdigest()+'"'
+        requested=self.headers.get('Range') if not head_only else None
+        if self.headers.get('If-Range') not in (None,etag):requested=None
+        if requested:
+            match=re.fullmatch(r'bytes=(\d*)-(\d*)',requested.strip())
+            try:
+                if not match or not any(match.groups()):raise ValueError()
+                first,last=match.groups()
+                if first:start=int(first);end=min(int(last),total-1) if last else total-1
+                else:
+                    count=int(last)
+                    if count<=0:raise ValueError()
+                    start=max(0,total-count)
+                if start>=total or start>end:raise ValueError()
+                status=206
+            except (ValueError,OverflowError):
+                self.send_response(416);self.send_header('Content-Range','bytes */'+str(total));self.send_header('Content-Length','0');self.end_headers();return True
+        self.send_response(status);self.send_header('Content-Type','video/'+extension);self.send_header('Accept-Ranges','bytes');self.send_header('Content-Length',str(end-start+1));self.send_header('Cache-Control','no-store');self.send_header('ETag',etag)
+        if status==206:self.send_header('Content-Range',f'bytes {start}-{end}/{total}')
+        self.end_headers()
+        if not head_only:
+            try:self.wfile.write(raw[start:end+1])
+            except (BrokenPipeError,ConnectionResetError):pass
+        return True
+    def do_HEAD(self):
+        if not self.serve_mobile_media(True):self.send_error(404)
     def do_GET(self):
         try:
+            if self.serve_mobile_media():return
             if self.path=='/offline.gif':return self.send(web_asset('gif'),kind='image/gif')
             if self.path in ('/app-icon-180.png','/app-icon-192.png','/app-icon-512.png'):return self.send(web_asset(self.path.split('-')[-1].split('.')[0]),kind='image/png')
             if self.path=='/manifest.webmanifest':return self.send(json.dumps({'name':'MGC YFC Operations','short_name':'YFC Operations','start_url':'/','scope':'/','display':'standalone','background_color':'#101821','theme_color':'#073ea6','icons':[{'src':'/app-icon-'+str(size)+'.png','sizes':str(size)+'x'+str(size),'type':'image/png','purpose':'any'} for size in (192,512)]}).encode(),kind='application/manifest+json')
