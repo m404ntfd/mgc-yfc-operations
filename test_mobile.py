@@ -42,7 +42,7 @@ def run():
                 page.locator('#userForm [name=password]').fill('testpassword')
                 page.locator('#userForm button').click()
                 expect(page.locator('#users')).to_contain_text('Alex')
-                page.locator('#dayTab').click()
+                page.locator('#storeMenuButton').click();page.locator('#dispatchSection').click()
                 assert page.evaluate("weekStart('2026-10-31')") == '2026-10-25'
                 assert page.evaluate("weekStart('2026-11-01')") == '2026-11-01'
                 assert page.evaluate("shiftDate(weekStart('2026-12-31'),7)") == '2027-01-03'

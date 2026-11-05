@@ -105,3 +105,24 @@ body[data-section="receipts"] .primary{background:#067a06;color:white}
 @media(hover:none){.loginShowcase #pauseVideo{opacity:1;pointer-events:auto}}
 @media(max-width:740px){body[data-section=signin] .connectionInfo{display:block;width:100%;max-width:none}body[data-section=signin] #connection{max-width:none}}
 @media(prefers-reduced-motion:reduce){#connectionDot[data-connection-state]{animation:none}#connectionDot[data-connection-state=update]{background:#ffc83d}}
+
+/* Dedicated settings workspace and clearly labeled page navigation. */
+body.settingsView #overview,body.settingsView .scheduleNav,body.settingsView #schedule,body.settingsView #reports{display:none!important}
+body[data-section=settings]>header{background:#000;color:#fff}
+:root[data-theme] .settingsTabs button.selected{border:2px solid #e5ff00;animation:settingsGlow 3s ease-in-out infinite}
+@keyframes settingsGlow{50%{border-color:#e5ff0040;box-shadow:0 0 0 1px #e5ff0020}}
+input[type=checkbox]{width:18px;height:18px;min-height:0;flex:none;vertical-align:middle}
+#connectionLine{display:flex;align-items:center;justify-content:flex-end;gap:7px}#connectionLine .statusDot{margin:0}#connectionLine #connection{display:inline}
+#loggedOutStatus{display:flex;align-items:center;justify-content:flex-end;gap:7px}#loggedOutStatus .statusDot{margin:0;animation:serverPulse 2.8s ease-in-out infinite}
+#connectionDot[data-connection-state=update]{animation:serverUpdateSmooth 3s ease-in-out infinite}
+@keyframes serverUpdateSmooth{0%,100%{background:#299e55;opacity:1}50%{background:#ffc83d;opacity:.4}}
+.operationsTitle{font-size:24px;font-weight:750;margin-bottom:8px}
+#storeMenuButton{border:1px solid #ffffff80;border-radius:10px;padding:10px 14px;background:#ffffff15;font-size:16px;display:flex;align-items:center;gap:10px}#storeMenuButton span{margin:0}#currentSection{font-size:16px;margin:0}
+.menuDivider{border:0;border-top:1px solid #8291a4;margin:12px 4px}
+#storeMenu #dispatchSection{background:#b51f2b;color:white}#storeMenu #pagingSection{background:#7a1520;color:white}#storeMenu #receiptsSection{background:#067a06;color:white}
+.shareYfc{display:none}.shareYfc>div{width:100%}.shareYfcRow{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-top:16px}.shareYfcRow img{width:130px;max-height:85px;object-fit:contain}.shareYfcRow button{background:#215baa;color:white;padding:12px 18px}
+.shareOptions{display:flex;gap:12px;flex-wrap:wrap}.shareOptions a{display:inline-block;padding:12px;border:1px solid #8291a4;border-radius:10px;text-decoration:none}
+@media(max-width:740px){#auth:not([hidden]){margin:8px auto}main{padding-top:10px}.loginColumn{gap:12px}#auth #login{padding:20px}.shareYfc{display:flex}.operationsTitle{font-size:20px}.receiptShortcut{padding:18px}}
+@media(prefers-reduced-motion:reduce){.settingsTabs button.selected,#loggedOutStatus .statusDot{animation:none}}
+
+#unlockRepository{margin-top:10px}

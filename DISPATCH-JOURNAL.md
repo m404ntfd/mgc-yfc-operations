@@ -19,7 +19,7 @@ The server's local calendar date controls the daily choice. Each employee choose
 
 ## Retention and reports
 
-Automatic hourly backups must be enabled. The additional archive option can be disabled in Settings. Entries stay active for at least 30 days after both their appointment date and last recorded change. Only Completed and Canceled entries are eligible; scheduled/in-progress, future, undated, and recently edited records remain active.
+Automatic hourly backups must be enabled. The additional archive option can be disabled in Settings. Settings controls the retention period (1–3650 days, default 30). All pickups and deliveries older than that period are eligible regardless of status or last edit date. Future and undated records remain active. Copy, complete-backup and read-back verification still precede removal from the active database.
 
 Before local removal the server creates a complete verified backup, writes an immutable SQLite archive under `<configured backup folder>\Dispatch Journal`, reads it back, and compares every selected entry, revision, photo, and audit row. It commits the archive index and local removals together, then compacts the active database. Failures before that transaction leave the active records intact. Journal files are never automatically deleted.
 

@@ -37,6 +37,7 @@ jobs:
       - run: python test_receipt_ui.py
       - run: python test_security_ui.py
       - run: python test_appearance.py
+      - run: python test_settings_revision.py
       - run: python test_video_status.py
   windows-installer:
     needs: [test, mobile-browser]

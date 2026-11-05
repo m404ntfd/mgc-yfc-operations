@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS receipts(id TEXT PRIMARY KEY, at REAL, actor TEXT, ca
 CREATE TABLE IF NOT EXISTS audit(at TEXT, actor TEXT, action TEXT, job TEXT);''')
         if 'chosen_on' not in {r[1] for r in c.execute('PRAGMA table_info(landing_preferences)')}:
             c.execute('ALTER TABLE landing_preferences ADD COLUMN chosen_on TEXT')
+        c.execute("CREATE TABLE IF NOT EXISTS appearance_preferences(name TEXT PRIMARY KEY COLLATE NOCASE, mode TEXT NOT NULL)")
         c.execute('CREATE TABLE IF NOT EXISTS journal_archives(file TEXT PRIMARY KEY, sha256 TEXT NOT NULL, records INTEGER NOT NULL, archived_at TEXT NOT NULL)')
         c.execute('CREATE TABLE IF NOT EXISTS user_grants(name TEXT PRIMARY KEY COLLATE NOCASE, body TEXT)')
         c.execute('CREATE TABLE IF NOT EXISTS app_migrations(name TEXT PRIMARY KEY)')
@@ -189,18 +190,18 @@ def _archive_dispatch(today=None):
     with LOCK:
         cfg=backup_config()
         if not cfg.get('enabled') or not cfg.get('journal_enabled',True):return 0
-        cutoff=(today or dt.date.today())-dt.timedelta(days=30)
+        cutoff=(today or dt.date.today())-dt.timedelta(days=int(cfg.get('journal_days',30)))
         with connect() as c:
             selected=[]
             for row in c.execute('SELECT * FROM jobs'):
                 job=json.loads(row['body'])
-                if job.get('status') not in ('Completed','Canceled'):continue
+                if job.get('type') not in ('Pickup','Delivery'):continue
                 try:
                     event=dt.date.fromisoformat((job.get('end') or job.get('start') or '')[:10])
                     last=c.execute('SELECT MAX(at) FROM audit WHERE job=?',(row['id'],)).fetchone()[0]
                     modified=dt.date.fromisoformat(last[:10]) if last else event
                 except ValueError:continue
-                if max(event,modified)>=cutoff:continue
+                if event>=cutoff:continue
                 selected.append(tuple(row))
             if not selected:return 0
         # A fresh, complete and verified fallback must exist before any local removal.
@@ -399,6 +400,9 @@ class Handler(BaseHTTPRequestHandler):
                     photo=c.execute('SELECT body FROM photos WHERE job=? AND position=?',(parts[3],int(parts[4]))).fetchone()
                     if not photo: raise Problem('Not found',404)
                     return self.send(bytes(photo['body']),kind='image/jpeg')
+                if self.path=='/api/account/appearance':
+                    row=c.execute('SELECT mode FROM appearance_preferences WHERE name=?',(u['name'],)).fetchone()
+                    return self.send({'mode':row['mode'] if row else 'system'})
                 if self.path=='/api/account/landing':
                     preference=c.execute('SELECT section,chosen_on FROM landing_preferences WHERE name=?',(u['name'],)).fetchone()
                     today=dt.date.today().isoformat();options=section_options(u)
@@ -497,6 +501,34 @@ class Handler(BaseHTTPRequestHandler):
                     c.execute('INSERT INTO receipts VALUES(?,?,?,?,?,?,?,?)',(ident,time.time(),actor,category,filename,mime,body,source))
                     return self.send({'ok':True,'id':ident,'email_pending':True})
                 u=self.user()
+                if self.path=='/api/account/appearance':
+                    mode=d.get('mode')
+                    if mode not in ('light','dark','system'):raise Problem('Choose Light, Dark or Use system settings.')
+                    c.execute('INSERT OR REPLACE INTO appearance_preferences VALUES(?,?)',(u['name'],mode))
+                    return self.send({'mode':mode})
+                if self.path=='/api/repository-unlock':
+                    if not (has_permission(u,'check_updates') or has_permission(u,'configure_updates')):raise Problem('Update settings permission required.',403)
+                    name=str(d.get('name','')).strip()
+                    key='repo:'+self.client_address[0]
+                    attempts=[t for t in ATTEMPTS.get(key,[]) if t>time.time()-300]
+                    if len(attempts)>=5:raise Problem('Too many attempts. Wait five minutes.',429)
+                    ATTEMPTS[key]=attempts+[time.time()]
+                    row=c.execute('SELECT * FROM users WHERE name=?',(name,)).fetchone()
+                    locked=c.execute('SELECT locked_at FROM account_lockouts WHERE name=?',(name,)).fetchone()
+                    if not row or not row['admin'] or (locked and locked['locked_at']) or not hmac.compare_digest(row['hash'],password(str(d.get('password','')),row['salt'])):
+                        raise Problem('Valid administrator credentials are required.',403)
+                    ATTEMPTS.pop(key,None)
+                    u['repository_unlock']={'until':time.time()+300,'administrator':row['name']}
+                    return self.send({'ok':True,'expires_in':300})
+                if self.path=='/api/update-config':
+                    approval=u.pop('repository_unlock',None)
+                    if not approval or approval['until']<time.time():raise Problem('Unlock repository settings with administrator credentials first.',403)
+                    admin=c.execute('SELECT admin FROM users WHERE name=?',(approval['administrator'],)).fetchone()
+                    if not admin or not admin['admin']:raise Problem('Administrator approval is no longer valid.',403)
+                    try:updater.configure(str(d.get('repository','')).strip())
+                    except ValueError as e:raise Problem(str(e))
+                    c.execute('INSERT INTO audit VALUES(?,?,?,?)',(dt.datetime.now().isoformat(timespec='seconds'),approval['administrator'],'Update repository changed by '+u['name'],''))
+                    return self.send({'ok':True})
                 if self.path in ROUTE_PERMISSIONS and not route_allowed(u,self.path): raise Problem('Administrator or delegated permission required.',403)
                 if self.path=='/api/admin/receipt-categories':
                     if not u['admin']: raise Problem('Administrator access required.',403)
@@ -582,7 +614,9 @@ class Handler(BaseHTTPRequestHandler):
                             candidate=Path(folder).resolve()
                             if candidate==ROOT or candidate==DATA or ROOT in candidate.parents: raise Problem('Choose a OneDrive folder outside the program folder.')
                         if folder!=backup_config().get('folder','') and c.execute('SELECT 1 FROM journal_archives').fetchone():raise Problem('Dispatch Journal exists. Keep the current backup folder until the journal has been migrated and verified.')
-                        cfg={'folder':folder,'enabled':enabled,'journal_enabled':d.get('journal_enabled',backup_config().get('journal_enabled',True)) is True}
+                        days=d.get('journal_days',backup_config().get('journal_days',30))
+                        if type(days) is not int or not 1<=days<=3650:raise Problem('Journal retention must be 1–3650 days.')
+                        cfg={'folder':folder,'enabled':enabled,'journal_enabled':d.get('journal_enabled',True) is True,'journal_days':days}
                         tmp=DATA/'backup-settings.tmp';tmp.write_text(json.dumps(cfg));os.replace(tmp,DATA/'backup-settings.json')
                     else:
                         try: return self.send({'ok':True,'backup':complete_backup()})
