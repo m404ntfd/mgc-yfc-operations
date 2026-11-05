@@ -9,6 +9,14 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from http.cookies import SimpleCookie
 from urllib.parse import urlsplit,parse_qs
 
+WEB_ASSETS={} # prepared by prepare_web_assets.py
+
+def web_asset(key):
+    value=WEB_ASSETS.get(key)
+    if value:return base64.b64decode(value)
+    if key=='gif':return base64.b64decode(''.join(part.read_text() for part in sorted((ROOT/'assets').glob('plug-*.b64'))))
+    return base64.b64decode(json.loads((ROOT/'assets/home-icons.json').read_text())[key])
+
 ROOT=Path(__file__).resolve().parent
 DATA=Path(os.environ.get('DISPATCH_DATA', ROOT/'data'))
 DATA.mkdir(parents=True, exist_ok=True)
@@ -60,6 +68,8 @@ CREATE TABLE IF NOT EXISTS audit(at TEXT, actor TEXT, action TEXT, job TEXT);'''
         if 'chosen_on' not in {r[1] for r in c.execute('PRAGMA table_info(landing_preferences)')}:
             c.execute('ALTER TABLE landing_preferences ADD COLUMN chosen_on TEXT')
         c.execute('CREATE TABLE IF NOT EXISTS local_admin_sessions(token_hash TEXT PRIMARY KEY,name TEXT COLLATE NOCASE,version TEXT)')
+        c.execute('CREATE TABLE IF NOT EXISTS permission_roles(id INTEGER PRIMARY KEY,name TEXT UNIQUE COLLATE NOCASE,body TEXT)')
+        c.execute('CREATE TABLE IF NOT EXISTS user_roles(name TEXT PRIMARY KEY COLLATE NOCASE,role_id INTEGER)')
         c.execute('CREATE TABLE IF NOT EXISTS page_colors(id INTEGER PRIMARY KEY CHECK(id=1),body TEXT)')
         c.execute('CREATE TABLE IF NOT EXISTS sharing_settings(id INTEGER PRIMARY KEY CHECK(id=1),body TEXT)')
         c.execute('CREATE TABLE IF NOT EXISTS receipt_profiles(name TEXT PRIMARY KEY COLLATE NOCASE,profile_id TEXT UNIQUE)')
@@ -90,6 +100,7 @@ PERMISSIONS={
  'submit_requests':'Submit pickup and delivery requests', 'review_requests':'Review and approve requests',
  'see_requests':'Show flashing Pending Requests button', 'call_contacts':'Show customer call button',
  'text_contacts':'Show On Our Way text button', 'navigate':'Show navigation button',
+ 'manage_roles':'Create and edit permission roles',
  'manage_vehicles':'Add vehicles', 'manage_users':'Add/remove employees and edit permissions',
  'unlock_users':'Unlock employee accounts after failed logins',
  'reset_passwords':'Reset employee passwords/passcodes', 'change_own_password':'Change own password/passcode',
@@ -110,6 +121,11 @@ ROUTE_PERMISSIONS={'/api/admin/lockouts':'unlock_users','/api/admin/unlock-user'
  '/api/updates':'check_updates','/api/update-check':'check_updates','/api/update-config':'configure_updates',
  '/api/update-install':'install_updates','/api/audit':'view_audit'}
 DEFAULT_PAGE_COLORS={name:{'header':color,'light':'#faf6f5','dark':'#101821'} for name,color in {'dispatch':'#b51f2b','paging':'#7a1520','receipts':'#067a06','print':'#073ea6','settings':'#000000','signin':'#ffffff'}.items()}
+
+def permission_groups():
+    dispatch={'view_reports','view_schedule','create_appointments','edit_appointments','delete_appointments','update_status','cancel_appointments','submit_requests','review_requests','see_requests','call_contacts','text_contacts','navigate','manage_vehicles','show_vehicle_filter','show_search'}
+    paging={'send_pages','receive_pages'};receipts={'submit_receipts','view_all_receipts'}
+    return {'Application Settings':[k for k in PERMISSIONS if k not in dispatch|paging|receipts],'Thrift Mart Dispatch':[k for k in PERMISSIONS if k in dispatch],'Store Associate Paging':[k for k in PERMISSIONS if k in paging],'Receipts & Accounting':[k for k in PERMISSIONS if k in receipts],'Print with a Purpose':[]}
 
 def has_permission(u,key): return bool(u['admin'] or u.get('grants',{}).get(key,False))
 def route_allowed(u,path): return has_permission(u,ROUTE_PERMISSIONS.get(path,''))
@@ -377,7 +393,8 @@ class Handler(BaseHTTPRequestHandler):
         for key in ('create_appointments','edit_appointments','delete_appointments','update_status','review_requests'): defaults[key]=session['can_create']
         defaults['see_requests']=session['see_requests'];defaults['view_reports']=session['can_create']
         defaults['submit_receipts']=True
-        session['grants']=json.loads(saved['body']) if saved else defaults
+        with connect() as c:role=c.execute('SELECT r.body FROM permission_roles r JOIN user_roles a ON a.role_id=r.id WHERE a.name=?',(session['name'],)).fetchone()
+        session['grants']=json.loads(role['body']) if role else json.loads(saved['body']) if saved else defaults
         session['grants'].setdefault('submit_receipts',True)
         for key in ('view_schedule','show_vehicle_filter','show_search'): session['grants'].setdefault(key,True)
         session['can_create']=has_permission(session,'create_appointments')
@@ -385,13 +402,16 @@ class Handler(BaseHTTPRequestHandler):
         return session
     def do_GET(self):
         try:
+            if self.path=='/offline.gif':return self.send(web_asset('gif'),kind='image/gif')
+            if self.path in ('/app-icon-180.png','/app-icon-192.png','/app-icon-512.png'):return self.send(web_asset(self.path.split('-')[-1].split('.')[0]),kind='image/png')
+            if self.path=='/manifest.webmanifest':return self.send(json.dumps({'name':'MGC YFC Operations','short_name':'YFC Operations','start_url':'/','scope':'/','display':'standalone','background_color':'#101821','theme_color':'#073ea6','icons':[{'src':'/app-icon-'+str(size)+'.png','sizes':str(size)+'x'+str(size),'type':'image/png','purpose':'any'} for size in (192,512)]}).encode(),kind='application/manifest+json')
             if self.path in ('/favicon.svg','/favicon.ico'):
                 return self.send(FAVICON_SVG.encode(),kind='image/svg+xml')
             if self.path in ('/','/mobile','/mobile/','/app.js','/style.css'):
                 filename={'/':'index.html','/mobile':'index.html','/mobile/':'index.html','/app.js':'app.js','/style.css':'style.css'}[self.path]
                 kind={'/':'text/html; charset=utf-8','/mobile':'text/html; charset=utf-8','/mobile/':'text/html; charset=utf-8','/app.js':'text/javascript','/style.css':'text/css'}[self.path]
                 body=(ROOT/'static'/filename).read_bytes()
-                if filename=='index.html':body=body.replace(b'</head>',b'<link rel="icon" type="image/svg+xml" href="/favicon.svg"></head>')
+                if filename=='index.html':body=body.replace(b'</head>',b'<link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="apple-touch-icon" sizes="180x180" href="/app-icon-180.png"><link rel="manifest" href="/manifest.webmanifest"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="YFC Operations"></head>')
                 return self.send(body,kind=kind)
             with LOCK, connect() as c:
                 if self.path=='/api/page-colors':
@@ -410,7 +430,8 @@ class Handler(BaseHTTPRequestHandler):
                 if self.path=='/api/receipt-users':
                     people=[]
                     for row in c.execute('SELECT u.name,u.admin,p.profile_id,g.body FROM users u JOIN receipt_profiles p ON p.name=u.name LEFT JOIN user_grants g ON g.name=u.name ORDER BY u.name'):
-                        grants=json.loads(row['body']) if row['body'] else {}
+                        assigned=c.execute('SELECT r.body FROM permission_roles r JOIN user_roles a ON a.role_id=r.id WHERE a.name=?',(row['name'],)).fetchone()
+                        grants=json.loads(assigned['body']) if assigned else json.loads(row['body']) if row['body'] else {}
                         if row['admin'] or grants.get('submit_receipts',True):people.append({'id':row['profile_id'],'name':row['name']})
                     return self.send({'users':people})
                 if self.path=='/api/receipt-categories':
@@ -454,8 +475,11 @@ class Handler(BaseHTTPRequestHandler):
                 if self.path=='/api/admin/lockouts':
                     if not has_permission(u,'unlock_users'): raise Problem('Unlock users permission required.',403)
                     return self.send({'users':[dict(r) for r in c.execute('SELECT l.name,l.failures,l.locked_at FROM account_lockouts l JOIN users u ON u.name=l.name WHERE l.locked_at IS NOT NULL ORDER BY l.name')]})
+                if self.path=='/api/roles':
+                    if not (has_permission(u,'manage_users') or has_permission(u,'manage_roles')):raise Problem('Employee or role management permission required.',403)
+                    return self.send({'permissions':PERMISSIONS,'groups':permission_groups(),'roles':[{'id':r['id'],'name':r['name'],'grants':json.loads(r['body'])} for r in c.execute('SELECT * FROM permission_roles ORDER BY name')],'assignments':{r['name']:r['role_id'] for r in c.execute('SELECT * FROM user_roles')},'can_edit':has_permission(u,'manage_roles'),'can_assign':has_permission(u,'manage_users'),'grantable':[key for key in PERMISSIONS if has_permission(u,key)]})
                 if self.path=='/api/admin/permission-catalog':
-                    if not u['admin']: raise Problem('Administrator access required.',403)
+                    if not has_permission(u,'manage_users'): raise Problem('Administrator access required.',403)
                     return self.send({'permissions':PERMISSIONS,'users':[{'name':r['name'],'grants':json.loads(r['body'])} for r in c.execute('SELECT * FROM user_grants')]})
                 if self.path=='/api/admin/users':
                     if not route_allowed(u,self.path): raise Problem('Administrator access required.',403)
@@ -488,7 +512,7 @@ class Handler(BaseHTTPRequestHandler):
                     today=dt.date.today().isoformat();options=section_options(u)
                     section=preference['section'] if preference and preference['chosen_on']==today and preference['section'] in {o['id'] for o in options} else None
                     home=c.execute('SELECT section FROM daily_home WHERE name=? AND day=?',(u['name'],today)).fetchone()
-                    return self.send({'section':section,'home_section':home['section'] if home and home['section'] in {o['id'] for o in options} else section,'date':today,'options':options})
+                    return self.send({'section':section,'home_section':section,'date':today,'options':options})
                 if self.path=='/api/paging':
                     if not has_permission(u,'send_pages') and not has_permission(u,'receive_pages'): raise Problem('Paging permission required.',403)
                     return self.send({'pages':[dict(r) for r in c.execute('SELECT * FROM pages WHERE at>? ORDER BY id',(time.time()-60,))],'latest':c.execute('SELECT COALESCE(MAX(id),0) FROM pages').fetchone()[0]})
@@ -590,7 +614,8 @@ class Handler(BaseHTTPRequestHandler):
                         if d.get('account_upload'):raise Problem('Sign in again before saving this receipt to your profile.',401)
                         target=c.execute('SELECT u.name,u.admin,p.profile_id,g.body FROM users u JOIN receipt_profiles p ON p.name=u.name LEFT JOIN user_grants g ON g.name=u.name WHERE p.profile_id=?',(str(d.get('assignee','')),)).fetchone()
                         if not target:raise Problem('Select a current user for this receipt.')
-                        grants=json.loads(target['body']) if target['body'] else {}
+                        assigned=c.execute('SELECT r.body FROM permission_roles r JOIN user_roles a ON a.role_id=r.id WHERE a.name=?',(target['name'],)).fetchone()
+                        grants=json.loads(assigned['body']) if assigned else json.loads(target['body']) if target['body'] else {}
                         if not target['admin'] and not grants.get('submit_receipts',True):raise Problem('This user cannot submit receipts.')
                         owner=target['profile_id'];actor=target['name'];uploader=None
                     if uploader and not has_permission(uploader,'submit_receipts'):raise Problem('Receipt submission permission required.',403)
@@ -678,7 +703,7 @@ class Handler(BaseHTTPRequestHandler):
                     if section=='paging' and not has_permission(u,'send_pages') and not has_permission(u,'receive_pages'): raise Problem('Paging permission required.',403)
                     previous=c.execute('SELECT section,chosen_on FROM landing_preferences WHERE name=?',(u['name'],)).fetchone()
                     home=previous['section'] if previous and previous['chosen_on']==dt.date.today().isoformat() else section
-                    c.execute('INSERT OR IGNORE INTO daily_home VALUES(?,?,?)',(u['name'],dt.date.today().isoformat(),home))
+                    c.execute('INSERT OR REPLACE INTO daily_home VALUES(?,?,?)',(u['name'],dt.date.today().isoformat(),section))
                     c.execute('INSERT OR REPLACE INTO landing_preferences(name,section,chosen_on) VALUES(?,?,?)',(u['name'],section,dt.date.today().isoformat()))
                     return self.send({'ok':True})
                 if self.path=='/api/paging/send':
@@ -693,10 +718,40 @@ class Handler(BaseHTTPRequestHandler):
                     for k,v in list(SESSIONS.items()):
                         if v is u: del SESSIONS[k]
                     return self.send({'ok':True},cookie='session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0')
+                if self.path=='/api/roles':
+                    if not has_permission(u,'manage_roles'):raise Problem('Role management permission required.',403)
+                    name=str(d.get('name','')).strip();grants=d.get('grants');ident=d.get('id')
+                    if not 1<=len(name)<=80 or not isinstance(grants,dict) or any(k not in PERMISSIONS or not isinstance(v,bool) for k,v in grants.items()):raise Problem('Enter a role name and valid permissions.')
+                    old=c.execute('SELECT body FROM permission_roles WHERE id=?',(ident,)).fetchone() if ident is not None else None
+                    if ident is not None and not old:raise Problem('Role not found.',404)
+                    previous=json.loads(old['body']) if old else {}
+                    if not u['admin'] and any(v and not previous.get(k) and not has_permission(u,k) for k,v in grants.items()):raise Problem('You may only grant permissions you have.',403)
+                    body=json.dumps({k:bool(grants.get(k,False)) for k in PERMISSIONS})
+                    if old:c.execute('UPDATE permission_roles SET name=?,body=? WHERE id=?',(name,body,ident))
+                    else:ident=c.execute('INSERT INTO permission_roles(name,body) VALUES(?,?)',(name,body)).lastrowid
+                    c.execute('INSERT INTO audit VALUES(?,?,?,?)',(dt.datetime.now().isoformat(timespec='seconds'),u['name'],'Saved role: '+name,''))
+                    return self.send({'ok':True,'id':ident})
+                if self.path=='/api/admin/user-role':
+                    if not has_permission(u,'manage_users'):raise Problem('Employee management permission required.',403)
+                    target=c.execute('SELECT name,admin FROM users WHERE name=?',(str(d.get('name','')),)).fetchone()
+                    if not target:raise Problem('Employee not found.',404)
+                    if target['admin']:raise Problem('Administrators retain all permissions; roles apply to employee accounts.',403)
+                    ident=d.get('role_id')
+                    if ident is None:
+                        if not u['admin']:raise Problem('An administrator must restore individual permissions.',403)
+                        c.execute('DELETE FROM user_roles WHERE name=?',(target['name'],))
+                    else:
+                        role=c.execute('SELECT name,body FROM permission_roles WHERE id=?',(ident,)).fetchone()
+                        if not role:raise Problem('Role not found.',404)
+                        if not u['admin'] and any(v and not has_permission(u,k) for k,v in json.loads(role['body']).items()):raise Problem('You may only assign roles within your own permissions.',403)
+                        c.execute('INSERT OR REPLACE INTO user_roles VALUES(?,?)',(target['name'],ident))
+                    c.execute('INSERT INTO audit VALUES(?,?,?,?)',(dt.datetime.now().isoformat(timespec='seconds'),u['name'],'Assigned role for: '+target['name'],''))
+                    return self.send({'ok':True})
                 if self.path=='/api/admin/permissions':
                     if not u['admin']: raise Problem('Administrator access required.',403)
                     target=c.execute('SELECT * FROM users WHERE name=?',(str(d.get('name','')),)).fetchone()
                     if not target: raise Problem('User not found.',404)
+                    if c.execute('SELECT 1 FROM user_roles WHERE name=?',(target['name'],)).fetchone():raise Problem('Edit the assigned role, or select Individual permissions first.',409)
                     if 'grants' in d:
                         if not isinstance(d['grants'],dict) or any(k not in PERMISSIONS or not isinstance(v,bool) for k,v in d['grants'].items()): raise Problem('Invalid permission list.')
                         grants={k:bool(d['grants'].get(k,k=='view_schedule')) for k in PERMISSIONS}
@@ -778,6 +833,7 @@ class Handler(BaseHTTPRequestHandler):
                     if target['admin']: raise Problem('Administrator accounts cannot be removed here.',403)
                     c.execute('DELETE FROM users WHERE name=?',(target['name'],))
                     c.execute('DELETE FROM receipt_profiles WHERE name=?',(target['name'],))
+                    c.execute('DELETE FROM user_roles WHERE name=?',(target['name'],))
                     c.execute('DELETE FROM account_lockouts WHERE name=?',(target['name'],))
                     c.execute('DELETE FROM local_admin_sessions WHERE name=?',(target['name'],))
                     for token in list(SESSIONS):
