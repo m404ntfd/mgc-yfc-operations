@@ -20,13 +20,20 @@ class JournalTests(unittest.TestCase):
   body=json.dumps({'type':kind,'status':status,'start':date+'T10:00','end':date+'T11:00','customer':'Preservation test','photoCount':1})
   with server.connect() as c:
    c.execute('INSERT INTO jobs VALUES(?,?,?)',(id,3,body));c.execute('INSERT INTO photos VALUES(?,?,?)',(id,0,b'photo-bytes-'+id.encode()));c.execute('INSERT INTO audit VALUES(?,?,?,?)',((modified or date)+'T12:00','Tester','Updated',id))
+ def test_configurable_retention(self):
+  cfg={'enabled':True,'folder':str(self.folder),'journal_days':60}
+  (self.data/'backup-settings.json').write_text(json.dumps(cfg))
+  self.job('older',status='Scheduled',date='2026-09-01')
+  self.job('within-period',date='2026-10-01')
+  self.assertEqual(server.archive_dispatch(dt.date(2026,11,5)),1)
+  with server.connect() as c:self.assertEqual(c.execute('SELECT id FROM jobs').fetchone()[0],'within-period')
  def test_verified_archive_reports_and_standalone_restore(self):
   self.job('old-pickup');self.job('old-delivery','Delivery');self.job('recent',date='2026-10-20');self.job('unfinished',status='Scheduled');self.job('future',date='2026-12-01');self.job('recent-edit',modified='2026-11-01');self.job('boundary',date='2026-10-06')
-  self.assertEqual(server.archive_dispatch(dt.date(2026,11,5)),2)
+  self.assertEqual(server.archive_dispatch(dt.date(2026,11,5)),4)
   with server.connect() as c:
-   self.assertEqual(c.execute('SELECT COUNT(*) FROM jobs').fetchone()[0],5)
+   self.assertEqual(c.execute('SELECT COUNT(*) FROM jobs').fetchone()[0],3)
    self.assertEqual(len(server.all_report_jobs(c)),7)
-   self.assertEqual(c.execute('SELECT COUNT(*) FROM photos').fetchone()[0],5)
+   self.assertEqual(c.execute('SELECT COUNT(*) FROM photos').fetchone()[0],3)
   self.assertEqual(server.archive_dispatch(dt.date(2026,11,5)),0)
   backup=server.complete_backup();status=json.loads((self.data/'backup-status.json').read_text());self.assertTrue(status['verified']);self.assertEqual(status['counts']['total'],7);self.assertEqual(status['counts']['Delivery'],1);self.assertEqual(status['counts']['photos'],7)
   restored=self.root/'restored';restore_backup(backup,restored)

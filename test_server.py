@@ -52,6 +52,8 @@ class Tests(unittest.TestCase):
   self.assertEqual(code,200)
   self.assertIn('; Secure',cookie)
   self.assertEqual(self.call('updates')[1]['current'],Path(__file__).with_name('VERSION').read_text().strip())
+  self.assertEqual(self.call('update-config',{'repository':'example/store'})[0],403)
+  self.assertEqual(self.call('repository-unlock',{'name':'Manager','password':'testpassword'})[0],200)
   self.assertEqual(self.call('update-config',{'repository':'example/store'})[0],200)
   self.assertEqual(self.call('updates')[1]['repository'],'example/store')
   self.assertEqual(self.call('update-install',{'version':'0.2.1'})[0],400)
