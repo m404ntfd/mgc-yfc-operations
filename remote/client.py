@@ -1,4 +1,4 @@
-"""HTTP client for Thrift Mart Dispatch Remote Manager; credentials stay in memory."""
+"""HTTP client for MGC YFC Operations Remote Manager; credentials stay in memory."""
 import http.cookiejar,json,urllib.request,urllib.error,urllib.parse
 
 def normalize_address(value):
@@ -31,7 +31,7 @@ class Client:
         except (urllib.error.URLError,TimeoutError,OSError) as e:raise ValueError('Cannot reach the server. Check its address, power, staff network, and Windows Firewall.') from e
     def probe(self):
         r=self.request('session')
-        if r.get('application')!='thrift-mart-dispatch':raise ValueError('This is not a compatible Thrift Mart Dispatch Server. Install server version 0.3.0 or newer.')
+        if r.get('application')!='thrift-mart-dispatch':raise ValueError('This is not a compatible MGC YFC Operations Server. Install server version 0.3.0 or newer.')
         return r
     def login(self,name,password):
         self.probe();self.request('login',{'name':name,'password':password})

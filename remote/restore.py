@@ -58,7 +58,7 @@ def restore_backup(source,data):
 def restore_window(data):
     import tkinter as tk
     from tkinter import ttk,filedialog,messagebox
-    root=tk.Tk();root.title('Restore Thrift Mart Dispatch Server');root.geometry('650x300')
+    root=tk.Tk();root.title('Restore MGC YFC Operations Server');root.geometry('650x300')
     frame=ttk.Frame(root,padding=24);frame.pack(fill='both',expand=True)
     ttk.Label(frame,text='Restore server from OneDrive backup',font=('Segoe UI',16,'bold')).pack(anchor='w')
     ttk.Label(frame,text='Choose Exit server from the truck tray menu first. Choose a downloaded backup ZIP from OneDrive.\nThis replaces appointments, accounts, vehicles and settings with the backup.\nCurrent data is saved separately before replacement.',wraplength=590).pack(anchor='w',pady=16)

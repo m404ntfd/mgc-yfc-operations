@@ -1,6 +1,6 @@
 THRIFT MART DISPATCH RELEASES
 
-Repository: m404ntfd/thriftmart_scheduling
+Repository: m404ntfd/mgc-yfc-operations
 Update VERSION and RELEASE-NOTES.md, then push main. GitHub Actions tests on
 Windows/Linux, builds the Remote Manager and unified installer, tests an actual
 installed server, then publishes the installer and the legacy update asset.

@@ -15,7 +15,7 @@ def version(v):
 def current(): return (ROOT/'VERSION').read_text().strip()
 def repo():
     p=DATA/'updates.json'
-    return json.loads(p.read_text()).get('repository','') if p.exists() else 'm404ntfd/thriftmart_scheduling'
+    return json.loads(p.read_text()).get('repository','') if p.exists() else 'm404ntfd/mgc-yfc-operations'
 def configure(value):
     if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+',value): raise ValueError('Enter a GitHub repository as owner/repository.')
     DATA.mkdir(exist_ok=True,parents=True)

@@ -1,20 +1,20 @@
-"""Thrift Mart Dispatch Remote Manager — native Windows control panel."""
+"""MGC YFC Operations Remote Manager — native Windows control panel."""
 import json,os,queue,sys,threading,webbrowser
 from pathlib import Path
 import tkinter as tk
 from tkinter import ttk,messagebox
 from client import Client
-NAME='Thrift Mart Dispatch Remote Manager'
+NAME='MGC YFC Operations Remote Manager'
 VERSION='0.11.0'
 CONFIG=Path(os.environ.get('APPDATA',Path.home()))/'ThriftMartDispatchRemoteManager'/'config.json'
 
 class App:
     def __init__(self,root,local=False):
         self.root=root;self.client=None;self.release=None;self.busy=False;self.results=queue.Queue()
-        root.title('Thrift Mart Dispatch Server — Administration' if local else NAME);root.geometry('800x830');root.minsize(720,760)
+        root.title('MGC YFC Operations Server — Administration' if local else NAME);root.geometry('800x830');root.minsize(720,760)
         style=ttk.Style();style.theme_use('clam');style.configure('TButton',padding=9);style.configure('TLabel',font=('Segoe UI',10));style.configure('Title.TLabel',font=('Segoe UI',22,'bold'));style.configure('TEntry',padding=7)
         frame=ttk.Frame(root,padding=24);frame.pack(fill='both',expand=True)
-        ttk.Label(frame,text='Thrift Mart Dispatch',style='Title.TLabel').pack(anchor='w')
+        ttk.Label(frame,text='MGC YFC Operations',style='Title.TLabel').pack(anchor='w')
         ttk.Label(frame,text=('Server administration' if local else 'Remote Manager')+' • '+VERSION+'  |  Staff network').pack(anchor='w',pady=(2,16))
         box=ttk.LabelFrame(frame,text='Connect to your store server',padding=12);box.pack(fill='x')
         try:saved=json.loads(CONFIG.read_text())
@@ -41,7 +41,7 @@ class App:
         row=ttk.Frame(updates);row.pack(fill='x');ttk.Button(row,text='Check for server updates',command=self.check).pack(side='left');self.install=ttk.Button(row,text='Install update & restart',command=self.install_update,state='disabled');self.install.pack(side='left',padx=8)
         self.notes=tk.Text(updates,height=7,wrap='word',font=('Segoe UI',10),state='disabled');self.notes.pack(fill='both',expand=True,pady=8)
         ttk.Label(frame,text='Manage employee accounts here; open the browser for schedules and vehicles.\nThe browser requires its own sign-in. Closing this app does not stop the server.',wraplength=690).pack(anchor='w')
-        ttk.Button(frame,text='Remote Manager downloads / updates',command=lambda:webbrowser.open('https://github.com/m404ntfd/thriftmart_scheduling/releases/latest')).pack(anchor='w',pady=(8,0))
+        ttk.Button(frame,text='Remote Manager downloads / updates',command=lambda:webbrowser.open('https://github.com/m404ntfd/mgc-yfc-operations/releases/latest')).pack(anchor='w',pady=(8,0))
         root.after(100,self.deliver)
     def run(self,work,done):
         if self.busy:return

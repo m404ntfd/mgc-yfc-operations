@@ -19,6 +19,8 @@ def run():
     assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
     page.screenshot(path=f'/tmp/login-{width}.png')
     page.locator('#receiptShortcut').click();page.locator('#login [name=name]').fill('Admin');page.locator('#login [name=password]').fill('testpassword');page.locator('#login button').click()
+    if width==390:
+     expect(page.locator('#sectionChooser')).to_be_visible();page.locator('#sectionChooserForm button').click()
     expect(page.locator('#receipts')).to_be_visible();expect(page.locator('#sectionChooser')).to_be_hidden();expect(page.locator('#mobileIntro')).to_be_hidden()
     assert page.locator('#desktopVideo').evaluate('(v)=>v.paused');assert not errors,errors;page.close()
    b.close()

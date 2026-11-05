@@ -14,7 +14,7 @@ with tempfile.TemporaryDirectory() as data:
    except Exception:time.sleep(.25)
   else:raise AssertionError('Installed server did not start')
   c.request('setup',{'name':'SmokeAdmin','password':'TestPasswordOnly'})
-  assert c.login('SmokeAdmin','TestPasswordOnly')['name']=='Thrift Mart Dispatch Server'
+  assert c.login('SmokeAdmin','TestPasswordOnly')['name']=='MGC YFC Operations Server'
   c.request('admin/restart',{})
   time.sleep(2)
   assert c.probe()['application']=='thrift-mart-dispatch'
@@ -26,7 +26,7 @@ with tempfile.TemporaryDirectory() as data:
 # Test the installed GUI host, real Windows tray, hide/show behavior, and safe exit.
 with tempfile.TemporaryDirectory() as data:
  with socket.socket() as s:s.bind(('127.0.0.1',0));port=s.getsockname()[1]
- p=subprocess.Popen([str(root/'Thrift Mart Dispatch Server.exe'),'--smoke-test'],cwd=root,env={**os.environ,'DISPATCH_DATA':data,'DISPATCH_PORT':str(port)})
+ p=subprocess.Popen([str(root/'MGC YFC Operations Server.exe'),'--smoke-test'],cwd=root,env={**os.environ,'DISPATCH_DATA':data,'DISPATCH_PORT':str(port)})
  try:
   assert p.wait(timeout=75)==0, 'Tray host smoke test failed'
   c=Client(f'127.0.0.1:{port}')
@@ -41,7 +41,7 @@ with tempfile.TemporaryDirectory() as data:
 # Use the classic console host so Windows Terminal tabs do not own the window.
 with tempfile.TemporaryDirectory() as data:
  with socket.socket() as s:s.bind(('127.0.0.1',0));port=s.getsockname()[1]
- command=[str(Path(os.environ['SystemRoot'])/'System32/conhost.exe'),str(root/'Thrift Mart Dispatch Server Console.exe'),'--console','--smoke-test']
+ command=[str(Path(os.environ['SystemRoot'])/'System32/conhost.exe'),str(root/'MGC YFC Operations Server Console.exe'),'--console','--smoke-test']
  p=subprocess.Popen(command,cwd=root,env={**os.environ,'DISPATCH_DATA':data,'DISPATCH_PORT':str(port)})
  try:
   assert p.wait(timeout=75)==0,'Console tray smoke test failed'

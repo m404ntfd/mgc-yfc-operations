@@ -1,14 +1,14 @@
 THRIFT MART DISPATCH REMOTE MANAGER — 0.5.0
 
 On a SECOND Windows computer on the same trusted staff network:
-1. Run the unified Thrift Mart Dispatch installer and choose Remote Manager.
-2. Open Thrift Mart Dispatch Remote Manager.exe. Python is not needed.
+1. Run the unified MGC YFC Operations installer and choose Remote Manager.
+2. Open MGC YFC Operations Remote Manager.exe. Python is not needed.
 3. Enter the IP address shown on the server computer, e.g. 192.168.1.50:8080.
    A local computer name also works if your network resolves it.
 4. Test connection, then sign in with an administrator account from the server.
    Create the first administrator locally on the server computer first.
 
-Requires Thrift Mart Dispatch Server 0.5.0 or later. Restart requires a full 0.5.0
+Requires MGC YFC Operations Server 0.5.0 or later. Restart requires a full 0.5.0
 server installation (new launcher); older launchers can still install server updates.
 
 FEATURES

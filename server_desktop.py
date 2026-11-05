@@ -1,11 +1,11 @@
-"""Windows tray host for Thrift Mart Dispatch Server; data/code stay external."""
+"""Windows tray host for MGC YFC Operations Server; data/code stay external."""
 import ctypes,json,os,queue,secrets,socket,subprocess,sys,threading,time,urllib.request,webbrowser
 from pathlib import Path
 import tkinter as tk
 from tkinter import ttk,messagebox
 from PIL import Image,ImageTk
 import pystray
-NAME='Thrift Mart Dispatch Server'
+NAME='MGC YFC Operations Server'
 ROOT=Path(sys.executable).resolve().parent if getattr(sys,'frozen',False) else Path(__file__).resolve().parent
 ASSETS=Path(getattr(sys,'_MEIPASS',ROOT))/'assets'
 DATA=Path(os.environ.get('DISPATCH_DATA',ROOT/'data'))
@@ -24,14 +24,14 @@ class ServerWindow:
         if console:
             from console_control import ConsoleWindow
             self.console=ConsoleWindow(ASSETS/'dispatch.ico');root.withdraw()
-            print('Thrift Mart Dispatch Server — console mode',flush=True)
+            print('MGC YFC Operations Server — console mode',flush=True)
             print('Minimize sends this command window to the truck icon in the system tray.',flush=True)
             print('Double-click the truck to reopen. To stop: right-click truck > Exit server.',flush=True)
         root.protocol('WM_DELETE_WINDOW',self.hide);root.bind('<Unmap>',self.on_minimize)
         style=ttk.Style();style.theme_use('clam');style.configure('TButton',padding=10);style.configure('TLabel',font=('Segoe UI',10))
         f=ttk.Frame(root,padding=24);f.pack(fill='both',expand=True)
         self.picture=ImageTk.PhotoImage(Image.open(ASSETS/'dispatch.png').resize((72,72)))
-        top=ttk.Frame(f);top.pack(fill='x');ttk.Label(top,image=self.picture).pack(side='left',padx=(0,16));ttk.Label(top,text='Thrift Mart\nDispatch Server',font=('Segoe UI',20,'bold')).pack(side='left')
+        top=ttk.Frame(f);top.pack(fill='x');ttk.Label(top,image=self.picture).pack(side='left',padx=(0,16));ttk.Label(top,text='MGC YFC\nOperations Server',font=('Segoe UI',20,'bold')).pack(side='left')
         self.status=tk.StringVar(value='Starting server…');ttk.Label(f,textvariable=self.status,wraplength=600).pack(anchor='w',pady=(20,12))
         try:addresses=[a for a in socket.gethostbyname_ex(socket.gethostname())[2] if not a.startswith('127.')]
         except OSError:addresses=[]
@@ -88,7 +88,7 @@ class ServerWindow:
         else:self.root.deiconify();self.root.lift();self.root.focus_force()
     def open_schedule(self):webbrowser.open(URL)
     def manage(self):
-        try:subprocess.Popen([str(ROOT/'Thrift Mart Dispatch Remote Manager.exe'),'--local-server'],env={**os.environ,'PYINSTALLER_RESET_ENVIRONMENT':'1'})
+        try:subprocess.Popen([str(ROOT/'MGC YFC Operations Remote Manager.exe'),'--local-server'],env={**os.environ,'PYINSTALLER_RESET_ENVIRONMENT':'1'})
         except OSError as e:messagebox.showerror(NAME,'Cannot open administration: '+str(e))
     def open_log(self):os.startfile(DATA/'server-console.log')
     def ask_exit(self):

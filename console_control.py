@@ -7,9 +7,9 @@ class ConsoleWindow:
         self.user=ctypes.WinDLL('user32',use_last_error=True)
         self.kernel.GetConsoleWindow.restype=w.HWND
         self.hwnd=self.kernel.GetConsoleWindow()
-        if not self.hwnd:raise RuntimeError('Use the Thrift Mart Dispatch Server Console shortcut to open a dedicated console.')
+        if not self.hwnd:raise RuntimeError('Use the MGC YFC Operations Server Console shortcut to open a dedicated console.')
         self.kernel.SetConsoleTitleW.argtypes=[w.LPCWSTR]
-        self.kernel.SetConsoleTitleW('Thrift Mart Dispatch Server — Console')
+        self.kernel.SetConsoleTitleW('MGC YFC Operations Server — Console')
         self.user.LoadImageW.argtypes=[w.HINSTANCE,w.LPCWSTR,w.UINT,ctypes.c_int,ctypes.c_int,w.UINT]
         self.user.LoadImageW.restype=w.HANDLE
         self.user.SendMessageW.argtypes=[w.HWND,w.UINT,w.WPARAM,w.LPARAM]

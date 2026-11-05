@@ -1,11 +1,10 @@
-# MGC YFC Operations 0.21.0
+# MGC YFC Operations 0.22.0
 
-- Branded desktop login and mobile ministry/store video intro with skip, replay, and reduced-motion support.
-- Persistent account lockouts after 5 failed attempts by default, configurable by administrators.
-- Unlock employee accounts permission, web and native unlock controls, and host recovery utility.
-- MGC YFC Operations branding and dark-red Store Associate Paging header.
-- Blank Receipts & Accounting section with green #067a06 header and a sign-in shortcut.
+- Renames the Windows Server, Console, Remote Manager, installer and shortcuts to MGC YFC Operations. The scheduling section remains Thrift Mart Dispatch.
+- Prompts each employee to choose a permitted starting page once per server calendar day.
+- Verifies full pickup/delivery backups, including photos and history. Archives eligible completed/canceled records after 30 days into Dispatch Journal beneath the configured backup folder. Reports and complete restores include archived history.
+- Preserves installation identity, data paths, accounts, settings, instance locks and update ZIP compatibility.
 
-Install the full Windows installer on the host to receive the native settings and recovery utility. The in-app update installs web/server changes only. Existing data is retained.
+Run the new Windows installer over the existing installation to update desktop programs and shortcuts; the in-app code updater alone does not replace desktop executables. Existing startup and shortcut targets remain supported. Do not uninstall or move the data directory.
 
-Cloudflare Access settings are separate and are not changed by this release. See LOGIN-SECURITY.md for configuration instructions.
+The repository is now m404ntfd/mgc-yfc-operations. Release and update links use the new name; GitHub redirects existing repository links. OneDrive must finish syncing; Files On-Demand is needed to reclaim space occupied by synced archives.
