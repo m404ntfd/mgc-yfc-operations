@@ -2,6 +2,8 @@
 from pathlib import Path
 import zipfile
 import updater
+from prepare_web_assets import prepare
+prepare()
 root=Path(__file__).resolve().parent
 updater.version(updater.current())
 out=root/'dist';out.mkdir(exist_ok=True)
