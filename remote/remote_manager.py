@@ -3,25 +3,32 @@ import json,os,queue,sys,threading,webbrowser
 from pathlib import Path
 import tkinter as tk
 from tkinter import ttk,messagebox
-from client import Client
+try:
+    from .client import Client
+except ImportError:
+    from client import Client
 NAME='MGC YFC Operations Remote Manager'
-VERSION='0.11.0'
+VERSION='0.28.0'
 CONFIG=Path(os.environ.get('APPDATA',Path.home()))/'ThriftMartDispatchRemoteManager'/'config.json'
 
 class App:
-    def __init__(self,root,local=False):
+    def __init__(self,root,local=False,container=None,address=None):
         self.root=root;self.client=None;self.release=None;self.busy=False;self.results=queue.Queue()
-        root.title('MGC YFC Operations Server — Administration' if local else NAME);root.geometry('800x830');root.minsize(720,760)
+        self.local=local
+        if container is None:
+            root.title('MGC YFC Operations Server — Administration' if local else NAME);root.geometry('800x830');root.minsize(720,760)
+            icon=Path(getattr(sys,'_MEIPASS',Path(__file__).resolve().parents[1]))/'assets'/('dispatch.ico' if local else 'remote.ico')
+            if icon.exists():root.iconbitmap(str(icon))
         style=ttk.Style();style.theme_use('clam');style.configure('TButton',padding=9);style.configure('TLabel',font=('Segoe UI',10));style.configure('Title.TLabel',font=('Segoe UI',22,'bold'));style.configure('TEntry',padding=7)
-        frame=ttk.Frame(root,padding=24);frame.pack(fill='both',expand=True)
+        frame=ttk.Frame(container if container is not None else root,padding=16);frame.pack(fill='both',expand=True)
         ttk.Label(frame,text='MGC YFC Operations',style='Title.TLabel').pack(anchor='w')
         ttk.Label(frame,text=('Server administration' if local else 'Remote Manager')+' • '+VERSION+'  |  Staff network').pack(anchor='w',pady=(2,16))
         box=ttk.LabelFrame(frame,text='Connect to your store server',padding=12);box.pack(fill='x')
         try:saved=json.loads(CONFIG.read_text())
         except (OSError,ValueError):saved={}
-        self.address=tk.StringVar(value='http://localhost:8080' if local else saved.get('address',''));self.username=tk.StringVar(value=saved.get('username',''));self.password=tk.StringVar()
+        self.address=tk.StringVar(value=(address or 'http://localhost:8080') if local else saved.get('address',''));self.username=tk.StringVar(value=saved.get('username',''));self.password=tk.StringVar()
         for label,var,secret in [('Server IP or computer name',self.address,False),('Administrator name',self.username,False),('Password',self.password,True)]:
-            row=ttk.Frame(box);row.pack(fill='x',pady=3);ttk.Label(row,text=label,width=27).pack(side='left');ttk.Entry(row,textvariable=var,show='•' if secret else '').pack(side='left',fill='x',expand=True)
+            row=ttk.Frame(box);row.pack(fill='x',pady=3);ttk.Label(row,text=label,width=27).pack(side='left');ttk.Entry(row,textvariable=var,show='•' if secret else '',state='readonly' if local and var is self.address else 'normal').pack(side='left',fill='x',expand=True)
         ttk.Label(box,text='Example: 192.168.1.50:8080 • Passwords are never saved.').pack(anchor='w',pady=5)
         buttons=ttk.Frame(box);buttons.pack(fill='x');ttk.Button(buttons,text='Test connection',command=self.probe).pack(side='left');ttk.Button(buttons,text='Connect / Sign in',command=self.login).pack(side='left',padx=8);ttk.Button(buttons,text='Disconnect',command=self.disconnect).pack(side='left')
         self.status=tk.StringVar(value='Enter the server address shown on the store computer.')
@@ -74,6 +81,7 @@ class App:
         def done(r):
             self.client=c;self.show_status(r)
             try:
+                if self.local:return
                 CONFIG.parent.mkdir(parents=True,exist_ok=True);CONFIG.write_text(json.dumps({'address':c.address,'username':name}))
             except OSError:self.status.set('Connected, but the server address could not be saved on this computer.')
         self.run(lambda:c.login(name,password),done)
