@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS audit(at TEXT, actor TEXT, action TEXT, job TEXT);'''
         c.execute('CREATE TABLE IF NOT EXISTS sharing_settings(id INTEGER PRIMARY KEY CHECK(id=1),body TEXT)')
         c.execute('CREATE TABLE IF NOT EXISTS receipt_profiles(name TEXT PRIMARY KEY COLLATE NOCASE,profile_id TEXT UNIQUE)')
         for person in c.execute('SELECT name FROM users').fetchall():c.execute('INSERT OR IGNORE INTO receipt_profiles VALUES(?,?)',(person['name'],secrets.token_hex(16)))
+        c.execute('CREATE TABLE IF NOT EXISTS receipt_details(receipt_id TEXT PRIMARY KEY,reimbursement INTEGER NOT NULL DEFAULT 0,guest_assigned INTEGER NOT NULL DEFAULT 0)')
         c.execute('CREATE TABLE IF NOT EXISTS receipt_ownership(receipt_id TEXT PRIMARY KEY,profile_id TEXT)')
         c.execute("INSERT OR IGNORE INTO receipt_ownership SELECT r.id,p.profile_id FROM receipts r LEFT JOIN receipt_profiles p ON p.name=r.actor AND r.actor!='Guest'")
         c.execute("CREATE TABLE IF NOT EXISTS appearance_preferences(name TEXT PRIMARY KEY COLLATE NOCASE, mode TEXT NOT NULL)")
@@ -80,6 +81,7 @@ CREATE TABLE IF NOT EXISTS audit(at TEXT, actor TEXT, action TEXT, job TEXT);'''
 PERMISSIONS={
  'send_pages':'Page an associate to an area', 'receive_pages':'Use device as paging speaker',
  'show_vehicle_filter':'Show vehicle filter on main dashboard', 'show_search':'Show search bar on main dashboard',
+ 'submit_receipts':'Submit receipts and appear in guest receipt assignment',
  'view_all_receipts':'View all users’ receipts (manager/accounting)',
  'view_reports':'Open and print schedule/request reports',
  'view_schedule':'View schedule, search and filter', 'create_appointments':'Create pickups and deliveries',
@@ -98,6 +100,7 @@ PERMISSIONS={
 ROUTE_PERMISSIONS={'/api/admin/lockouts':'unlock_users','/api/admin/unlock-user':'unlock_users','/api/paging/send':'send_pages',
  'send_pages':'Page an associate to an area', 'receive_pages':'Use device as paging speaker',
  'show_vehicle_filter':'Show vehicle filter on main dashboard', 'show_search':'Show search bar on main dashboard',
+ 'submit_receipts':'Submit receipts and appear in guest receipt assignment',
  'view_all_receipts':'View all users’ receipts (manager/accounting)',
  'view_reports':'Open and print schedule/request reports','/api/admin/users':'manage_users','/api/admin/permissions':'manage_users',
  '/api/user':'manage_users','/api/admin/remove-user':'manage_users','/api/admin/password':'reset_passwords',
@@ -373,7 +376,9 @@ class Handler(BaseHTTPRequestHandler):
         defaults.update({key:True for key in ('view_schedule','submit_requests','cancel_appointments','call_contacts','text_contacts','navigate','change_own_password')})
         for key in ('create_appointments','edit_appointments','delete_appointments','update_status','review_requests'): defaults[key]=session['can_create']
         defaults['see_requests']=session['see_requests'];defaults['view_reports']=session['can_create']
+        defaults['submit_receipts']=True
         session['grants']=json.loads(saved['body']) if saved else defaults
+        session['grants'].setdefault('submit_receipts',True)
         for key in ('view_schedule','show_vehicle_filter','show_search'): session['grants'].setdefault(key,True)
         session['can_create']=has_permission(session,'create_appointments')
         session['see_requests']=has_permission(session,'see_requests')
@@ -402,6 +407,12 @@ class Handler(BaseHTTPRequestHandler):
                     try: u=self.user()
                     except Problem: u=None
                     return self.send({'application':'thrift-mart-dispatch','name':'MGC YFC Operations Server','version':updater.current(),'setup':setup,'user':u and {'name':u['name'],'admin':u['admin'],'can_create':u['can_create'],'see_requests':u['see_requests'],'grants':u['grants']},'local':self.client_address[0] in ('127.0.0.1','::1')})
+                if self.path=='/api/receipt-users':
+                    people=[]
+                    for row in c.execute('SELECT u.name,u.admin,p.profile_id,g.body FROM users u JOIN receipt_profiles p ON p.name=u.name LEFT JOIN user_grants g ON g.name=u.name ORDER BY u.name'):
+                        grants=json.loads(row['body']) if row['body'] else {}
+                        if row['admin'] or grants.get('submit_receipts',True):people.append({'id':row['profile_id'],'name':row['name']})
+                    return self.send({'users':people})
                 if self.path=='/api/receipt-categories':
                     return self.send({'categories':[r[0] for r in c.execute('SELECT code FROM receipt_categories ORDER BY code')]})
                 u=self.user()
@@ -427,11 +438,11 @@ class Handler(BaseHTTPRequestHandler):
                     try:offset=max(0,int(value('offset') or 0))
                     except ValueError:raise Problem('Invalid page.')
                     count=c.execute('SELECT COUNT(*) FROM receipts'+where,args).fetchone()[0]
-                    rows=c.execute('SELECT id,at,actor,category,filename FROM receipts'+where+' ORDER BY at DESC,id LIMIT 100 OFFSET ?',args+[offset]).fetchall()
+                    rows=c.execute('SELECT id,at,actor,category,filename,COALESCE((SELECT reimbursement FROM receipt_details WHERE receipt_id=receipts.id),0) AS reimbursement_required,COALESCE((SELECT guest_assigned FROM receipt_details WHERE receipt_id=receipts.id),0) AS guest_assigned FROM receipts'+where+' ORDER BY at DESC,id LIMIT 100 OFFSET ?',args+[offset]).fetchall()
                     return self.send({'receipts':[dict(r) for r in rows],'total':count,'offset':offset,'can_view_all':has_permission(u,'view_all_receipts')})
                 if self.path=='/api/admin/receipts':
                     if not u['admin']: raise Problem('Administrator access required.',403)
-                    return self.send({'receipts':[dict(r) for r in c.execute('SELECT id,at,actor,category,filename FROM receipts ORDER BY at DESC LIMIT 200')]})
+                    return self.send({'receipts':[dict(r) for r in c.execute('SELECT id,at,actor,category,filename,COALESCE((SELECT reimbursement FROM receipt_details WHERE receipt_id=receipts.id),0) AS reimbursement_required,COALESCE((SELECT guest_assigned FROM receipt_details WHERE receipt_id=receipts.id),0) AS guest_assigned FROM receipts ORDER BY at DESC LIMIT 200')]})
                 if self.path.startswith('/api/admin/receipt-file/'):
                     if not u['admin']: raise Problem('Administrator access required.',403)
                     r=c.execute('SELECT body,mime FROM receipts WHERE id=?',(self.path.rsplit('/',1)[1],)).fetchone()
@@ -577,9 +588,17 @@ class Handler(BaseHTTPRequestHandler):
                         uploader=self.user();owner=uploader['receipt_owner'];actor=uploader['name']
                     except Problem:
                         if d.get('account_upload'):raise Problem('Sign in again before saving this receipt to your profile.',401)
-                        owner=None;actor='Guest'
+                        target=c.execute('SELECT u.name,u.admin,p.profile_id,g.body FROM users u JOIN receipt_profiles p ON p.name=u.name LEFT JOIN user_grants g ON g.name=u.name WHERE p.profile_id=?',(str(d.get('assignee','')),)).fetchone()
+                        if not target:raise Problem('Select a current user for this receipt.')
+                        grants=json.loads(target['body']) if target['body'] else {}
+                        if not target['admin'] and not grants.get('submit_receipts',True):raise Problem('This user cannot submit receipts.')
+                        owner=target['profile_id'];actor=target['name'];uploader=None
+                    if uploader and not has_permission(uploader,'submit_receipts'):raise Problem('Receipt submission permission required.',403)
+                    reimbursement=d.get('reimbursement_required',False)
+                    if not isinstance(reimbursement,bool):raise Problem('Choose whether reimbursement is required.')
                     c.execute('INSERT INTO receipts VALUES(?,?,?,?,?,?,?,?)',(ident,time.time(),actor,category,filename,mime,body,source))
                     c.execute('INSERT INTO receipt_ownership VALUES(?,?)',(ident,owner))
+                    c.execute('INSERT INTO receipt_details VALUES(?,?,?)',(ident,int(reimbursement),int(uploader is None)))
                     return self.send({'ok':True,'id':ident,'email_pending':True})
                 u=self.user()
                 if self.path=='/api/page-colors':
