@@ -14,6 +14,7 @@
 'use strict';
 const $=id=>document.getElementById(id), esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let state={jobs:[],vehicles:[],users:[]},user,setup=false,mode='day',editing=null,timer;
+const connectionId=Array.from(crypto.getRandomValues(new Uint8Array(16)),value=>value.toString(16).padStart(2,'0')).join('');
 $('login').elements.name.labels[0].firstChild.textContent='Username';
 const loginAttempts=document.createElement('p');loginAttempts.id='loginAttempts';loginAttempts.setAttribute('role','status');$('authError').after(loginAttempts);
 const operationsTitle=document.createElement('div');operationsTitle.className='operationsTitle';operationsTitle.textContent='MGC YFC Operations';$('storeMenuButton').before(operationsTitle);const pageLabel=$('currentSection');$('storeMenuButton').replaceChildren(pageLabel,document.createTextNode(' ▾'));
@@ -33,7 +34,7 @@ setServerConnection(true);setInterval(pollServerConnection,15000);pollServerConn
 const localDate=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 $('date').value=localDate(new Date());
 $('mobileLink').href=location.origin+'/mobile';$('mobileLink').textContent=location.origin+'/mobile';
-async function api(path,data){let r;try{r=await fetch('/api/'+path,{method:data?'POST':'GET',headers:data?{'Content-Type':'application/json','X-Dispatch':'1'}:{},body:data?JSON.stringify(data):undefined,signal:AbortSignal.timeout(20000)});if(r.status>=500)throw Error('Server unavailable');setServerConnection(true);}catch(e){setServerConnection(false);throw e;}const v=await r.json();if(!r.ok){if(r.status===401&&user){user=null;updateSignedInUser();clearInterval(timer);$('app').hidden=true;$('paging').hidden=true;$('receipts').hidden=true;$('receiptHistory')?.setAttribute('hidden','');$('printPurpose')?.setAttribute('hidden','');setSectionHeader('Sign in','signin');$('auth').hidden=false;$('editor').close();$('passwordDialog').close();$('statusDialog').close();}throw Object.assign(Error(v.error||'Request failed'),{status:r.status,attemptsRemaining:v.attempts_remaining});}return v;}
+async function api(path,data){let r;try{r=await fetch('/api/'+path,{method:data?'POST':'GET',headers:{'X-Dispatch-Connection':connectionId,...(data?{'Content-Type':'application/json','X-Dispatch':'1'}:{})},body:data?JSON.stringify(data):undefined,signal:AbortSignal.timeout(20000)});if(r.status>=500)throw Error('Server unavailable');setServerConnection(true);}catch(e){setServerConnection(false);throw e;}const v=await r.json();if(!r.ok){if(r.status===401&&user){user=null;updateSignedInUser();clearInterval(timer);$('app').hidden=true;$('paging').hidden=true;$('receipts').hidden=true;$('receiptHistory')?.setAttribute('hidden','');$('printPurpose')?.setAttribute('hidden','');setSectionHeader('Sign in','signin');$('auth').hidden=false;$('editor').close();$('passwordDialog').close();$('statusDialog').close();}throw Object.assign(Error(v.error||'Request failed'),{status:r.status,attemptsRemaining:v.attempts_remaining});}return v;}
 let toastTimer;
 function toast(message,action){
  const notice=$('toast');
@@ -137,10 +138,19 @@ $('repositoryUnlockForm').onsubmit=async e=>{e.preventDefault();try{await api('r
 lockRepository();
 
 let updateVersion=null,updateBusy=false;
-async function loadUpdates(){lockRepository();try{const r=await api('updates');$('updateVersion').textContent='Installed version: '+r.current;$('updateRepo').value=r.repository;$('lastUpdate').textContent=r.last?(r.last.error||'Last installed: '+r.last.version+' · '+r.last.at):'';if(!r.launcher)$('updateStatus').textContent='Use Start-Store-Dispatch.bat on the server to enable update installation.';}catch(e){toast(e.message);}}
+async function loadUpdates(){lockRepository();refreshUpdateConnections();try{const r=await api('updates');$('updateVersion').textContent='Installed version: '+r.current;$('updateRepo').value=r.repository;$('lastUpdate').textContent=r.last?(r.last.error||'Last installed: '+r.last.version+' · '+r.last.at):'';if(!r.launcher)$('updateStatus').textContent='Use Start-Store-Dispatch.bat on the server to enable update installation.';}catch(e){toast(e.message);}}
 $('updateConfig').onsubmit=async e=>{e.preventDefault();if(updateBusy)return;try{await api('update-config',{repository:$('updateRepo').value});updateVersion=null;$('installUpdate').hidden=true;$('releaseNotes').textContent='';$('updateStatus').textContent='Repository saved. Ready to check.';}catch(err){$('updateStatus').textContent=err.message;}finally{lockRepository();}};
-$('checkUpdate').onclick=async()=>{if(updateBusy)return;updateBusy=true;$('checkUpdate').disabled=true;$('installUpdate').hidden=true;$('updateStatus').textContent='Checking GitHub…';try{const r=await api('update-check',{});updateVersion=r.available?r.latest:null;serverUpdateAvailable=!!r.available;setServerConnection(true);$('updateStatus').textContent=r.available?'Version '+r.latest+' is available.':'You are up to date (version '+r.current+').';$('releaseNotes').textContent=r.notes;$('installUpdate').hidden=!r.available;}catch(e){$('updateStatus').textContent=e.message;}finally{updateBusy=false;$('checkUpdate').disabled=false;}};
-$('installUpdate').onclick=async()=>{if(updateBusy||!updateVersion)return;if(!confirm('Install version '+updateVersion+' and restart? Ask everyone to finish saving appointments first. All users will be signed out.'))return;updateBusy=true;$('installUpdate').disabled=true;$('updateStatus').textContent='Downloading and verifying the update…';try{await api('update-install',{version:updateVersion});clearInterval(timer);$('updateStatus').textContent='Restarting. This page will reload when the server is ready.';let tries=0;const poll=setInterval(async()=>{tries++;try{const r=await api('session');if(!r.user){clearInterval(poll);location.reload();}}catch{}if(tries>=45){clearInterval(poll);$('updateStatus').textContent='The server has not returned yet. Check its window on the Windows computer, then reload this page.';}},2000);}catch(e){$('updateStatus').textContent=e.message;}finally{updateBusy=false;$('installUpdate').disabled=false;}};
+$('checkUpdate').onclick=async()=>{if(updateBusy)return;updateBusy=true;$('checkUpdate').disabled=true;$('installUpdate').hidden=true;$('updateStatus').textContent='Checking GitHub…';try{const r=await api('update-check',{});updateVersion=r.available?r.latest:null;serverUpdateAvailable=!!r.available;setServerConnection(true);$('updateStatus').textContent=r.available?'Version '+r.latest+' is available.':'You are up to date (version '+r.current+').';$('releaseNotes').textContent=r.notes;$('installUpdate').hidden=!r.available;}catch(e){$('updateStatus').textContent=e.message;}finally{updateBusy=false;$('checkUpdate').disabled=false;refreshUpdateConnections();}};
+$('installUpdate').onclick=async()=>{
+ if(updateBusy||!updateVersion)return;
+ if(user?.admin&&!(await refreshUpdateConnections()))return;
+ if(!confirm('Install version '+updateVersion+' and restart? Save your own work first and confirm guest/kiosk activity is finished. All users will be signed out. The server will recheck other signed-in connections before installing.'))return;
+ updateBusy=true;updateInstallButton();$('updateStatus').textContent='Checking connections, then downloading and verifying the update…';
+ try{await api('update-install',{version:updateVersion});clearInterval(timer);$('updateStatus').textContent='Restarting. This page will reload when the server is ready.';
+  let tries=0;const poll=setInterval(async()=>{tries++;try{const r=await api('session');if(!r.user){clearInterval(poll);location.reload();}}catch{}if(tries>=45){clearInterval(poll);$('updateStatus').textContent='The server has not returned yet. Check its window on the Windows computer, then reload this page.';}},2000);
+ }catch(e){$('updateStatus').textContent=e.message;await refreshUpdateConnections();}
+ finally{updateBusy=false;updateInstallButton();}
+};
 
 async function loadBackups(){try{const r=await api('admin/backup-settings');$('backupFolder').value=r.config.folder;$('backupEnabled').checked=r.config.enabled;$('journalEnabled').checked=r.config.journal_enabled!==false;$('journalDays').value=r.config.journal_days||30;const s=r.status;$('backupStatus').textContent=s?(s.error?'Last backup error: '+s.error:s.verified?`Verified backup: ${s.at} · ${s.counts.Pickup} pickups · ${s.counts.Delivery} deliveries · ${s.counts.photos} photos. ${s.file}. Confirm OneDrive is synced.`:'Previous backup has not been read-back verified. Use Back up now.'):'No complete backup saved yet.';$('journalStatus').textContent=`Dispatch Journal: ${r.journal.records} archived entries in ${r.journal.archives} files. `+(r.journal.status?.error?'Archiving paused: '+r.journal.status.error:'Records are archived only after a complete backup and successful read-back checks.');}catch(e){$('backupStatus').textContent=e.message;}}
 $('backupConfig').onsubmit=async e=>{e.preventDefault();try{await api('admin/backup-settings',{folder:$('backupFolder').value,enabled:$('backupEnabled').checked,journal_enabled:$('journalEnabled').checked,journal_days:Number($('journalDays').value)});$('backupStatus').textContent='Settings saved. Use Back up now to verify the destination.';}catch(err){$('backupStatus').textContent=err.message;}};
@@ -2806,3 +2816,50 @@ $('workJobsForm').onsubmit=async e=>{
  try{await workApi('jobs',{jobs:e.currentTarget.elements.jobs.value.split(/\r?\n/).map(j=>j.trim()).filter(Boolean)});$('workJobsStatus').textContent='Jobs saved.';}
  catch(error){$('workJobsStatus').textContent=error.message;}finally{e.submitter.disabled=false;}
 };
+
+// Connection presence contains status only, never form contents or session tokens.
+const updateConnectionsPanel=document.createElement('section');
+updateConnectionsPanel.id='updateConnectionsPanel';updateConnectionsPanel.hidden=true;
+updateConnectionsPanel.innerHTML=`<div class="connectionPanelHead"><h3>Connections before updating</h3><button type="button" id="refreshUpdateConnections">Refresh connections</button></div>
+ <p id="updateConnectionsStatus" role="status">Checking connections…</p>
+ <p>Ask everyone to save their work and sign out or close all application tabs before installing. Idle or unconfirmed connections still block installation. Your other tabs count as separate connections.</p>
+ <div id="updateConnectionsList"></div><p id="updateConnectionsChecked" class="connectionPanelNote"></p>
+ <p class="connectionPanelNote">This shows signed-in connections, not unsaved form contents. Check guest/kiosk activity separately. If a connection is unconfirmed, ask that user to reconnect and sign out.</p>`;
+$('updateConfig').before(updateConnectionsPanel);
+let updateConnectionsState=null,updateConnectionsChecking=false,updateConnectionsAt=0;
+function updateInstallButton(){
+ $('installUpdate').disabled=updateBusy||!!(user?.admin&&(!updateConnectionsState||Date.now()-updateConnectionsAt>30000||updateConnectionsState.other_connections));
+}
+function connectionAge(stamp,now){
+ if(stamp===null)return 'PIN access in progress';
+ const seconds=Math.max(0,Math.floor(now-stamp));
+ return seconds<60?'Just now':seconds<3600?Math.floor(seconds/60)+' min ago':Math.floor(seconds/3600)+' hr ago';
+}
+async function refreshUpdateConnections(){
+ updateConnectionsPanel.hidden=!user?.admin;
+ if(!user?.admin){updateConnectionsState=null;updateInstallButton();return false;}
+ if(updateConnectionsChecking)return false;
+ const signedIn=user;updateConnectionsChecking=true;$('refreshUpdateConnections').disabled=true;
+ try{
+  const result=await api('admin/update-connections');
+  if(user!==signedIn)return false;
+  updateConnectionsState=result;updateConnectionsAt=Date.now();
+  updateConnectionsPanel.dataset.blocked=String(result.other_connections>0);
+  $('updateConnectionsStatus').textContent=result.other_connections?`${result.other_connections} other signed-in ${result.other_connections===1?'connection':'connections'} — installation blocked.`:'No other signed-in connections reported.';
+  $('updateConnectionsList').innerHTML=result.connections.map(row=>`<article class="updateConnectionRow"><div><strong>${esc(row.name)}${row.current?' · You (this connection)':''}</strong><span>${esc(row.kind)}</span></div><div><b>${({active:'Active recently',idle:'Connected · idle','not-seen':'Unconfirmed · not recently seen'})[row.status]}</b><span>Last activity: ${connectionAge(row.last_active,result.checked_at)}</span><span>Last seen: ${connectionAge(row.last_seen,result.checked_at)}</span></div></article>`).join('')||'<p>No signed-in connections reported.</p>';
+  $('updateConnectionsChecked').textContent='Checked '+new Date(result.checked_at*1000).toLocaleTimeString()+'. Refreshes every 15 seconds while this screen is open.';
+  return result.other_connections===0;
+ }catch(error){
+  if(user===signedIn){updateConnectionsState=null;updateConnectionsPanel.dataset.blocked='true';$('updateConnectionsStatus').textContent='Connection status unavailable. Installation is disabled until the status can be checked.';$('updateConnectionsList').replaceChildren();$('updateConnectionsChecked').textContent='';}
+  return false;
+ }finally{updateConnectionsChecking=false;$('refreshUpdateConnections').disabled=false;updateInstallButton();}
+}
+$('refreshUpdateConnections').onclick=refreshUpdateConnections;
+function sendConnectionPresence(closing=false){
+ if(!user)return;
+ fetch('/api/account/connection',{method:'POST',headers:{'Content-Type':'application/json','X-Dispatch':'1','X-Dispatch-Connection':connectionId},body:JSON.stringify({closing}),keepalive:closing}).catch(()=>{});
+}
+setInterval(()=>{sendConnectionPresence();if(user?.admin&&!$('settings').hidden&&!$('updatePanel').hidden)refreshUpdateConnections();else updateInstallButton();},15000);
+window.addEventListener('pagehide',event=>{if(!event.persisted)sendConnectionPresence(true);});
+window.addEventListener('pageshow',()=>sendConnectionPresence());
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)sendConnectionPresence();});

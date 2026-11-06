@@ -110,3 +110,14 @@ Time Clock remains a standalone button. My Timekeeping contains My Schedule, My 
 Copy week copies shifts starting in the source Sunday–Saturday week to a different Sunday–Saturday week. It preserves local times, jobs, work sites, and notes. An overlap or changed assignment cancels the entire copy; existing shifts are never overwritten. Availability and time-off requests are not copied. The manager grid shows approved and pending restrictions separately, including optional partial-day time off. Compact pickup/delivery bars use the dispatch colors and are shown only with dispatch schedule access.
 
 Validation: `python -m unittest test_workforce test_schedule_redesign`, `python test_workforce_ui.py`, `python test_schedule_redesign_ui.py`, and `node --check static/app.js`. Set TEST_CHROMIUM to use an existing Chromium test executable and TEST_ARTIFACTS for optional browser screenshots.
+
+
+### Connections before updating
+
+Administrators can see signed-in connections on Application Settings → Updates. The panel refreshes every 15 seconds while open and shows the user, client type, recent activity, and last contact. Separate tabs and devices are counted separately; the administrator’s current connection is identified and excluded from the blocker count. Active Time Clock PIN sessions also block installation until the punch completes, the user exits, or the PIN session expires.
+
+An idle or unconfirmed connection is not proof that work has been saved. Ask users to save their work and sign out or close all application tabs. Unconfirmed connections remain blockers until closed, signed out, or expired. Reconnecting with the same browser and signing out clears its session. The panel never offers a forced sign-out. Guest forms and disconnected/offline work cannot be assessed by this list and require a separate check by the administrator.
+
+The server checks connections again inside its request lock before downloading an update, so a login after the displayed status was checked still blocks installation. Pending writes finish before the check; new writes are rejected once restart begins. The current administrator must save their own work before confirming installation. The browser disables Install if connection status cannot be refreshed. Connection names are administrator-only; all installation routes retain their existing permission checks and enforce the server-side blocker.
+
+Presence is held in memory and reports status only, without form contents or session tokens. No timecard or reservation records or schemas are changed by this feature. Tests: `python -m unittest test_update_connections test_data_integrity test_updater` and `python test_update_connections_ui.py`.

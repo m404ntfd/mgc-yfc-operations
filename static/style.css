@@ -394,3 +394,16 @@ header #currentSection {flex-basis:auto;order:0;font-size:.85rem;margin-left:4px
 @media(max-width:600px){header .storeMenu {gap:6px}header #currentSection {flex-basis:100%;margin:0}header .headerMenu summary,header #storeMenuButton {padding:8px 10px}header .operationsTitle {font-size:1rem}}
 @media(max-width:1023px){#workforce [data-work-view=team],#workforce [data-work-panel=team] {display:none!important}}
 @media(max-width:600px){.workDropdown>div {min-width:190px}.workTabs {gap:6px}.workDropdown summary {padding:10px;font-size:.85rem}.workPersonalShift {padding:16px}.workScheduleTotals div {padding:18px 10px}.headerMenu>div {left:auto;right:0}}
+
+#updateConnectionsPanel {margin:18px 0;padding:16px;border:1px solid #b5c8bb;border-radius:12px;background:#f4faf5;color:#173a25}
+#updateConnectionsPanel[hidden] {display:none!important}
+#updateConnectionsPanel[data-blocked=true] {border-color:#d5b26b;background:#fff9ed;color:#573b11}
+.connectionPanelHead {display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.connectionPanelHead h3 {margin:0}
+#updateConnectionsStatus {font-weight:700}
+.updateConnectionRow {display:flex;justify-content:space-between;gap:16px;padding:12px 0;border-top:1px solid #0002}
+.updateConnectionRow>div {display:grid;gap:4px;min-width:0;overflow-wrap:anywhere}
+.updateConnectionRow span,.connectionPanelNote {font-size:.85rem}
+:root[data-theme=dark] #updateConnectionsPanel {background:#172d24;color:#e1f5e9;border-color:#446d58}
+:root[data-theme=dark] #updateConnectionsPanel[data-blocked=true] {background:#362a16;color:#ffebc4;border-color:#866938}
+@media(max-width:600px){.updateConnectionRow {flex-direction:column;gap:8px}}

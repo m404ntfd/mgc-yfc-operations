@@ -1,10 +1,11 @@
-# MGC YFC Operations 0.39.0
+# MGC YFC Operations 0.39.1
 
-- Adds Jobs in Application Settings and groups manager scheduling by job. Employees assigned to multiple jobs appear in each section; shifts from other jobs appear lighter with a dashed outline without duplicating employee shifts or section totals.
-- Keeps manager scheduling in desktop view while employees can view their schedule on mobile, with daily shift cards, scheduled hours, and shift counts.
-- Adds header utilities and My Timekeeping, Manager Functions, and Time Clock Setup dropdown menus, respecting existing permissions.
-- Adds Copy week with overlap checks. The entire copy is canceled if any destination shift conflicts; existing shifts are preserved.
-- Shows compact pickup and delivery bars using dispatch colors, plus approved and pending availability and time off. Time-off requests support partial-day hours.
-- Adds private My Timecards access for employees.
+- Adds an administrator-only Connections before updating panel showing signed-in connections, recent activity, and whether the server is still seeing each connection.
+- Blocks updates while other signed-in connections remain, including idle connections, unconfirmed connections, other tabs, and active Time Clock PIN sessions.
+- Rechecks connections on the server immediately before staging an update. A new login after the screen was checked cannot bypass this protection.
+- Disables installation when connection status cannot be confirmed. Connection status refreshes automatically and can be refreshed manually.
+- Preserves existing timecard and reservation records. This release introduces no database schema changes; connection tracking is kept in memory.
 
-Use Update server → Check for server updates → Install update & restart, or run the full Windows installer over the existing installation. Existing job assignments and shifts are retained.
+Save work and sign out or close other application tabs before installing. The panel does not inspect unsaved form contents; check guest/kiosk activity separately. The administrator installing the update should save their own work first.
+
+For this first upgrade from 0.39.0, coordinate with users before installing: the new connection protection becomes available after 0.39.1 is installed.

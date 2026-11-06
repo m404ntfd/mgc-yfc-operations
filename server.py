@@ -1577,6 +1577,51 @@ def section_options(u):
     options.append({'id':'print','label':'Print with a Purpose'})
     return options
 
+CONNECTION_RECENT_SECONDS=60
+
+
+def connection_key(handler):
+    value=handler.headers.get('X-Dispatch-Connection','')
+    return value if re.fullmatch(r'[a-f0-9]{32}',value) else 'legacy'
+
+
+def record_connection(handler,session):
+    key=connection_key(handler)
+    connections=session.setdefault('connections',{})
+    now=time.time()
+    if key not in connections:
+        connections[key]=dict(connected_at=now,last_active=session.get('last_active',now))
+    connections[key]['last_seen']=now
+    return connections[key]
+
+
+def update_connection_rows(handler,c,current):
+    now=time.time()
+    rows=[]
+    for session in list(SESSIONS.values()):
+        if session_expired(session,now): continue
+        for key,connection in session.get('connections',{}).items():
+            seen=connection['last_seen']
+            activity=connection.get('last_active',session.get('last_active',seen))
+            rows.append(dict(name=session['name'],current=session is current and key==connection_key(handler),
+                kind='Desktop manager' if session.get('local_admin') else 'Browser' if key!='legacy' else 'Other client',
+                status='not-seen' if now-seen>CONNECTION_RECENT_SECONDS else 'active' if now-activity<300 else 'idle',
+                last_seen=seen,last_active=activity))
+    for account,expires,_ in list(CLOCK_SESSIONS.values()):
+        if expires<=now: continue
+        person=c.execute('SELECT name FROM receipt_profiles WHERE profile_id=?',(account,)).fetchone()
+        rows.append(dict(name=person['name'] if person else 'Time Clock user',current=False,kind='Time Clock PIN',
+                         status='active',last_seen=None,last_active=None))
+    rows.sort(key=lambda row:(not row['current'],row['name'].casefold(),row['kind']))
+    return dict(connections=rows,other_connections=sum(not row['current'] for row in rows),checked_at=now)
+
+
+def ensure_update_connections_clear(handler,c,current):
+    status=update_connection_rows(handler,c,current)
+    if status['other_connections']:
+        raise Problem('Update blocked: other signed-in connections remain. Ask users to save their work and sign out or close their tabs, then refresh Connections. Idle or unconfirmed connections also block installation.',409)
+
+
 def session_expired(session, now):
     if session.get('local_admin'):return session.get('version')!=updater.current()
     if now >= session['expires']: return True
@@ -1812,13 +1857,17 @@ class Handler(BaseHTTPRequestHandler):
         if trusted_local and token:
             with connect() as c:
                 row=c.execute('SELECT s.name,s.version FROM local_admin_sessions s JOIN users u ON u.name=s.name WHERE s.token_hash=? AND u.admin=1',(hashlib.sha256(token.encode()).hexdigest(),)).fetchone()
-            if row and row['version']==updater.current():session={'name':row['name'],'admin':True,'local_admin':True,'version':row['version']};SESSIONS[token]=session
+            if row and row['version']==updater.current():
+                session=session if session and session.get('name')==row['name'] else {}
+                session.update(name=row['name'],admin=True,local_admin=True,version=row['version']);SESSIONS[token]=session
             elif session and session.get('local_admin'):session=None
         elif session and session.get('local_admin'):session=None
         if not session or session_expired(session, time.time()):
             SESSIONS.pop(token, None)
             raise Problem('Please sign in again.',401)
-        if self.headers.get('X-Dispatch-Activity')=='1':session['last_active']=time.time()
+        record_connection(self,session)
+        if self.headers.get('X-Dispatch-Activity')=='1':
+            session['last_active']=time.time();record_connection(self,session)['last_active']=session['last_active']
         with connect() as c:
             permission=c.execute('SELECT * FROM permissions WHERE name=?',(session['name'],)).fetchone()
             profile=c.execute('SELECT profile_id FROM receipt_profiles WHERE name=?',(session['name'],)).fetchone()
@@ -1990,6 +2039,9 @@ class Handler(BaseHTTPRequestHandler):
                 if self.path=='/api/admin/status':
                     if not route_allowed(u,self.path): raise Problem('Administrator access required.',403)
                     return self.send({'name':'MGC YFC Operations Server','version':updater.current(),'uptime_minutes':int((time.time()-STARTED)/60),'time':dt.datetime.now().isoformat(timespec='seconds'),'jobs':c.execute('SELECT COUNT(*) FROM jobs').fetchone()[0],'vehicles':c.execute('SELECT COUNT(*) FROM vehicles').fetchone()[0],'users':c.execute('SELECT COUNT(*) FROM users').fetchone()[0]})
+                if self.path=='/api/admin/update-connections':
+                    if not u['admin']: raise Problem('Administrator access required.',403)
+                    return self.send(update_connection_rows(self,c,u))
                 if self.path=='/api/updates' and route_allowed(u,self.path):
                     last=DATA/'last-update.json'
                     return self.send({'current':updater.current(),'repository':updater.repo(),'launcher':os.environ.get('DISPATCH_LAUNCHER')=='1','last':json.loads(last.read_text()) if last.exists() else None})
@@ -2091,6 +2143,7 @@ class Handler(BaseHTTPRequestHandler):
                         control=os.environ.get('DISPATCH_CONTROL_TOKEN','')
                         if not r['admin'] or self.client_address[0] not in ('127.0.0.1','::1') or not control or not hmac.compare_digest(str(d.get('local_control_token','')),control):raise Problem('Local server administration required.',403)
                     token=secrets.token_urlsafe(32); SESSIONS[token]={'name':r['name'],'admin':bool(r['admin']),'expires':time.time()+86400,'login_day':dt.date.today().isoformat(),'last_active':time.time()}
+                    record_connection(self,SESSIONS[token])
                     if local_admin:
                         c.execute('INSERT INTO local_admin_sessions VALUES(?,?,?)',(hashlib.sha256(token.encode()).hexdigest(),r['name'],updater.current()))
                         SESSIONS[token].update(local_admin=True,version=updater.current())
@@ -2151,8 +2204,14 @@ class Handler(BaseHTTPRequestHandler):
                     if set(d)!={'mobile','desktop'} or any(not isinstance(d[k],dict) or set(d[k])!={'text','email','native'} or any(not isinstance(v,bool) for v in d[k].values()) for k in d):raise Problem('Invalid sharing options.')
                     c.execute('INSERT OR REPLACE INTO sharing_settings VALUES(1,?)',(json.dumps(d),))
                     return self.send(d)
+                if self.path=='/api/account/connection':
+                    if type(d.get('closing',False)) is not bool: raise Problem('Invalid connection status.')
+                    if d.get('closing'):
+                        u.get('connections',{}).pop(connection_key(self),None)
+                    return self.send({'ok':True})
                 if self.path=='/api/account/activity':
                     u['last_active']=time.time()
+                    record_connection(self,u)['last_active']=u['last_active']
                     return self.send({'ok':True})
                 if self.path=='/api/account/appearance':
                     mode=d.get('mode')
@@ -2332,6 +2391,7 @@ class Handler(BaseHTTPRequestHandler):
                         elif self.path=='/api/update-check':
                             result=check_release_status(); result.pop('asset',None); return self.send(result)
                         elif self.path=='/api/update-install':
+                            ensure_update_connections_clear(self,c,u)
                             if os.environ.get('DISPATCH_LAUNCHER')!='1': raise ValueError('Restart using Start-Store-Dispatch.bat to enable installation.')
                             updater.stage(str(d.get('version','')))
                             RESTART=True
