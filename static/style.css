@@ -407,3 +407,44 @@ header #currentSection {flex-basis:auto;order:0;font-size:.85rem;margin-left:4px
 :root[data-theme=dark] #updateConnectionsPanel {background:#172d24;color:#e1f5e9;border-color:#446d58}
 :root[data-theme=dark] #updateConnectionsPanel[data-blocked=true] {background:#362a16;color:#ffebc4;border-color:#866938}
 @media(max-width:600px){.updateConnectionRow {flex-direction:column;gap:8px}}
+/* Administration tiles and focused account/role editors. */
+#settings {--admin-surface:#fff;--admin-muted:#f5f3f2;--admin-border:#dedbd8;--admin-ink:#282b36;--admin-accent:#a91c28}
+:root[data-theme=dark] #settings {--admin-surface:#18212c;--admin-muted:#202c39;--admin-border:#3c4958;--admin-ink:#e8edf5;--admin-accent:#ffb6bc}
+.settingsHeading {margin:8px 0 26px}.settingsHeading h1 {font-size:2rem}.settingsHeading p {margin:8px 0}
+#settingsCategories {gap:8px;border-bottom:1px solid var(--admin-border);padding-bottom:16px}
+#settingsCategories button {border:1px solid var(--admin-border);background:var(--admin-surface);color:var(--admin-ink)}
+#settingsCategories button.selected {border-color:var(--admin-accent);color:var(--admin-accent);box-shadow:inset 0 -3px var(--admin-accent)}
+#settingsSubcategories {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;border:0;padding:10px 0 24px}
+#settingsSubcategories[hidden] {display:none}
+#settingsSubcategories button {display:flex;align-items:center;gap:16px;text-align:left;padding:22px 18px;min-height:115px;border:1px solid var(--admin-border);border-radius:14px;background:var(--admin-surface);color:var(--admin-ink);box-shadow:0 3px 10px #00000006}
+#settingsSubcategories button:hover {background:var(--admin-muted);border-color:var(--admin-accent)}
+#settingsSubcategories button>span:nth-child(2) {flex:1;min-width:0}
+#settingsSubcategories strong {display:block;font-size:1rem}#settingsSubcategories small {display:block;font-weight:400;font-size:.82rem;line-height:1.5;margin-top:6px;opacity:.78}
+.settingsTileIcon {font-size:2rem;width:36px;text-align:center;color:var(--admin-accent)}
+.settingsBack {margin:0 0 22px;background:transparent}.editorTabs {display:flex;gap:8px;margin:18px 0 24px;flex-wrap:wrap;border-bottom:1px solid #8885;padding-bottom:14px}
+.editorTabs button {border:1px solid #8885}.editorTabs button.selected {background:#fce7e9;color:#8d1420;border-color:#b51f2b}
+.userEditor,.permissionEditorDialog {width:min(880px,calc(100vw - 32px));max-width:880px;padding:28px;max-height:90dvh;overflow:auto}
+.userEditor>section[hidden],#roleProperties[hidden],#rolePermissionPanel[hidden] {display:none}
+.userEditor .dialogTop h2 {font-size:1.6rem}.userEditor .dialogTop {margin-bottom:8px}
+#userEditorSummary {font-size:1.1rem;margin:0 0 18px;overflow-wrap:anywhere}
+#passwordForm>label {display:grid;grid-template-columns:220px minmax(0,1fr);align-items:center;gap:16px;margin:14px 0}
+.userPropertyActions {border-bottom:1px solid #8884;padding-bottom:20px;margin-bottom:20px}.userPropertyActions h3 {margin-top:0}
+#permissionFields {border:0;padding:0;margin:0}#permissionFields legend {font-weight:700;font-size:1.15rem;margin-bottom:16px}
+#permissionFields>label {max-width:480px}#userRoleSummary {padding:16px;border:1px solid #8884;border-radius:10px;line-height:1.6}
+.userFieldGrid {display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.accessPreview {display:grid;grid-template-columns:1fr 1fr;gap:12px}.accessPreview>div {display:flex;flex-direction:column;gap:8px;padding:16px;border:1px solid #8884;border-radius:10px}.accessPreview span {font-size:.85rem;opacity:.8}
+#rolesArea>label {max-width:520px}#roleProperties {max-width:600px;padding:12px 0 24px}#roleForm>button {margin:20px 8px 0 0}
+.permissionTools {display:flex;align-items:end;flex-wrap:wrap;gap:10px;border:0;margin-bottom:0;padding-bottom:12px}.permissionTools>label {flex:1;min-width:180px;margin:0}.permissionTools button {font-size:.8rem;padding:10px}.permissionTools .permissionCount {flex-basis:100%;margin:0;font-size:.85rem}
+#rolePermissions,#permissionChecklist {display:block;border:1px solid #8884;border-radius:10px;overflow:hidden}
+#rolePermissions .permissionRow,#permissionChecklist .permissionRow {display:grid;grid-template-columns:minmax(0,1fr) 130px;align-items:center;gap:20px;padding:15px 18px;margin:0;border-bottom:1px solid #8883;cursor:pointer}
+.permissionRow:last-child {border-bottom:0!important}.permissionRow[hidden] {display:none!important}.permissionRow strong {display:block;font-size:.9rem;font-weight:600}.permissionRow small {display:block;font-size:.75rem;opacity:.7;margin-top:4px}
+.permissionToggle {display:flex;align-items:center;gap:10px;font-size:.85rem}.permissionToggle input {width:20px;height:20px;min-height:0;accent-color:#b51f2b}.permissionToggle input:disabled {opacity:.55}
+.permissionRow[data-enabled=true] .permissionToggle {font-weight:650}.permissionEditorDialog .actions {margin-top:20px}
+:root[data-theme=dark] .editorTabs button.selected {background:#48242b;color:#ffdce0;border-color:#df8792}
+@media(max-width:950px){#settingsSubcategories {grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){#settingsSubcategories {grid-template-columns:1fr}.userEditor,.permissionEditorDialog {padding:18px;width:calc(100vw - 20px)}#passwordForm>label {grid-template-columns:1fr;gap:6px}.userFieldGrid,.accessPreview {grid-template-columns:1fr}.editorTabs {gap:5px}.editorTabs button {padding:10px;font-size:.85rem}#rolePermissions .permissionRow,#permissionChecklist .permissionRow {grid-template-columns:minmax(0,1fr) 100px;gap:10px;padding:12px}.permissionTools>label {min-width:100%}}
+#settings {max-width:none}
+.permissionTools button {border:1px solid #8885;border-radius:8px;background:transparent}
+#rolePermissions,#permissionChecklist {max-height:460px;overflow:auto}
+.permissionToggle input {margin:0!important;flex-shrink:0}
+.userPropertyActions .actions {justify-content:flex-start;flex-wrap:wrap}

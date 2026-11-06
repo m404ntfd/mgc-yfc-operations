@@ -157,7 +157,7 @@ $('backupConfig').onsubmit=async e=>{e.preventDefault();try{await api('admin/bac
 $('cloudBackup').onclick=async()=>{$('cloudBackup').disabled=true;$('backupStatus').textContent='Creating a complete backup…';try{const r=await api('admin/backup-now',{});await loadBackups();}catch(e){$('backupStatus').textContent=e.message;}finally{$('cloudBackup').disabled=false;}};
 
 $('serverUpdateButton').onclick=()=>{tab('settings');settingsSection(2);$('updatePanel').scrollIntoView({behavior:'smooth',block:'start'});$('checkUpdate').click();};
-$('users').onclick=e=>{const b=e.target.closest('[data-password]');if(!b)return;$('passwordForm').reset();$('passwordUser').value=b.dataset.password;$('passwordError').textContent='';const person=state.users.find(u=>u.name===b.dataset.password);$('canCreate').checked=!!person.can_create;$('seeRequests').checked=!!person.see_requests;$('canCreate').disabled=!!person.admin;$('permissionMessage').textContent='';loadPermissionList(b.dataset.password);$('passwordDialog').showModal();};
+$('users').onclick=e=>{const b=e.target.closest('[data-password]');if(!b)return;$('passwordForm').reset();$('passwordUser').value=b.dataset.password;$('passwordError').textContent='';const person=state.users.find(u=>u.name===b.dataset.password);$('canCreate').checked=!!person.can_create;$('seeRequests').checked=!!person.see_requests;$('canCreate').disabled=!!person.admin;$('permissionMessage').textContent='';openUserSetup(b.dataset.password);};
 function closePassword(){$('passwordForm').reset();$('passwordDialog').close();}
 $('passwordClose').onclick=closePassword;
 $('passwordDialog').addEventListener('close',()=>$('passwordForm').reset());
@@ -241,8 +241,17 @@ const settingsTabs=document.createElement('nav');settingsTabs.className='setting
 const settingsEmpty=document.createElement('p');settingsEmpty.id='settingsEmpty';settingsEmpty.setAttribute('role','status');settingsEmpty.hidden=true;
 let selectedSettingsCategory=null;
 function settingsAllowed(i){if(i===12)return can('manage_staff_schedule');return i!==0&&(i===8||i===9||!!user?.admin||([[],['backup_settings','create_backups'],['check_updates','configure_updates','install_updates'],['manage_vehicles'],['manage_users','reset_passwords','rename_users','manage_roles','manage_staff_schedule'],['view_audit'],['unlock_users'],[],[],[]][i]||[]).some(can));}
-function settingsCategory(index){selectedSettingsCategory=index;settingsPanels.forEach(panel=>panel.hidden=true);settingsTabs.replaceChildren();settingsEmpty.hidden=true;[...settingsCategories.children].forEach((button,i)=>{button.classList.toggle('selected',i===index);button.setAttribute('aria-pressed',String(i===index));});if(index===null)return;const panels=settingsGroups[index].panels.filter(settingsAllowed);for(const i of panels){const button=document.createElement('button');button.type='button';button.dataset.settingsPanel=i;button.textContent=settingsNames[i];button.onclick=()=>settingsSection(i);settingsTabs.append(button);}if(!panels.length){settingsEmpty.textContent='No settings are currently available in this category.';settingsEmpty.hidden=false;}}
-function settingsSection(index){if(!settingsAllowed(index))return;if(index===12)loadWorkJobs();if(index===4)selectUserSettings();if(index===10)loadSharingSettings();if(index===11)loadPageColors(true);const group=settingsGroups.findIndex(g=>g.panels.includes(index));if(group!==selectedSettingsCategory)settingsCategory(group);settingsPanels.forEach((panel,i)=>panel.hidden=i!==index);[...settingsTabs.children].forEach(button=>{const selected=Number(button.dataset.settingsPanel)===index;button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected));});}
+function settingsCategory(index){
+ index=index===null?0:index;selectedSettingsCategory=index;
+ settingsPanels.forEach(panel=>panel.hidden=true);settingsTabs.hidden=false;settingsTabs.replaceChildren();settingsEmpty.hidden=true;
+ [...settingsCategories.children].forEach((button,i)=>{button.classList.toggle('selected',i===index);button.setAttribute('aria-pressed',String(i===index));});
+ const descriptions={1:['↺','Configure backups and recovery.'],2:['↑','Check releases and connected users.'],3:['▰','Manage dispatch vehicles.'],4:['♙','Manage employee accounts and role assignments.'],5:['≡','Review recent application changes.'],6:['⊙','Manage login protection and locked accounts.'],7:['▤','Configure receipt categories.'],8:['◐','Choose your preferred color mode.'],9:['▣','Set the layout for this device.'],10:['↗','Choose available sharing options.'],11:['◈','Customize application page colors.'],12:['▦','Define jobs used in staff scheduling.']};
+ const panels=settingsGroups[index].panels.filter(settingsAllowed);
+ for(const i of panels){const button=document.createElement('button');button.type='button';button.dataset.settingsPanel=i;button.setAttribute('aria-label',settingsNames[i]);const [icon,description]=descriptions[i]||['⚙','Manage these settings.'];button.innerHTML=`<span class="settingsTileIcon" aria-hidden="true">${icon}</span><span><strong>${esc(settingsNames[i])}</strong><small>${description}</small></span><span aria-hidden="true">›</span>`;button.onclick=()=>settingsSection(i);settingsTabs.append(button);}
+ if(index===0&&can('manage_roles')){const button=document.createElement('button');button.type='button';button.setAttribute('aria-label','Roles');button.innerHTML='<span class="settingsTileIcon" aria-hidden="true">☷</span><span><strong>Roles</strong><small>Manage shared permissions by category.</small></span><span aria-hidden="true">›</span>';button.onclick=()=>{settingsSection(4);selectUserSettings('roles');};settingsTabs.append(button);}
+ if(!settingsTabs.children.length){settingsEmpty.textContent='No settings are currently available in this category.';settingsEmpty.hidden=false;}
+}
+function settingsSection(index){if(!settingsAllowed(index))return;if(index===12)loadWorkJobs();if(index===4)selectUserSettings();if(index===10)loadSharingSettings();if(index===11)loadPageColors(true);const group=settingsGroups.findIndex(g=>g.panels.includes(index));if(group!==selectedSettingsCategory)settingsCategory(group);settingsPanels.forEach((panel,i)=>panel.hidden=i!==index);settingsTabs.hidden=true;}
 settingsGroups.forEach((group,i)=>{const button=document.createElement('button');button.type='button';button.textContent=group.name;button.onclick=()=>settingsCategory(i);settingsCategories.append(button);});
 $('settings').prepend(settingsCategories,settingsTabs,settingsEmpty);settingsCategory(null);
 
@@ -250,10 +259,33 @@ const globalActions=document.querySelector('.bottomActions');document.querySelec
 function updateSignedInUser(){if(!user){commReset();profileReset();workPayrollReset();workCardReset();userIdentityDialog.close();$('userIdentityForm').reset();}else {renderHeaderAvatar();commPoll();if(isMobileView()||commIsIos())commPreparePush();}$('headerShortcuts').hidden=!user;globalActions.hidden=!user; $('loggedOutStatus').hidden=!!user; $('signedInUser').textContent=user?'Signed in as '+user.name:'';$('signedInUser').hidden=!user; }
 
 let permissionCatalog={},savedUserGrants={};
-async function loadPermissionList(name){$('savePermissions').disabled=true;$('permissionChecklist').textContent='Loading permissions…';try{const data=await api('admin/permission-catalog');permissionCatalog=data.permissions;savedUserGrants=Object.fromEntries(data.users.map(u=>[u.name,u.grants]));const roleData=await api('roles');populateEmployeeRole(name,roleData);const person=state.users.find(u=>u.name===name);const defaults={view_schedule:true,submit_requests:true,cancel_appointments:true,call_contacts:true,text_contacts:true,navigate:true,change_own_password:true,submit_receipts:true};for(const key of ['create_appointments','edit_appointments','delete_appointments','update_status','review_requests'])defaults[key]=!!person.can_create;defaults.see_requests=!!person.see_requests;const grants={...defaults,...(savedUserGrants[name]||{})};employeeIndividualGrants={...grants};$('permissionChecklist').innerHTML=Object.entries(permissionCatalog).map(([key,label])=>`<label><input type="checkbox" data-grant="${key}" ${person.admin||grants[key]?'checked':''} ${person.admin?'disabled':''}> ${esc(label)}</label>`).join('');setEmployeeRoleMode();$('savePermissions').disabled=false;}catch(e){$('permissionMessage').textContent=e.message;}}
+let employeePermissionVersion=0;
+async function loadPermissionList(name){
+ const version=++employeePermissionVersion,signedIn=user;
+ employeeRolesData=null;employeeIndividualGrants={};employeeRole.disabled=true;$('savePermissions').disabled=true;$('permissionChecklist').replaceChildren();$('userRoleSummary').textContent='Loading access…';$('editIndividualAccess').hidden=true;
+ if(!can('manage_users')){$('userRoleSummary').textContent='User management permission is required to view or assign roles.';return;}
+ try{
+  const [data,roleData]=await Promise.all([api('admin/permission-catalog'),api('roles')]);
+  if(version!==employeePermissionVersion||user!==signedIn||$('passwordUser').value!==name||!$('passwordDialog').open)return;
+  permissionCatalog=data.permissions;savedUserGrants=Object.fromEntries(data.users.map(u=>[u.name,u.grants]));populateEmployeeRole(name,roleData);
+  const person=state.users.find(u=>u.name===name),defaults=Object.fromEntries(Object.keys(permissionCatalog).map(key=>[key,false]));
+  for(const key of ['view_schedule','submit_requests','cancel_appointments','call_contacts','text_contacts','navigate','change_own_password','submit_receipts'])defaults[key]=true;
+  for(const key of ['create_appointments','edit_appointments','delete_appointments','update_status','review_requests','view_reports'])defaults[key]=!!person.can_create;
+  defaults.see_requests=!!person.can_create&&!!person.see_requests;
+  const grants={...(savedUserGrants[name]||defaults)};
+  for(const key of ['submit_receipts','view_schedule','show_vehicle_filter','show_search'])if(!(key in grants))grants[key]=true;
+  employeeIndividualGrants=grants;setEmployeeRoleMode();$('savePermissions').disabled=!!person.admin;
+ }catch(e){if(version===employeePermissionVersion){$('permissionMessage').textContent=e.message;$('userRoleSummary').textContent='Access could not be loaded. No changes have been made.';}}
+}
 const permissionChecklist=document.createElement('div');permissionChecklist.id='permissionChecklist';$('permissionFields').prepend(permissionChecklist);
 $('canCreate').closest('label').hidden=true;$('seeRequests').closest('label').hidden=true;
-$('savePermissions').onclick=async()=>{try{if(employeeRole.value){await api('admin/user-role',{name:$('passwordUser').value,role_id:Number(employeeRole.value)});employeeHadRole=true;$('permissionMessage').textContent='Role assigned. Permissions follow the selected role.';await refresh();return;}if(employeeHadRole){await api('admin/user-role',{name:$('passwordUser').value,role_id:null});employeeHadRole=false;}const grants=Object.fromEntries([...document.querySelectorAll('[data-grant]')].map(input=>[input.dataset.grant,input.checked]));await api('admin/permissions',{name:$('passwordUser').value,grants,can_create:grants.create_appointments,see_requests:grants.see_requests});$('permissionMessage').textContent='Permissions saved.';await refresh();}catch(e){$('permissionMessage').textContent=e.message;}};
+$('savePermissions').onclick=async()=>{
+ const button=$('savePermissions');button.disabled=true;
+ try{if(!employeeRolesData)throw Error('Load the user’s access before saving.');const id=employeeRole.value?Number(employeeRole.value):null;
+ if(id!==null||employeeHadRole)await api('admin/user-role',{name:$('passwordUser').value,role_id:id});
+ employeeHadRole=id!==null;$('permissionMessage').textContent=id!==null?'Role assigned. Permissions follow the selected role.':'Individual permissions retained.';await loadUserList();
+ }catch(e){$('permissionMessage').textContent=e.message;}finally{button.disabled=!employeeRolesData||employeeRole.disabled;}
+};
 
 function can(key){return !!(user&&(user.admin||user.grants?.[key]));}
 function applyPermissions(){
@@ -535,12 +567,23 @@ applyPageColors();loadPageColors();setInterval(()=>loadPageColors(),60000);
 
 const employeeRoleLabel=document.createElement('label');employeeRoleLabel.innerHTML='Role<select id="employeeRole"><option value="">Individual permissions (existing)</option></select>';const employeeRole=employeeRoleLabel.querySelector('select');$('permissionFields').prepend(employeeRoleLabel);let employeeHadRole=false,employeeRolesData=null,employeeIndividualGrants={};
 function populateEmployeeRole(name,data){employeeRolesData=data;employeeHadRole=!!data.assignments[name];employeeRole.replaceChildren(new Option('Individual permissions (existing)',''));for(const role of data.roles)employeeRole.add(new Option(role.name,String(role.id)));employeeRole.value=employeeHadRole?String(data.assignments[name]):'';employeeRole.disabled=!!state.users.find(person=>person.name===name)?.admin;}
-function setEmployeeRoleMode(){const assigned=!!employeeRole.value;const role=employeeRolesData?.roles.find(item=>String(item.id)===employeeRole.value);for(const input of $('permissionChecklist').querySelectorAll('[data-grant]')){input.disabled=assigned||employeeRole.disabled;input.checked=employeeRole.disabled||!!(role?role.grants[input.dataset.grant]:employeeIndividualGrants[input.dataset.grant]);}$('permissionChecklist').classList.toggle('roleManaged',assigned);}
+function setEmployeeRoleMode(){
+ const role=employeeRolesData?.roles.find(item=>String(item.id)===employeeRole.value),admin=!!state.users.find(p=>p.name===$('passwordUser').value)?.admin;
+ $('userRoleSummary').textContent=admin?'Administrator · full access. Roles apply to employee accounts.':role?`${role.name} · ${Object.values(role.grants).filter(Boolean).length} enabled permissions. Changes to this role apply to every assigned user.`:'Individual access · existing permissions are retained. Choose a shared role to simplify management.';
+ $('editIndividualAccess').hidden=!!role||admin||!user.admin;
+ $('manageUserRole').hidden=!can('manage_roles');renderUserAccessPreview(role?.grants||employeeIndividualGrants,admin);
+}
 employeeRole.onchange=setEmployeeRoleMode;
 const openRoles=document.createElement('button');openRoles.id='openRoles';openRoles.type='button';openRoles.textContent='Roles';settingsPanels[4].append(openRoles);
 const rolesArea=document.createElement('section');rolesArea.id='rolesArea';rolesArea.hidden=true;rolesArea.innerHTML='<h2>Permission Roles</h2><p>Assign a role to use one permission set for an employee. Existing individual permissions remain available when a role is removed. Role changes apply to all assigned employees.</p><label>Choose a role<select id="roleSelect"><option value="">Create a new role</option></select></label><form id="roleForm"><label>Role name<input id="roleName" maxlength="80" required></label><nav id="roleCategories" class="settingsTabs" aria-label="Role permission categories"></nav><div id="rolePermissions"></div><button type="submit">Save role</button></form><p id="roleStatus" role="status"></p>';settingsPanels[4].append(rolesArea);
 let rolesData=null;
-function showRole(){const selected=rolesData.roles.find(role=>String(role.id)===$('roleSelect').value);$('roleName').value=selected?selected.name:'';const permissions=$('rolePermissions'),categories=$('roleCategories');permissions.replaceChildren();categories.replaceChildren();for(const [name,keys]of Object.entries(rolesData.groups)){const section=document.createElement('fieldset');section.hidden=true;const legend=document.createElement('legend');legend.textContent=name;section.append(legend);for(const key of keys){const label=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.dataset.roleGrant=key;input.checked=!!selected?.grants[key];input.disabled=!user.admin&&!rolesData.grantable.includes(key);label.append(input,document.createTextNode(' '+rolesData.permissions[key]));section.append(label);}if(!keys.length){const text=document.createElement('p');text.textContent='No permissions are currently defined for this page.';section.append(text);}permissions.append(section);const button=document.createElement('button');button.type='button';button.textContent=name;button.onclick=()=>{for(const panel of permissions.children)panel.hidden=panel!==section;for(const item of categories.children)item.classList.toggle('selected',item===button);};categories.append(button);}$('roleStatus').textContent='';}
+function showRole(){
+ const selected=rolesData.roles.find(role=>String(role.id)===$('roleSelect').value);$('roleName').value=selected?selected.name:'';
+ const count=selected?Object.values(rolesData.assignments).filter(id=>id===selected.id).length:0;
+ $('roleAssignmentCount').textContent=selected?`${count} assigned user${count===1?'':'s'}. Saving changes updates access for all of them.`:'Create a reusable permission set, then assign it in a user’s Role tab.';
+ buildPermissionEditor($('rolePermissions'),$('roleCategories'),rolesData.permissions,rolesData.groups,selected?.grants||{},'roleGrant',key=>!user.admin&&!rolesData.grantable.includes(key));
+ selectRoleEditorTab('properties');$('roleStatus').textContent='';
+}
 let rolesLoadVersion=0;
 async function loadRoles(selected=''){
  const version=++rolesLoadVersion, signedIn=user;
@@ -567,7 +610,7 @@ const heading=userSettingsPanel.querySelector('h2');if(heading)heading.textConte
 userSettingsTabs.append(usersSettingsButton,openRoles);
 settingsPanels[4].prepend(userSettingsTabs,userSettingsPanel);
 function renderUserList(){
- const edit=can('manage_users')||can('reset_passwords');
+ const edit=can('manage_users')||can('reset_passwords')||can('rename_users')||can('manage_staff_schedule');
  $('users').innerHTML=state.users.map(person=>{
   const name=esc(person.name);
   const pin=can('reset_passwords')&&(!person.admin||user.admin);
@@ -576,7 +619,7 @@ function renderUserList(){
    <span>${rename?`<button type="button" data-user-identity="${name}">Employee Profile</button>`:''}
    ${can('manage_staff_schedule')?`<button type="button" data-work-assignment="${name}">Work assignments</button>`:''}
    ${pin?`<button type="button" data-clock-pin="${name}">Time Clock PIN</button>`:''}
-   ${edit?`<button type="button" data-password="${name}">Edit user / permissions</button>`:''}</span></div>`;
+   ${edit?`<button type="button" data-password="${name}">Edit user</button>`:''}</span></div>`;
  }).join('');
 }
 async function loadUserList(){
@@ -670,7 +713,7 @@ function selectUserSettings(target){
  }
 }
 usersSettingsButton.onclick=()=>selectUserSettings('users');openRoles.onclick=()=>selectUserSettings('roles');$('roleSelect').onchange=showRole;
-$('roleForm').onsubmit=async e=>{e.preventDefault();const grants=Object.fromEntries([...$('rolePermissions').querySelectorAll('[data-role-grant]')].map(input=>[input.dataset.roleGrant,input.checked]));try{const payload={name:$('roleName').value,grants};if($('roleSelect').value)payload.id=Number($('roleSelect').value);const result=await api('roles',payload);await loadRoles(result.id);$('roleStatus').textContent='Role saved. Assigned users receive its updated permissions.';}catch(err){$('roleStatus').textContent=err.message;}};
+$('roleForm').onsubmit=async e=>{e.preventDefault();const button=$('roleForm').querySelector('[type=submit]');if(button.disabled||!rolesData)return;button.disabled=true;const grants=Object.fromEntries([...$('rolePermissions').querySelectorAll('[data-role-grant]')].map(input=>[input.dataset.roleGrant,input.checked]));try{const payload={name:$('roleName').value,grants};if($('roleSelect').value)payload.id=Number($('roleSelect').value);const result=await api('roles',payload);await loadRoles(result.id);$('roleStatus').textContent='Role saved. Assigned users receive its updated permissions.';}catch(err){$('roleStatus').textContent=err.message;button.disabled=false;}};
 
 // Staff communications. Membership and read state are enforced by the server.
 const commMenu = document.createElement('button');
@@ -2863,3 +2906,82 @@ setInterval(()=>{sendConnectionPresence();if(user?.admin&&!$('settings').hidden&
 window.addEventListener('pagehide',event=>{if(!event.persisted)sendConnectionPresence(true);});
 window.addEventListener('pageshow',()=>sendConnectionPresence());
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)sendConnectionPresence();});
+// Settings and account editors use the existing APIs without changing stored access on load.
+function buildPermissionEditor(container,toolbar,catalog,groups,grants,attribute,locked){
+ toolbar.className='permissionTools';toolbar.replaceChildren();container.replaceChildren();
+ const category=document.createElement('select');category.setAttribute('aria-label','Permission category');category.add(new Option('All categories',''));
+ for(const name of Object.keys(groups))category.add(new Option(name,name));
+ const search=document.createElement('input');search.type='search';search.placeholder='Find a permission';search.setAttribute('aria-label','Find a permission');
+ const count=document.createElement('p');count.className='permissionCount';count.setAttribute('role','status');
+ const rows=[];
+ for(const [group,keys]of Object.entries(groups))for(const key of keys){
+  const row=document.createElement('label');row.className='permissionRow';row.dataset.category=group;
+  const text=document.createElement('span');text.innerHTML=`<strong>${esc(catalog[key])}</strong><small>${esc(group)}</small>`;
+  const control=document.createElement('span');control.className='permissionToggle';
+  const input=document.createElement('input');input.type='checkbox';input.dataset[attribute]=key;input.checked=!!grants[key];input.disabled=locked(key);
+  const status=document.createElement('span');const update=()=>{status.textContent=input.checked?'Enabled':'Disabled';row.dataset.enabled=String(input.checked);};input.onchange=update;update();
+  control.append(input,status);row.append(text,control);container.append(row);rows.push(row);
+ }
+ const filter=()=>{const query=search.value.trim().toLowerCase();for(const row of rows)row.hidden=!!((category.value&&row.dataset.category!==category.value)||(query&&!row.textContent.toLowerCase().includes(query)));const visible=rows.filter(row=>!row.hidden);count.textContent=`${visible.length} of ${rows.length} permissions shown`;};
+ const categoryLabel=document.createElement('label');categoryLabel.append('Category',category);
+ const searchLabel=document.createElement('label');searchLabel.append('Filter',search);
+ toolbar.append(categoryLabel,searchLabel);
+ for(const [label,value]of [['Enable shown',true],['Disable shown',false]]){const button=document.createElement('button');button.type='button';button.textContent=label;button.onclick=()=>{for(const row of rows){const input=row.querySelector('input');if(!row.hidden&&!input.disabled){input.checked=value;input.dispatchEvent(new Event('change',{bubbles:true}));}}};toolbar.append(button);}
+ const clear=document.createElement('button');clear.type='button';clear.textContent='Clear filter';clear.onclick=()=>{category.value='';search.value='';filter();};toolbar.append(clear,count);
+ category.onchange=search.oninput=filter;filter();
+}
+
+const settingsHeading=document.createElement('div');settingsHeading.className='settingsHeading';settingsHeading.innerHTML='<p class="eyebrow">ADMINISTRATION & PREFERENCES</p><h1>Settings</h1><p>Choose an area to manage your application.</p>';$('settings').prepend(settingsHeading);
+for(const panel of settingsPanels){const back=document.createElement('button');back.type='button';back.className='settingsBack';back.textContent='‹ Back to settings';back.onclick=()=>settingsCategory(selectedSettingsCategory);panel.prepend(back);}
+
+const roleTabs=document.createElement('nav');roleTabs.className='editorTabs';roleTabs.setAttribute('aria-label','Role editor');
+const roleProperties=document.createElement('section');roleProperties.id='roleProperties';
+const roleNameLabel=$('roleName').closest('label');roleProperties.append(roleNameLabel);
+const roleAssignmentCount=document.createElement('p');roleAssignmentCount.id='roleAssignmentCount';roleProperties.append(roleAssignmentCount);
+const rolePermissionPanel=document.createElement('section');rolePermissionPanel.id='rolePermissionPanel';rolePermissionPanel.hidden=true;rolePermissionPanel.append($('roleCategories'),$('rolePermissions'));
+$('roleForm').prepend(roleTabs,roleProperties,rolePermissionPanel);
+for(const name of ['properties','permissions']){const b=document.createElement('button');b.type='button';b.dataset.roleTab=name;b.textContent=name[0].toUpperCase()+name.slice(1);b.onclick=()=>selectRoleEditorTab(name);roleTabs.append(b);}
+function selectRoleEditorTab(name){roleProperties.hidden=name!=='properties';rolePermissionPanel.hidden=name!=='permissions';for(const b of roleTabs.children){const selected=b.dataset.roleTab===name;b.classList.toggle('selected',selected);b.setAttribute('aria-pressed',String(selected));}}
+const roleCancel=document.createElement('button');roleCancel.type='button';roleCancel.textContent='Cancel changes';roleCancel.onclick=()=>{if(rolesData)showRole();};$('roleForm').append(roleCancel);
+$('roleForm').querySelector('[type=submit]').classList.add('primary');
+
+// Keep password, role assignment and personal details as separate forms/actions.
+const userEditor=$('passwordDialog');userEditor.classList.add('userEditor');userEditor.setAttribute('aria-labelledby','userEditorTitle');
+const editorHeading=$('passwordForm').querySelector('.dialogTop');
+editorHeading.querySelector('h2').id='userEditorTitle';editorHeading.querySelector('h2').textContent='Edit user';
+userEditor.prepend(editorHeading);
+const userEditorSummary=document.createElement('p');userEditorSummary.id='userEditorSummary';editorHeading.after(userEditorSummary);
+const userEditorTabs=document.createElement('nav');userEditorTabs.className='editorTabs';userEditorTabs.setAttribute('aria-label','User setup');userEditorSummary.after(userEditorTabs);
+const userEditorPanels={};
+for(const [name,label]of [['properties','Properties'],['role','Role'],['personal','Personal'],['view','User view']]){const button=document.createElement('button');button.type='button';button.dataset.userTab=name;button.textContent=label;button.onclick=()=>selectUserEditorTab(name);userEditorTabs.append(button);const panel=document.createElement('section');panel.id='userEditor_'+name;panel.hidden=true;userEditor.append(panel);userEditorPanels[name]=panel;}
+userEditorPanels.properties.append($('passwordForm'));
+userEditorPanels.role.append($('permissionFields'));$('permissionFields').querySelector('legend').textContent='Role assignment';
+$('savePermissions').textContent='Save role assignment';
+const roleSummary=document.createElement('p');roleSummary.id='userRoleSummary';employeeRoleLabel.after(roleSummary);
+const accessButtons=document.createElement('div');accessButtons.className='actions';accessButtons.innerHTML='<button type="button" id="manageUserRole">Manage roles</button><button type="button" id="editIndividualAccess">Edit individual access</button>';$('permissionFields').append(accessButtons);
+const individualDialog=document.createElement('dialog');individualDialog.className='permissionEditorDialog';individualDialog.setAttribute('aria-labelledby','individualTitle');individualDialog.innerHTML='<h2 id="individualTitle">Individual access</h2><p>These permissions apply only to this employee. Shared roles can be managed in Settings → Roles.</p><nav id="individualTools"></nav><p id="individualStatus" role="status"></p><div class="actions"><button type="button" id="individualCancel">Cancel</button><button type="button" class="primary" id="individualSave">Save individual access</button></div>';document.body.append(individualDialog);$('individualTools').after($('permissionChecklist'));
+$('editIndividualAccess').onclick=()=>{if(!employeeRolesData||employeeRole.value||!user.admin)return;buildPermissionEditor($('permissionChecklist'),$('individualTools'),permissionCatalog,employeeRolesData.groups,employeeIndividualGrants,'grant',()=>false);$('individualStatus').textContent='';individualDialog.showModal();};
+$('individualCancel').onclick=()=>individualDialog.close();
+$('individualSave').onclick=async()=>{const button=$('individualSave');button.disabled=true;try{if(employeeHadRole)throw Error('Save the switch to individual access first.');const grants=Object.fromEntries([...$('permissionChecklist').querySelectorAll('[data-grant]')].map(input=>[input.dataset.grant,input.checked]));await api('admin/permissions',{name:$('passwordUser').value,grants,can_create:grants.create_appointments,see_requests:grants.see_requests});employeeIndividualGrants=grants;setEmployeeRoleMode();individualDialog.close();$('permissionMessage').textContent='Individual permissions saved.';}catch(e){$('individualStatus').textContent=e.message;}finally{button.disabled=false;}};
+$('manageUserRole').onclick=()=>{const role=employeeRole.value;closePassword();settingsSection(4);selectUserSettings('roles');if(role)loadRoles(role);};
+userEditorPanels.personal.innerHTML='<form id="userPersonalForm"><h3>Personal & login details</h3><div class="userFieldGrid"><label>Login username<input name="username" maxlength="80" required autocomplete="off"></label><label>Legal first name<input name="first" maxlength="80"></label><label>Legal middle name<input name="middle" maxlength="80"></label><label>Legal last name<input name="last" maxlength="80"></label></div><p id="userPersonalStatus" role="status"></p><button type="submit" class="primary">Save personal details</button></form>';
+userEditorPanels.view.innerHTML='<h3>Access overview</h3><p>Preview based on the selected role or existing individual access. Unsaved role selections are previews only.</p><div id="userAccessPreview" class="accessPreview"></div>';
+const propertyActions=document.createElement('div');propertyActions.className='userPropertyActions';propertyActions.innerHTML='<h3>Account actions</h3><div id="userPropertyButtons" class="actions"></div>';
+userEditorPanels.properties.prepend(propertyActions);
+function selectUserEditorTab(name){for(const [key,panel]of Object.entries(userEditorPanels))panel.hidden=key!==name;for(const button of userEditorTabs.children){const selected=button.dataset.userTab===name;button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected));}}
+function renderUserAccessPreview(grants,admin){const items=[['Dispatch',admin||grants.view_schedule],['Paging',admin||grants.send_pages||grants.receive_pages],['Receipts & Accounting',true],['Print with a Purpose',true],['My Timekeeping',true],['Manager scheduling',admin||grants.manage_staff_schedule],['Payroll export',admin||grants.export_payroll],['Role management',admin||grants.manage_roles]];$('userAccessPreview').innerHTML=items.map(([label,enabled])=>`<div><strong>${label}</strong><span>${enabled?'Available':'Not enabled'}</span></div>`).join('');}
+async function openUserSetup(name){
+ const person=state.users.find(p=>p.name===name);if(!person)return;
+ $('userEditorTitle').textContent='Edit user';$('userEditorSummary').textContent=name+' · '+(person.admin?'Administrator':'Employee');
+ $('passwordForm').hidden=!(can('reset_passwords')&&(!person.admin||user.admin));
+ const buttons=$('userPropertyButtons');buttons.replaceChildren();
+ for(const [attribute,label,allowed]of [['userIdentity','Edit display name / profile',can('rename_users')&&(!person.admin||user.admin)],['clockPin','Time Clock PIN',can('reset_passwords')&&(!person.admin||user.admin)],['workAssignment','Work assignments',can('manage_staff_schedule')]])if(allowed){const b=document.createElement('button');b.type='button';b.textContent=label;b.onclick=()=>{const original=[...$('users').querySelectorAll('button')].find(item=>item.dataset[attribute]===name);if(original){closePassword();original.click();}};buttons.append(b);}
+ const personal=$('userPersonalForm');personal.reset();for(const field of personal.elements)field.disabled=true;$('userPersonalStatus').textContent=can('rename_users')?'Loading personal details…':'Edit user names permission is required to view or change these details.';
+ $('userAccessPreview').textContent='Load the user’s access to see an overview.';
+ selectUserEditorTab('properties');userEditor.showModal();loadPermissionList(name);
+ if(can('rename_users')){const signedIn=user,version=employeePermissionVersion;try{const identity=await api('admin/user-identity?name='+encodeURIComponent(name));if(user!==signedIn||version!==employeePermissionVersion||!userEditor.open)return;for(const key of ['username','first','middle','last'])personal.elements[key].value=identity[key];for(const field of personal.elements)field.disabled=false;$('userPersonalStatus').textContent='';}catch(e){if(userEditor.open&&$('passwordUser').value===name)$('userPersonalStatus').textContent=e.message;}}
+}
+$('userPersonalForm').onsubmit=async e=>{e.preventDefault();const button=e.submitter;button.disabled=true;try{await api('admin/user-identity',{...Object.fromEntries(new FormData(e.currentTarget)),name:$('passwordUser').value});$('userPersonalStatus').textContent='Personal details saved.';}catch(error){$('userPersonalStatus').textContent=error.message;}finally{button.disabled=false;}};
+userEditor.addEventListener('close',()=>{++employeePermissionVersion;individualDialog.close();});
+
+$('roleName').addEventListener('invalid',()=>selectRoleEditorTab('properties'));

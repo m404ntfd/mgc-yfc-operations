@@ -121,3 +121,13 @@ An idle or unconfirmed connection is not proof that work has been saved. Ask use
 The server checks connections again inside its request lock before downloading an update, so a login after the displayed status was checked still blocks installation. Pending writes finish before the check; new writes are rejected once restart begins. The current administrator must save their own work before confirming installation. The browser disables Install if connection status cannot be refreshed. Connection names are administrator-only; all installation routes retain their existing permission checks and enforce the server-side blocker.
 
 Presence is held in memory and reports status only, without form contents or session tokens. No timecard or reservation records or schemas are changed by this feature. Tests: `python -m unittest test_update_connections test_data_integrity test_updater` and `python test_update_connections_ui.py`.
+
+## Users, roles, and settings navigation
+
+Settings opens a responsive tile menu. Select a category and tile to open its controls, then use Back to settings to return. Tiles follow existing permissions and the app's light/dark appearance.
+
+Edit user separates Properties, Role, Personal, and User view. Role assignment uses existing shared permission roles. User view previews available sections from the selected access; it does not sign in as that employee. Personal edits use the existing account-identity service and retain the account's links to historical records.
+
+Roles has Properties and Permissions tabs. Search or filter permissions by category; Enable shown and Disable shown affect only visible permissions that the signed-in manager may change. Saving retains permissions hidden by a filter. Cancel changes reloads the saved role. Existing individual access remains intact and can be edited separately by an administrator; simply opening or saving an unchanged role selection does not rewrite individual permissions.
+
+This redesign adds no database migrations or changes to timecard/reservation storage. Browser regression coverage includes preserved individual grants, shared-role filtering, restricted role managers, personal details, mobile/dark layouts, and unchanged sample reservations, attachments, and open timecards/breaks.

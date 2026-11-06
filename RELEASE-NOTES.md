@@ -1,11 +1,11 @@
-# MGC YFC Operations 0.39.1
+# MGC YFC Operations 0.39.2
 
-- Adds an administrator-only Connections before updating panel showing signed-in connections, recent activity, and whether the server is still seeing each connection.
-- Blocks updates while other signed-in connections remain, including idle connections, unconfirmed connections, other tabs, and active Time Clock PIN sessions.
-- Rechecks connections on the server immediately before staging an update. A new login after the screen was checked cannot bypass this protection.
-- Disables installation when connection status cannot be confirmed. Connection status refreshes automatically and can be refreshed manually.
-- Preserves existing timecard and reservation records. This release introduces no database schema changes; connection tracking is kept in memory.
+- Reorganizes user setup into Properties, Role, Personal, and User view tabs using the existing application style.
+- Adds a responsive settings tile menu with descriptions and permission-aware navigation.
+- Separates role editing into Properties and Permissions, with category filters, search, and Enable shown / Disable shown actions.
+- Keeps existing individual permissions and shared-role assignments intact. Individual access is edited separately by administrators; hidden permissions are preserved when filtered role changes are saved.
+- Adds browser checks for permission preservation, restricted role managers, personal details, mobile/dark layouts, and unchanged operational records.
 
-Save work and sign out or close other application tabs before installing. The panel does not inspect unsaved form contents; check guest/kiosk activity separately. The administrator installing the update should save their own work first.
+No database migrations or changes to timecard or reservation storage. Existing records, attachments, and account relationships are preserved. The administrator connection checks introduced in 0.39.1 remain included.
 
-For this first upgrade from 0.39.0, coordinate with users before installing: the new connection protection becomes available after 0.39.1 is installed.
+Install using Update server → Check for server updates → Install update & restart. Save work and sign out of other application connections before installing.

@@ -44,6 +44,7 @@ jobs:
       - run: python test_workforce_ui.py
       - run: python test_schedule_redesign_ui.py
       - run: python test_update_connections_ui.py
+      - run: python test_user_settings_ui.py
       - run: python test_daily.py
       - run: python test_login.py
       - run: python test_mobile_intro.py
