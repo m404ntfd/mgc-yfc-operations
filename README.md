@@ -97,3 +97,16 @@ The phone view shares the same live schedule: add Pickup or Delivery, choose dat
 Bookmark /mobile or use the phone browser's Add to Home Screen option. No phone app or Remote Manager installation is required. The Windows server must stay awake and running. Use staff Wi-Fi with local device access (guest networks may block it). Allow the server's TCP port through Windows Firewall on the private store network if needed; do not expose it to the public internet. This is for local-network access; road access is not configured.
 
 Version 0.8.1 appointment forms require a phone number and split addresses into street/city/state/ZIP. Select one or several employees from the checkbox dropdown. Existing free-text addresses and assignments remain intact; older addresses need their city/state/ZIP completed when edited. Remote Manager → Manage employees adds/removes employee accounts; removing an employee revokes their sessions but preserves appointment history. Install the 0.8.1 unified installer on Remote Manager PCs for that native feature; server update alone updates the browser and backend.
+
+
+### Scheduling navigation and job sections
+
+Application Settings → Jobs defines the job sections in Scheduling. Existing job names from employee work assignments and saved shifts are included automatically. Managers with Create and edit staff shifts permission can maintain this list; jobs still used by employees or saved shifts cannot be removed. Assign multiple jobs to employees in Users → Work assignments.
+
+The manager Scheduling screen is available in desktop view (automatic layout at 1024px or wider, or the explicit Desktop layout preference). Employees can view My Schedule on mobile. Each assigned job lists the employee; a shift in another job appears as a lighter dashed reference, excluded from that section’s shift count and hours. Employee schedules show each actual shift once and include scheduled weekly hours, shift count, and actual clock totals.
+
+Time Clock remains a standalone button. My Timekeeping contains My Schedule, My Requests, My Availability, and My Timecards. Manager Functions and Time Clock Setup show only permitted actions. The header Menu contains profile, starting-page, and settings utilities.
+
+Copy week copies shifts starting in the source Sunday–Saturday week to a different Sunday–Saturday week. It preserves local times, jobs, work sites, and notes. An overlap or changed assignment cancels the entire copy; existing shifts are never overwritten. Availability and time-off requests are not copied. The manager grid shows approved and pending restrictions separately, including optional partial-day time off. Compact pickup/delivery bars use the dispatch colors and are shown only with dispatch schedule access.
+
+Validation: `python -m unittest test_workforce test_schedule_redesign`, `python test_workforce_ui.py`, `python test_schedule_redesign_ui.py`, and `node --check static/app.js`. Set TEST_CHROMIUM to use an existing Chromium test executable and TEST_ARTIFACTS for optional browser screenshots.

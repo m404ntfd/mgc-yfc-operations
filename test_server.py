@@ -6,7 +6,8 @@ class Tests(unittest.TestCase):
  def setUpClass(cls):
   cls.tmp=tempfile.TemporaryDirectory()
   with socket.socket() as s:s.bind(('127.0.0.1',0));cls.port=s.getsockname()[1]
-  cls.p=subprocess.Popen([sys.executable,str(Path(__file__).with_name('server.py'))],env={**os.environ,'DISPATCH_DATA':cls.tmp.name,'DISPATCH_PORT':str(cls.port)},stdout=subprocess.DEVNULL)
+  # Test servers must never inherit a real user's cloud backup destination.
+  cls.p=subprocess.Popen([sys.executable,str(Path(__file__).with_name('server.py'))],env={**os.environ,'OneDrive':'','OneDriveConsumer':'','OneDriveCommercial':'','DISPATCH_DATA':cls.tmp.name,'DISPATCH_PORT':str(cls.port)},stdout=subprocess.DEVNULL)
   cls.client=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
   for i in range(100):
    try: cls.call('session');break

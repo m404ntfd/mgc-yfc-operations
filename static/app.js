@@ -230,9 +230,9 @@ const settingsCategories=document.createElement('nav');settingsCategories.classN
 const settingsTabs=document.createElement('nav');settingsTabs.className='settingsTabs settingsSubcategories';settingsTabs.id='settingsSubcategories';settingsTabs.setAttribute('aria-label','Settings subcategories');
 const settingsEmpty=document.createElement('p');settingsEmpty.id='settingsEmpty';settingsEmpty.setAttribute('role','status');settingsEmpty.hidden=true;
 let selectedSettingsCategory=null;
-function settingsAllowed(i){return i!==0&&(i===8||i===9||!!user?.admin||([[],['backup_settings','create_backups'],['check_updates','configure_updates','install_updates'],['manage_vehicles'],['manage_users','reset_passwords','rename_users','manage_roles','manage_staff_schedule'],['view_audit'],['unlock_users'],[],[],[]][i]||[]).some(can));}
+function settingsAllowed(i){if(i===12)return can('manage_staff_schedule');return i!==0&&(i===8||i===9||!!user?.admin||([[],['backup_settings','create_backups'],['check_updates','configure_updates','install_updates'],['manage_vehicles'],['manage_users','reset_passwords','rename_users','manage_roles','manage_staff_schedule'],['view_audit'],['unlock_users'],[],[],[]][i]||[]).some(can));}
 function settingsCategory(index){selectedSettingsCategory=index;settingsPanels.forEach(panel=>panel.hidden=true);settingsTabs.replaceChildren();settingsEmpty.hidden=true;[...settingsCategories.children].forEach((button,i)=>{button.classList.toggle('selected',i===index);button.setAttribute('aria-pressed',String(i===index));});if(index===null)return;const panels=settingsGroups[index].panels.filter(settingsAllowed);for(const i of panels){const button=document.createElement('button');button.type='button';button.dataset.settingsPanel=i;button.textContent=settingsNames[i];button.onclick=()=>settingsSection(i);settingsTabs.append(button);}if(!panels.length){settingsEmpty.textContent='No settings are currently available in this category.';settingsEmpty.hidden=false;}}
-function settingsSection(index){if(!settingsAllowed(index))return;if(index===4)selectUserSettings();if(index===10)loadSharingSettings();if(index===11)loadPageColors(true);const group=settingsGroups.findIndex(g=>g.panels.includes(index));if(group!==selectedSettingsCategory)settingsCategory(group);settingsPanels.forEach((panel,i)=>panel.hidden=i!==index);[...settingsTabs.children].forEach(button=>{const selected=Number(button.dataset.settingsPanel)===index;button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected));});}
+function settingsSection(index){if(!settingsAllowed(index))return;if(index===12)loadWorkJobs();if(index===4)selectUserSettings();if(index===10)loadSharingSettings();if(index===11)loadPageColors(true);const group=settingsGroups.findIndex(g=>g.panels.includes(index));if(group!==selectedSettingsCategory)settingsCategory(group);settingsPanels.forEach((panel,i)=>panel.hidden=i!==index);[...settingsTabs.children].forEach(button=>{const selected=Number(button.dataset.settingsPanel)===index;button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected));});}
 settingsGroups.forEach((group,i)=>{const button=document.createElement('button');button.type='button';button.textContent=group.name;button.onclick=()=>settingsCategory(i);settingsCategories.append(button);});
 $('settings').prepend(settingsCategories,settingsTabs,settingsEmpty);settingsCategory(null);
 
@@ -370,6 +370,7 @@ function setSectionHeader(title,section){
  section=section===true?'dispatch':section===false?'signin':section;
  if(section!=='workforce'&&$('workforce')&&!workPanel.hidden){
   workPanel.hidden=true;
+  $('workCopyDialog').close();
   workVersion++;
  }
  if(section!=='comms'&&!commPanel.hidden){commPanel.hidden=true;commVersion++;$('commPrefsDialog').close();}
@@ -1245,15 +1246,23 @@ workPanel.hidden = true;
 workPanel.innerHTML = `
  <div class="workHead"><p class="workKicker">STAFF OPERATIONS</p><h2>Scheduling &amp; Time Clock</h2></div>
  <nav class="workTabs" aria-label="Scheduling and time clock">
-  <button type="button" data-work-view="clock">Time clock</button>
-  <button type="button" data-work-view="mine">My schedule</button>
-  <button type="button" data-work-view="requests">My requests</button>
-  <button type="button" data-work-view="review" hidden>Review requests</button>
-  <button type="button" data-work-view="team" hidden>Manager schedule</button>
-  <button type="button" data-work-view="time-cards" hidden>Time cards</button>
-  <button type="button" data-work-view="time-card-audit" hidden>Time card audit</button>
-  <button type="button" data-work-view="payroll" hidden>Payroll export</button>
-  <button type="button" data-work-view="sites" hidden>Work sites</button>
+  <button type="button" data-work-view="clock">Time Clock</button>
+  <details class="workDropdown"><summary>My Timekeeping <span aria-hidden="true">▾</span></summary><div>
+   <button type="button" data-work-view="mine">My Schedule</button>
+   <button type="button" data-work-view="requests">My Requests</button>
+   <button type="button" data-work-view="availability">My Availability</button>
+   <button type="button" data-work-view="my-cards">My Timecards</button>
+  </div></details>
+  <details class="workDropdown" id="workManagerMenu" hidden><summary>Manager Functions <span aria-hidden="true">▾</span></summary><div>
+   <button type="button" data-work-view="review" hidden>Review Requests</button>
+   <button type="button" data-work-view="time-cards" hidden>Time Cards</button>
+   <button type="button" data-work-view="team" hidden>Scheduling</button>
+   <button type="button" data-work-view="time-card-audit" hidden>Time Card Audit</button>
+   <button type="button" data-work-view="payroll" hidden>Payroll Export</button>
+  </div></details>
+  <details class="workDropdown" id="workSetupMenu" hidden><summary>Time Clock Setup <span aria-hidden="true">▾</span></summary><div>
+   <button type="button" data-work-view="sites" hidden>Work Sites</button>
+  </div></details>
  </nav>
  <p id="workStatus" role="status"></p>
  <button id="workQuickBack" type="button" hidden>Back to sign in</button>
@@ -1278,7 +1287,8 @@ workPanel.innerHTML = `
   </div>
  </section>
  <section data-work-panel="mine" hidden>
-  <h3>My schedule</h3>
+  <h3>My schedule <span id="workMyRange"></span></h3>
+  <div class="workTotals workScheduleTotals"><div><span>Scheduled hours</span><strong id="workScheduledHours">—</strong></div><div><span>Total shifts</span><strong id="workScheduledCount">—</strong></div></div>
   <div class="workTotals">
    <div><span>Clocked in this week</span><strong id="workWeekGross">—</strong></div>
    <div><span>Worked this week, excluding breaks</span><strong id="workWeekNet">—</strong></div>
@@ -1286,7 +1296,8 @@ workPanel.innerHTML = `
   <div id="workMyShifts" class="workList"></div>
  </section>
  <section data-work-panel="team" hidden>
-  <h3>Manager schedule</h3>
+  <div class="workScheduleHeading"><h3>Scheduling</h3><button type="button" id="workCopyWeek">Copy week…</button></div>
+  <p class="workLegend">Dashed shifts belong to another job. Pending requests are marked for review.</p>
   <p>Shift dates and times use the server’s local time.</p>
   <div id="workTeamShifts" class="workList"></div>
   <button type="button" id="workAddShift" class="primary">Add shift</button>
@@ -1302,6 +1313,9 @@ workPanel.innerHTML = `
    <p id="workShiftError" role="alert"></p>
   </form></dialog>
  </section>
+ <section data-work-panel="availability" hidden><h3>My availability</h3><p>Approved recurring unavailable periods and pending changes.</p><button type="button" id="workAvailabilityEdit">Request availability change</button><div id="workOwnAvailability" class="workList"></div></section>
+ <section data-work-panel="my-cards" hidden><h3>My timecards</h3><div id="workOwnCards" class="workList"></div></section>
+ <dialog id="workCopyDialog"><form id="workCopyForm" class="workForm"><h3>Copy shifts to another week</h3><p>Copies shifts starting in the source week, with the same employees, jobs, sites and local times. Existing shifts are kept. If any shift overlaps, nothing is copied.</p><label>Source Sunday<input type="date" name="source" required></label><label>Destination Sunday<input type="date" name="target" required></label><p id="workCopyError" role="alert"></p><div class="actions"><button type="button" id="workCopyCancel">Cancel</button><button class="primary">Copy shifts</button></div></form></dialog>
  <section data-work-panel="requests" hidden>
   <h3>My requests</h3>
   <div class="actions"><button type="button" id="workAvailability">Request availability change</button><button type="button" id="workTimeOff">Request time off</button></div>
@@ -1320,6 +1334,7 @@ workPanel.innerHTML = `
   <div id="workTimeOffFields" class="workRequestDates">
    <label>First day off<input type="date" name="start"></label>
    <label>Last day off (inclusive)<input type="date" name="end"></label>
+   <label>From (optional, single day)<input type="time" name="from_time"></label><label>Until<input type="time" name="until_time"></label>
   </div>
   <label>Note for your administrator<textarea name="notes" maxlength="500" rows="2"></textarea></label>
   <p id="workRequestError" role="alert"></p>
@@ -1438,13 +1453,15 @@ function workRender(data) {
   button.hidden=!allowed.includes(punch);
   button.disabled=workBusy || (data.require_location&&!data.sites_ready&&['in','out'].includes(punch));
  }
- workPanel.querySelector('[data-work-view=team]').hidden = !data.manage_schedule;
+ workPanel.querySelector('[data-work-view=team]').hidden = !data.manage_schedule || !workIsDesktop();
  workPanel.querySelector('[data-work-view=review]').hidden = !data.manage_review;
  workPanel.querySelector('[data-work-view=time-cards]').hidden = !data.edit_time_cards&&!data.add_time_cards;
  workPanel.querySelector('[data-work-view=time-card-audit]').hidden = !user?.admin;
  workPanel.querySelector('[data-work-view=payroll]').hidden = !data.export_payroll;
  workPanel.querySelector('[data-work-view=sites]').hidden = !data.manage_sites;
- $('workMyShifts').innerHTML = workShiftList(data.shifts, false);
+ $('workManagerMenu').hidden=![...$('workManagerMenu').querySelectorAll('button')].some(b=>!b.hidden);
+ $('workSetupMenu').hidden=!data.manage_sites;
+ workRenderMine(data);
  workTick();
 }
 async function workLoad(version = workVersion) {
@@ -1468,8 +1485,13 @@ async function workLoad(version = workVersion) {
    if (workPanel.hidden||version!==workVersion||request!==workFetch||user!==signedIn)return;
    workRenderTimeCards(result.cards,result.people);
   }
+  if(workView==='my-cards'){
+   const result=await workApi('my-time-cards'+query);
+   if(version!==workVersion||request!==workFetch||user!==signedIn)return;
+   $('workOwnCards').innerHTML=result.cards.map(card=>`<article class="workRow"><div><strong>${esc(card.start.replace('T',' '))} – ${card.end?esc(card.end.replace('T',' ')):'Still clocked in'}</strong><p>${card.breaks.length?card.breaks.map(b=>'Break: '+esc(b.start.replace('T',' '))+' – '+(b.end?esc(b.end.replace('T',' ')):'In progress')).join('<br>'):'No breaks recorded'}</p></div></article>`).join('')||'<p>No timecards this week.</p>';
+  }
   if(workView==='time-card-audit')await workLoadAudit();
-  if (['requests','review'].includes(workView)) {
+  if (['requests','availability','review'].includes(workView)) {
    const review=workView==='review';
    const result=await workApi(review?'review-requests':'requests');
    if (workPanel.hidden || version!==workVersion || request!==workFetch || user!==signedIn) return;
@@ -1493,10 +1515,13 @@ async function workLoad(version = workVersion) {
  }
 }
 function workSelect(view) {
+ if(view==='team'&&!workIsDesktop())view='mine';
+ for(const menu of workPanel.querySelectorAll('.workDropdown'))menu.open=false;
  workView=view;
+ $('workCopyDialog').close();
  workVersion++;
  workStatus();
- $('workWeekControls').hidden=!['mine','team','time-cards'].includes(view);
+ $('workWeekControls').hidden=!['mine','team','time-cards','my-cards'].includes(view);
  $('workShiftDialog').close();$('workRequestDialog').close();$('workCardDialog').close();
  $('workShiftForm').hidden=$('workSiteForm').hidden=true;
  if(view==='time-cards'){$('workTimeCards').textContent='Loading time cards…';$('workAddCard').hidden=true;}
@@ -1599,6 +1624,7 @@ function workEditShift(shift,cell) {
   fields.end.value=cell.day+'T17:00';
  }
  workShiftOptions(!shift);
+ if(cell?.job!==undefined)fields.job.value=cell.job;
  form.hidden=false;
  $('workShiftDialog').showModal();
  fields.account.focus();
@@ -2181,40 +2207,42 @@ function workShiftTime(value){
  const [hour,minute]=value.slice(-5).split(':').map(Number);
  return `${hour%12||12}:${String(minute).padStart(2,'0')} ${hour<12?'AM':'PM'}`;
 }
+function workRenderMine(data){
+ const unique=[...new Map(data.shifts.map(s=>[s.id,s])).values()];
+ $('workScheduledHours').textContent=(unique.reduce((n,s)=>n+s.week_seconds,0)/3600).toLocaleString(undefined,{maximumFractionDigits:2});
+ $('workScheduledCount').textContent=unique.length;
+ $('workMyRange').textContent=`${data.week} – ${workDateOffset(data.week,6)}`;
+ $('workMyShifts').innerHTML=Array.from({length:7},(_,i)=>{
+  const day=workDateOffset(data.week,i),next=workDateOffset(day,1);
+  // Show each shift once, on its starting day (or the first visible day for an overnight carry-in).
+  const shifts=unique.filter(s=>s.start.slice(0,10)===day||(i===0&&s.start<day&&s.end>day));
+  const label=new Date(day+'T12:00:00').toLocaleDateString(undefined,{weekday:'long',month:'short',day:'numeric'});
+  return `<section class="workDay"><h4>${esc(label)}</h4>${shifts.length?shifts.map(s=>`<article class="workPersonalShift"><strong>${workShiftTime(s.start)} – ${workShiftTime(s.end)}${s.start.slice(0,10)!==s.end.slice(0,10)?' (ends '+esc(s.end.slice(0,10))+')':''}</strong><b>${esc(s.job||'Scheduled shift')}</b><span>${esc(s.location||'No location specified')}</span>${s.notes?`<p>${esc(s.notes)}</p>`:''}</article>`).join(''):'<div class="workDayEmpty">You don’t have any shifts on this day.</div>'}</section>`;
+ }).join('');
+}
 function workRenderGrid(team,week){
  const days=[6,0,1,2,3,4,5].map((weekday,i)=>({label:workWeekdays[weekday],day:workDateOffset(week,i),next:workDateOffset(week,i+1)}));
- const shifts=new Map(),absences=new Map();
- for(const shift of team.shifts){
-  if(!shifts.has(shift.account))shifts.set(shift.account,[]);
-  shifts.get(shift.account).push(shift);
- }
- for(const absence of team.absences){
-  const key=absence.account+':'+absence.day;
-  if(!absences.has(key))absences.set(key,[]);
-  absences.get(key).push(absence);
- }
- $('workTeamShifts').innerHTML=`<div class="workGridScroll" tabindex="0" aria-label="Weekly staff schedule">
-  <table class="workScheduleGrid"><thead><tr><th scope="col">Employee</th><th scope="col">Shifts</th>
-  ${days.map(day=>`<th scope="col">${day.label} ${day.day.slice(5)}</th>`).join('')}<th scope="col">Hours</th></tr></thead>
-  <tbody>${team.people.map(person=>{
-   const own=shifts.get(person.id)||[];
-   const hours=own.reduce((total,shift)=>total+shift.week_seconds,0)/3600;
-   return `<tr><th scope="row">${esc(person.name)}</th><td>${own.length}</td>
-    ${days.map(({day,next})=>{
-     const blocked=absences.get(person.id+':'+day)||[];
-     const items=own.filter(s=>s.start<next+'T00:00'&&s.end>day+'T00:00');
-     return `<td>${blocked.map(b=>`<div class="workAbsence ${b.kind==='time-off'?'timeOff':''}">${b.kind==='time-off'?'Time off':b.start?'Unavailable '+workShiftTime(b.start)+' – '+workShiftTime(b.end):'Unavailable · all day'}</div>`).join('')}
-      ${items.map(shift=>`<button class="workShiftCard" type="button" data-edit-shift="${shift.id}">
-       <strong>${workShiftTime(shift.start)} – ${workShiftTime(shift.end)}</strong>
-       ${shift.job?`<span>${esc(shift.job)}</span>`:''}
-       ${shift.location?`<span>${esc(shift.location)}</span>`:''}</button>`).join('')}
-      <button type="button" class="workGridAdd" data-grid-account="${esc(person.id)}" data-grid-day="${day}" aria-label="Add shift for ${esc(person.name)} on ${day}">＋</button></td>`;
-    }).join('')}<td>${new Intl.NumberFormat(undefined,{maximumFractionDigits:2}).format(hours)}</td></tr>`;
-  }).join('')}</tbody></table></div>`;
+ const jobs=[...new Set([...(team.jobs||[]),...team.people.flatMap(p=>p.jobs),...team.shifts.map(s=>s.job)].filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+ if(team.people.some(p=>!p.jobs.length)||team.shifts.some(s=>!s.job))jobs.push('');
+ const absences=[...(team.absences||[]),...(team.pending_absences||[]).map(b=>({...b,pending:true}))];
+ $('workTeamShifts').innerHTML=`<div class="workGridScroll" tabindex="0" aria-label="Weekly staff schedule"><table class="workScheduleGrid"><thead><tr><th scope="col">Employee</th><th scope="col">Shifts</th>${days.map(d=>`<th scope="col">${d.label} ${d.day.slice(5)}</th>`).join('')}<th scope="col">Hours</th></tr><tr class="workDispatchRow"><th scope="row" colspan="2">Dispatch</th>${days.map(d=>`<td>${(team.dispatch||[]).filter(e=>e.start.slice(0,10)===d.day).map(e=>`<div class="workDispatch type${e.type}">${workShiftTime(e.start)} ${e.type}</div>`).join('')}</td>`).join('')}<td></td></tr></thead>${jobs.map(job=>{
+  const people=team.people.filter(p=>p.jobs.includes(job)||(!job&&!p.jobs.length)||team.shifts.some(s=>s.account===p.id&&s.job===job));
+  return `<tbody data-job-section="${esc(job)}"><tr class="workJobHeading"><th colspan="10" scope="rowgroup">${esc(job||'Unassigned job')} <small>${people.length} employees</small></th></tr>${people.map(person=>{
+   const all=team.shifts.filter(s=>s.account===person.id),own=all.filter(s=>s.job===job);
+   return `<tr><th scope="row">${esc(person.name)}</th><td>${own.length}</td>${days.map(({day,next})=>{
+    const blocked=absences.filter(b=>b.account===person.id&&b.day===day);
+    return `<td>${blocked.map(b=>`<div class="workAbsence ${b.kind==='time-off'?'timeOff':''} ${b.pending?'workPending':''}">${b.pending?'Pending · ':''}${b.kind==='time-off'?'Time off':'Unavailable'}${b.start?' '+workShiftTime(b.start)+' – '+workShiftTime(b.end):' · all day'}</div>`).join('')}${all.filter(s=>s.start<next+'T00:00'&&s.end>day+'T00:00').map(s=>{
+     const ghost=s.job!==job;
+     const contents=`<strong>${workShiftTime(s.start)} – ${workShiftTime(s.end)}</strong><span>${esc(s.job||'Unassigned job')}${ghost?' · other job':''}</span>${s.location?`<span>${esc(s.location)}</span>`:''}${s.start.slice(0,10)!==s.end.slice(0,10)?'<span>Overnight shift</span>':''}`;
+     return ghost?`<div class="workShiftCard workGhost" aria-label="Other job: ${esc(s.job)}">${contents}</div>`:`<button class="workShiftCard" type="button" data-edit-shift="${s.id}">${contents}</button>`;
+    }).join('')}<button type="button" class="workGridAdd" data-grid-account="${esc(person.id)}" data-grid-day="${day}" data-grid-job="${esc(job)}" aria-label="Add ${esc(job)} shift for ${esc(person.name)} on ${day}">＋</button></td>`;
+   }).join('')}<td>${(own.reduce((n,s)=>n+s.week_seconds,0)/3600).toLocaleString(undefined,{maximumFractionDigits:2})}</td></tr>`;
+  }).join('')}</tbody>`;
+ }).join('')}</table></div>`;
 }
 $('workTeamShifts').addEventListener('click',e=>{
- const button=e.target.closest('[data-grid-account]');
- if(button)workEditShift(null,{account:button.dataset.gridAccount,day:button.dataset.gridDay});
+ const b=e.target.closest('[data-grid-account]');
+ if(b)workEditShift(null,{account:b.dataset.gridAccount,day:b.dataset.gridDay,job:b.dataset.gridJob});
 });
 
 let workRequestKind='';
@@ -2264,7 +2292,7 @@ $('workRequestForm').onsubmit=async e=>{
    const [start,end]=[...row.querySelectorAll('input[type=time]')].map(i=>allDay?'':i.value);
    return {day:Number(row.querySelector('select').value),start,end};
   });
- }else{data.start=form.elements.start.value;data.end=form.elements.end.value;}
+ }else{data.start=form.elements.start.value;data.end=form.elements.end.value;data.from_time=form.elements.from_time.value;data.until_time=form.elements.until_time.value;}
  button.disabled=true;
  try{
   await workApi('request',data);
@@ -2276,11 +2304,12 @@ $('workRequestForm').onsubmit=async e=>{
  finally{button.disabled=false;}
 };
 function workRenderRequests(result,review){
- const list=$(review?'workReviewRequests':'workMyRequests');
+ const list=$(review?'workReviewRequests':workView==='availability'?'workOwnAvailability':'workMyRequests');
+ if(workView==='availability')result={...result,requests:result.requests.filter(r=>r.kind==='availability')};
  list.innerHTML=result.requests.map(request=>{
   const availability=request.kind==='availability';
   const summary=availability?(request.details.blocks.map(b=>`${workWeekdays[b.day]}: ${b.start?b.start+' – '+b.end:'All day'}`).join(', ')||'Clear weekly unavailability'):
-   `${request.details.start} to ${request.details.end}`;
+   `${request.details.start} to ${request.details.end}${request.details.from_time?" · "+request.details.from_time+" – "+request.details.until_time:""}`;
   const pending=request.status==='pending';
   return `<article class="workRow"><div><strong>${review?esc(request.name)+' · ':''}${availability?'Availability':'Time off'}</strong>
    <p>${esc(summary)}</p>${request.notes?`<p>${esc(request.notes)}</p>`:''}<p class="workRequestState">${esc(request.status)}${request.reviewer?' · '+esc(request.reviewer):''}</p></div>
@@ -2289,7 +2318,7 @@ function workRenderRequests(result,review){
     `<button type="button" data-work-request="${request.id}">Withdraw</button>`}</div>`:''}</article>`;
  }).join('')||'<p>No requests yet.</p>';
 }
-for(const id of ['workMyRequests','workReviewRequests']){
+for(const id of ['workMyRequests','workReviewRequests','workOwnAvailability']){
  $(id).addEventListener('click',async e=>{
   const button=e.target.closest('[data-work-request]');
   if(!button)return;
@@ -2725,4 +2754,55 @@ $('userIdentityForm').onsubmit=async e=>{
   if(user===signedIn&&version===userIdentityVersion){userIdentityDialog.close();toast('Employee profile saved.');}
  }catch(err){if(user===signedIn&&version===userIdentityVersion)$('userIdentityError').textContent=err.message;}
  finally{if(version===userIdentityVersion)button.disabled=false;}
+};
+
+// Responsive manager scheduling and accessible menus.
+const workDesktop=window.matchMedia('(min-width: 1024px)');
+function workIsDesktop(){return mobileViewMode==='desktop'||(mobileViewMode!=='mobile'&&workDesktop.matches);}
+function workLayoutChanged(){
+ if(workData)workRender(workData);
+ if(!workIsDesktop()&&workView==='team'&&!workPanel.hidden){$('workCopyDialog').close();workSelect('mine');}
+}
+workDesktop.addEventListener('change',workLayoutChanged);
+$('mobileViewMode').addEventListener('change',workLayoutChanged);
+$('workAvailabilityEdit').onclick=()=>workRequestOpen('availability');
+$('workCopyWeek').onclick=()=>{
+ const form=$('workCopyForm');form.elements.source.value=workWeek;form.elements.target.value=workDateOffset(workWeek,7);
+ $('workCopyError').textContent='';$('workCopyDialog').showModal();
+};
+$('workCopyCancel').onclick=()=>$('workCopyDialog').close();
+$('workCopyForm').onsubmit=async e=>{
+ e.preventDefault();const button=e.submitter,signedIn=user,version=workVersion;button.disabled=true;$('workCopyError').textContent='';
+ try{const values=Object.fromEntries(new FormData(e.currentTarget));const result=await workApi('copy-week',values);
+  if(user!==signedIn||version!==workVersion||workPanel.hidden)return;
+  $('workCopyDialog').close();workWeek=values.target;workSelect('team');workStatus(`Copied ${result.copied} ${result.copied===1?'shift':'shifts'}.`);
+ }catch(error){$('workCopyError').textContent=error.message;}finally{button.disabled=false;}
+};
+for(const menu of workPanel.querySelectorAll('.workDropdown'))menu.addEventListener('toggle',()=>{
+ if(menu.open)for(const other of workPanel.querySelectorAll('.workDropdown'))if(other!==menu)other.open=false;
+});
+document.addEventListener('pointerdown',e=>{for(const menu of document.querySelectorAll('.workDropdown,.headerMenu'))if(!menu.contains(e.target))menu.open=false;});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')for(const menu of document.querySelectorAll('.workDropdown,.headerMenu'))if(menu.open){menu.open=false;menu.querySelector('summary').focus();}});
+const headerMenu=document.createElement('details');headerMenu.className='headerMenu';
+headerMenu.innerHTML='<summary>Menu <span aria-hidden="true">▾</span></summary><div id="headerMenuItems"></div>';
+$('storeMenuButton').parentElement.append(headerMenu);
+for(const id of ['chooseStartSection','appearanceMenu'])if($(id))$('headerMenuItems').append($(id));
+// Move the utility actions at the bottom of Pages, preserving their existing handlers.
+for(const button of [...$('storeMenu').children])if(!/Section$/.test(button.id))$('headerMenuItems').append(button);
+headerMenu.addEventListener('click',e=>{if(e.target.closest('button'))headerMenu.open=false;});
+$('storeMenuButton').before($('currentSection'));
+$('storeMenuButton').innerHTML='View Panel <span aria-hidden="true">▾</span>';
+
+const workJobsPanel=document.createElement('div');workJobsPanel.className='panel';workJobsPanel.hidden=true;
+workJobsPanel.innerHTML='<h2>Jobs</h2><p>Each job has a section in manager Scheduling. Assign employees to jobs under Users → Work assignments. Existing employee assignments are included automatically.</p><form id="workJobsForm"><label>Job names (one per line)<textarea name="jobs" rows="8" maxlength="16200"></textarea></label><button class="primary">Save jobs</button></form><p id="workJobsStatus" role="status"></p>';
+settingsPanels.push(workJobsPanel);settingsNames.push('Jobs');settingsGroups[0].panels.push(12);$('settings').append(workJobsPanel);
+async function loadWorkJobs(){
+ const form=$('workJobsForm');form.querySelector('button').disabled=true;$('workJobsStatus').textContent='Loading jobs…';
+ try{const data=await workApi('jobs');form.elements.jobs.value=data.jobs.join('\n');$('workJobsStatus').textContent='';form.querySelector('button').disabled=false;}
+ catch(error){$('workJobsStatus').textContent=error.message;}
+}
+$('workJobsForm').onsubmit=async e=>{
+ e.preventDefault();e.submitter.disabled=true;
+ try{await workApi('jobs',{jobs:e.currentTarget.elements.jobs.value.split(/\r?\n/).map(j=>j.trim()).filter(Boolean)});$('workJobsStatus').textContent='Jobs saved.';}
+ catch(error){$('workJobsStatus').textContent=error.message;}finally{e.submitter.disabled=false;}
 };

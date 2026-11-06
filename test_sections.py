@@ -16,7 +16,7 @@ def run():
     for section in ('dispatchSection','pagingSection','receiptsSection','printSection','commsSection','workforceSection','appearanceMenu','chooseStartSection'):
      guest.locator('#receiptShortcut').click()
      expect(guest.locator('#receiptUpload')).to_be_visible()
-     guest.locator('#storeMenuButton').click()
+     guest.locator('.headerMenu summary' if section in ('appearanceMenu','chooseStartSection') else '#storeMenuButton').click()
      guest.locator('#'+section).click()
      prompt=guest.get_by_role('button',name='Log in first',exact=True)
      expect(prompt).to_be_visible()

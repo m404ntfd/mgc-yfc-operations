@@ -633,6 +633,7 @@ def comm_post(handler, c, u, path, d):
 
 def init_workforce(c):
     c.executescript("""
+        CREATE TABLE IF NOT EXISTS work_job_definitions(name TEXT PRIMARY KEY);
         CREATE TABLE IF NOT EXISTS work_requests(
             id INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT NOT NULL, kind TEXT NOT NULL, details TEXT NOT NULL,
             notes TEXT NOT NULL, status TEXT NOT NULL, start_date TEXT NOT NULL, end_date TEXT,
@@ -686,6 +687,12 @@ def init_workforce(c):
         c.execute("ALTER TABLE work_shifts ADD COLUMN job TEXT NOT NULL DEFAULT ''")
     if not any(row[1]=='address' for row in c.execute('PRAGMA table_info(work_sites)')):
         c.execute("ALTER TABLE work_sites ADD COLUMN address TEXT NOT NULL DEFAULT ''")
+    # Carry existing assignments and historical shifts into the shared job catalogue.
+    for row in c.execute('SELECT body FROM work_assignments').fetchall():
+        for job in json.loads(row['body']).get('jobs',[]):
+            c.execute('INSERT OR IGNORE INTO work_job_definitions VALUES(?)',(job,))
+    c.execute("INSERT OR IGNORE INTO work_job_definitions SELECT DISTINCT job FROM work_shifts WHERE job!=''")
+
 
 
 
@@ -864,6 +871,8 @@ def work_save_assignment(c,d):
             or (bool(sites) and (type(site) is not int or site not in sites)) or (not sites and site is not None)):
         raise Problem('Choose a primary job and site from the assigned options.')
     if required and not sites: raise Problem('Assign at least one work site to require location checks.')
+    for assigned_job in jobs:
+        c.execute('INSERT OR IGNORE INTO work_job_definitions VALUES(?)',(assigned_job,))
     body=dict(jobs=jobs,sites=sites,primary_job=job,primary_site=site,require_location=required)
     c.execute('INSERT OR REPLACE INTO work_assignments VALUES(?,?)',(account,json.dumps(body)))
 
@@ -898,12 +907,12 @@ def work_request_rows(c,account=None,reviewer=None):
     return [{**dict(row),'details':json.loads(row['details'])} for row in rows]
 
 
-def work_week_absences(c,week):
+def work_week_absences(c,week,status="approved"):
     end=week+dt.timedelta(days=6)
     rows=c.execute("""SELECT q.account,q.kind,q.details FROM work_requests q
         JOIN receipt_profiles p ON p.profile_id=q.account JOIN users u ON u.name=p.name
-        WHERE q.status='approved' AND q.start_date<=? AND (q.end_date IS NULL OR q.end_date>=?)""",
-                   (end.isoformat(),week.isoformat()))
+        WHERE q.status=? AND q.start_date<=? AND (q.end_date IS NULL OR q.end_date>=?)""",
+                   (status,end.isoformat(),week.isoformat()))
     cells=[]
     for row in rows:
         details=json.loads(row['details'])
@@ -911,7 +920,8 @@ def work_week_absences(c,week):
             day=(week+dt.timedelta(days=i)).isoformat()
             if row['kind']=='time-off':
                 if details['start']<=day<=details['end']:
-                    cells.append(dict(account=row['account'],day=day,kind='time-off'))
+                    cells.append(dict(account=row['account'],day=day,kind='time-off',**(
+                        dict(start=details['from_time'],end=details['until_time']) if details.get('from_time') else {})))
             elif day>=details['effective']:
                 for block in details['blocks']:
                     if block['day']==(i+6)%7:
@@ -950,6 +960,11 @@ def work_submit_request(c,u,d):
             raise Problem('Choose a current or future date range of up to 366 days.')
         first,last=start.isoformat(),end.isoformat()
         details=dict(start=first,end=last)
+        begin,finish=d.get('from_time',''),d.get('until_time','')
+        if begin or finish:
+            if (first!=last or not all(isinstance(t,str) and re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d',t) for t in (begin,finish)) or begin>=finish):
+                raise Problem('For partial-day time off, choose one day and an end time after the start.')
+            details.update(from_time=begin,until_time=finish)
     else:
         raise Problem('Choose availability or time off.')
     request=c.execute("""INSERT INTO work_requests(account,kind,details,notes,status,start_date,end_date)
@@ -1074,13 +1089,14 @@ def work_card_display(card):
                 breaks=[dict(id=b['id'],start=work_card_time(b['start']),end=work_card_time(b['end'])) for b in card['breaks']])
 
 
-def work_time_cards(c,week):
+def work_time_cards(c,week,account=None):
     first,last=work_bounds(week,7)
     rows=c.execute("""SELECT w.*,u.name FROM work_periods w LEFT JOIN receipt_profiles p ON p.profile_id=w.account
         LEFT JOIN users u ON u.name=p.name WHERE w.start<? AND (w.end IS NULL OR w.end>?)
         ORDER BY u.name COLLATE NOCASE,w.start,w.id""",(last,first)).fetchall()
     cards=[]
     for row in rows:
+        if account is not None and row["account"]!=account: continue
         card=work_card_snapshot(c,row)
         cards.append(dict(id=row['id'],name=row['name'] or 'Former employee',
                           revision=work_card_revision(card),**work_card_display(card)))
@@ -1179,12 +1195,62 @@ def work_add_time_card(c,u,d):
                  json.dumps(work_card_display(dict(start=start,end=end,breaks=saved)))))
 
 
+
+def work_dispatch(c,u,week):
+    if not has_permission(u,'view_schedule'): return []
+    first,last=week.isoformat(),(week+dt.timedelta(days=7)).isoformat()
+    events=[]
+    for row in c.execute('SELECT body FROM jobs'):
+        job=json.loads(row['body'])
+        if (job.get('request') or job.get('status') in ('Canceled','Cancelled') or
+                job.get('type') not in ('Pickup','Delivery')): continue
+        start=job.get('start','')
+        if first<=start<last:
+            events.append(dict(start=start,type=job['type']))
+    return sorted(events,key=lambda event:event['start'])
+
+
+def work_copy_week(c,d):
+    try:
+        source,target=(dt.date.fromisoformat(d[key]) for key in ('source','target'))
+        if source.weekday()!=6 or target.weekday()!=6 or source==target: raise ValueError()
+        if not all(2000<=day.year<=2100 for day in (source,target)): raise ValueError()
+    except (TypeError,ValueError,KeyError):
+        raise Problem('Choose different Sunday start dates for the source and destination weeks.')
+    # Serialize conflict checks and inserts; a failed copy leaves every destination shift intact.
+    c.execute('BEGIN IMMEDIATE')
+    first,last=work_bounds(source,7)
+    rows=c.execute("""SELECT s.* FROM work_shifts s JOIN receipt_profiles p ON p.profile_id=s.account
+        JOIN users u ON u.name=p.name WHERE s.start>=? AND s.start<? ORDER BY s.start,s.id""",(first,last)).fetchall()
+    if not rows: raise Problem('The source week has no shifts starting in it.')
+    offset=target-source
+    copied=[]
+    for row in rows:
+        # Preserve local wall times when the offset crosses daylight saving time.
+        start=work_time((dt.datetime.fromtimestamp(row['start'])+offset).isoformat(timespec='minutes'))
+        end=work_time((dt.datetime.fromtimestamp(row['end'])+offset).isoformat(timespec='minutes'))
+        if not 0<end-start<=48*3600: raise Problem('A copied shift has invalid hours at the destination.')
+        assignment=work_assignment(c,row['account'])
+        locations=work_assigned_sites(c,assignment)
+        if ((assignment['jobs'] and row['job'] not in assignment['jobs']) or
+            (locations and row['location'] not in {site['name'] for site in locations})):
+            raise Problem('An employee’s assignments changed. Update the source shifts before copying.',409)
+        if c.execute('SELECT 1 FROM work_shifts WHERE account=? AND start<? AND end>?',
+                     (row['account'],end,start)).fetchone():
+            raise Problem('Copy stopped: a destination shift overlaps. No shifts were copied.',409)
+        c.execute('INSERT INTO work_shifts(account,start,end,location,notes,job) VALUES(?,?,?,?,?,?)',
+                  (row['account'],start,end,row['location'],row['notes'],row['job']))
+        copied.append(row['id'])
+    return dict(ok=True,copied=len(copied))
+
 def work_get(handler,c,u,path,query,clock_only=False):
     account=u['receipt_owner']
     if not account: raise Problem('Staff account required.',403)
     now=int(time.time())
     today=dt.date.fromtimestamp(now)
     week=work_week(query.get('week',[''])[0],today)
+    if path=='my-time-cards':
+        return handler.send({'cards':work_time_cards(c,week,account)})
     if path=='time-cards':
         edit,add=has_permission(u,'edit_time_cards'),has_permission(u,'add_time_cards')
         if not (edit or add): raise Problem('Time card permission required.',403)
@@ -1224,12 +1290,17 @@ def work_get(handler,c,u,path,query,clock_only=False):
             locations=work_assigned_sites(c,assignment)
             person.update(jobs=assignment['jobs'],primary_job=assignment['primary_job'],locations=[site['name'] for site in locations],
                           primary_location=next((site['name'] for site in locations if site['id']==assignment['primary_site']),''))
-        return handler.send(dict(people=people,shifts=work_shifts(c,week),absences=work_week_absences(c,week)))
+        return handler.send(dict(people=people,shifts=work_shifts(c,week),absences=work_week_absences(c,week),
+            pending_absences=work_week_absences(c,week,'pending'),dispatch=work_dispatch(c,u,week),
+            jobs=[r['name'] for r in c.execute('SELECT name FROM work_job_definitions ORDER BY name')]))
     if path=='requests':
         return handler.send({'requests':work_request_rows(c,account)})
     if path=='review-requests':
         if not can_review_requests(u): raise Problem('This request requires an administrator or an authorized manager.',403)
         return handler.send({'requests':work_request_rows(c,reviewer=u),'account':account})
+    if path=='jobs':
+        if not has_permission(u,'manage_staff_schedule'): raise Problem('Schedule management permission required.',403)
+        return handler.send({'jobs':[r['name'] for r in c.execute('SELECT name FROM work_job_definitions ORDER BY name')]})
     if path=='assignment':
         if not has_permission(u,'manage_staff_schedule'): raise Problem('Schedule management permission required.',403)
         target=work_assignment_target(c,query.get('name',[''])[0])
@@ -1309,6 +1380,24 @@ def work_post(handler,c,u,path,d,clock_only=False):
         if clock_only:
             CLOCK_SESSIONS.pop(clock_pin_cookie(handler),None)
             return handler.send({'ok':True},cookie='clock_session=; HttpOnly; SameSite=Strict; Path=/api/workforce/quick; Max-Age=0')
+        return handler.send({'ok':True})
+    if path=='copy-week':
+        if not has_permission(u,'manage_staff_schedule'): raise Problem('Schedule management permission required.',403)
+        result=work_copy_week(c,d)
+        c.commit()
+        return handler.send(result)
+    if path=='jobs':
+        if not has_permission(u,'manage_staff_schedule'): raise Problem('Schedule management permission required.',403)
+        jobs=d.get('jobs')
+        if not isinstance(jobs,list) or len(jobs)>200 or any(not isinstance(j,str) or not 1<=len(j.strip())<=80 for j in jobs):
+            raise Problem('Enter up to 200 job names, with up to 80 characters each.')
+        jobs=list(dict.fromkeys(j.strip() for j in jobs))
+        used={job for r in c.execute('SELECT body FROM work_assignments') for job in json.loads(r['body'])['jobs']}
+        used.update(r['job'] for r in c.execute("SELECT DISTINCT job FROM work_shifts WHERE job!=''"))
+        if not used<=set(jobs): raise Problem('Jobs used by an employee or saved shift cannot be removed.',409)
+        c.execute('DELETE FROM work_job_definitions')
+        c.executemany('INSERT INTO work_job_definitions VALUES(?)',[(job,) for job in jobs])
+        c.commit()
         return handler.send({'ok':True})
     if path=='assignment':
         if not has_permission(u,'manage_staff_schedule'): raise Problem('Schedule management permission required.',403)

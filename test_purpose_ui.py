@@ -20,11 +20,11 @@ def run():
      page.locator('[name=section][value=print]').check();page.locator('#sectionChooserForm button').click()
     expect(page.locator('#printPurpose')).to_be_visible()
     assert page.locator('body>header').evaluate('(e)=>getComputedStyle(e).backgroundColor')=='rgb(7, 62, 166)'
-    page.locator('#storeMenuButton').click();page.locator('#appearanceMenu').click()
+    page.locator('.headerMenu summary').click();page.locator('#appearanceMenu').click()
     expect(page.locator('#printPurpose')).to_be_hidden();expect(page.locator('#currentSection')).to_have_text('Settings')
     expect(page.get_by_role('button',name='Phone Access',exact=True)).to_be_hidden()
     page.locator('#accountButton').click();expect(page.locator('#printPurpose' if width==390 else '#receipts')).to_be_visible()
-    page.locator('#storeMenuButton').click();page.locator('#chooseStartSection').click()
+    page.locator('.headerMenu summary').click();page.locator('#chooseStartSection').click()
     page.locator('[name=section][value=receipts]').check();page.locator('#sectionChooserForm button').click()
     page.locator('#accountButton').click();expect(page.locator('#receipts')).to_be_visible()
     page.locator('#storeMenuButton').click();page.locator('#receiptsSection').click();page.locator('#openReceiptUpload').click()

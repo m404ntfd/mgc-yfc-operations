@@ -1,6 +1,7 @@
 """Exercise the manager and staff views with simulated mobile geolocation."""
 import csv
 import datetime
+import os
 
 from playwright.sync_api import expect, sync_playwright
 from test_server import Tests as Fixture
@@ -13,7 +14,7 @@ def run():
         Fixture.call('user', {'name':'Staff','password':'testpassword'})
         origin=f'http://127.0.0.1:{Fixture.port}'
         with sync_playwright() as playwright:
-            browser=playwright.chromium.launch()
+            browser=playwright.chromium.launch(**({'executable_path':os.environ['TEST_CHROMIUM']} if os.environ.get('TEST_CHROMIUM') else {}))
             errors=[]
 
             def open_workforce(name, width):
@@ -36,6 +37,7 @@ def run():
                 return page
 
             manager=open_workforce('Admin',1280)
+            manager.locator('.workDropdown:has([data-work-view=sites]) summary').click()
             manager.locator('[data-work-view=sites]').click()
             expect(manager.locator('#workSiteList')).to_have_text('No work sites configured.')
             manager.locator('#workAddSite').click()
@@ -86,6 +88,7 @@ def run():
             assignments.get_by_role('button',name='Save assignments').click()
             expect(manager.locator('#workAssignmentForm')).to_be_hidden()
             manager.locator('#headerClock').click()
+            manager.locator('.workDropdown:has([data-work-view=team]) summary').click()
             manager.locator('[data-work-view=team]').click()
             expect(manager.locator('.workScheduleGrid')).to_be_visible()
             expect(manager.locator('.workScheduleGrid thead th').nth(2)).to_contain_text('Sun')
@@ -105,6 +108,7 @@ def run():
             staff=open_workforce('Staff',390)
             expect(staff.locator('[data-work-view=team]')).to_be_hidden()
             expect(staff.locator('[data-work-view=sites]')).to_be_hidden()
+            staff.locator('.workDropdown:has([data-work-view=mine]) summary').click()
             staff.locator('[data-work-view=mine]').click()
             expect(staff.locator('#workMyShifts')).to_contain_text('Main Office')
             staff.locator('[data-work-view=clock]').click()
@@ -124,6 +128,7 @@ def run():
             staff.locator('[data-work-punch=out]').click()
             expect(staff.locator('#workClockState')).to_have_text('Clocked out')
             assert staff.evaluate('document.documentElement.scrollWidth<=innerWidth')
+            staff.locator('.workDropdown:has([data-work-view=requests]) summary').click()
             staff.locator('[data-work-view=requests]').click()
             staff.locator('#workTimeOff').click()
             today=staff.request.get(origin+'/api/workforce/overview').json()['today']
@@ -136,8 +141,10 @@ def run():
             manager.locator('#scheduleNoticeOpen').click()
             manager.locator('#workReviewRequests').get_by_role('button',name='Approve').click()
             expect(manager.locator('#workReviewRequests')).to_contain_text('approved')
+            manager.locator('.workDropdown:has([data-work-view=team]) summary').click()
             manager.locator('[data-work-view=team]').click()
-            expect(manager.locator('.workAbsence.timeOff')).to_have_text('Time off')
+            expect(manager.locator('.workAbsence.timeOff')).to_have_text(['Time off · all day','Time off · all day'])
+            staff.locator('.workDropdown:has([data-work-view=requests]) summary').click()
             staff.locator('[data-work-view=requests]').click()
             expect(staff.locator('#workMyRequests')).to_contain_text('approved')
             staff.locator('#headerHome').click()
@@ -168,6 +175,7 @@ def run():
             staff.locator('#headerClock').click()
             expect(staff.locator('#workClockState')).to_contain_text('Clocked in since')
             expect(staff.locator('[data-work-view=time-cards]')).to_be_hidden()
+            manager.locator('.workDropdown:has([data-work-view=time-cards]) summary').click()
             manager.locator('[data-work-view=time-cards]').click()
             open_card=manager.locator('#workTimeCards article').filter(has_text='Open')
             open_card.get_by_role('button',name='Edit time card').click()
@@ -185,11 +193,13 @@ def run():
             card.locator('[name=reason]').fill('Enter a missed shift')
             card.get_by_role('button',name='Save time card').click()
             expect(manager.locator('#workCardDialog')).to_be_hidden()
+            manager.locator('.workDropdown:has([data-work-view=time-card-audit]) summary').click()
             manager.locator('[data-work-view=time-card-audit]').click()
             expect(manager.locator('#workTimeAudit')).to_contain_text('Correct missing clock-out')
             expect(manager.locator('#workTimeAudit')).to_contain_text('No entry existed.')
             expect(manager.locator('#workTimeAudit')).to_contain_text('Before')
             expect(manager.locator('#workTimeAudit')).to_contain_text('After')
+            manager.locator('.workDropdown:has([data-work-view=payroll]) summary').click()
             manager.locator('[data-work-view=payroll]').click()
             manager.route('**/api/workforce/payroll?*',lambda route:route.fulfill(json={
                 **(dict(start='2025-01-09',end='2025-01-15') if 'period=quickbooks' in route.request.url

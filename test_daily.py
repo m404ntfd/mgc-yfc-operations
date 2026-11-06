@@ -16,7 +16,7 @@ def run():
    with sqlite3.connect(Path(F.tmp.name)/'schedule.db') as c:c.execute("UPDATE landing_preferences SET chosen_on=?",((dt.date.today()-dt.timedelta(days=1)).isoformat(),))
    c.close()
    page.reload();expect(page.locator('#sectionChooser')).to_be_visible();page.locator('[name=section][value=dispatch]').check();page.locator('#sectionChooserForm button').click();expect(page.locator('#sectionChooser')).to_be_hidden();expect(page.locator('#app')).to_be_visible()
-   page.locator('#storeMenuButton').click();page.locator('#chooseStartSection').click();expect(page.locator('#sectionChooser')).to_be_visible();page.locator('#sectionChooserForm button').click();expect(page.locator('#sectionChooser')).to_be_hidden()
+   page.locator('.headerMenu summary').click();page.locator('#chooseStartSection').click();expect(page.locator('#sectionChooser')).to_be_visible();page.locator('#sectionChooserForm button').click();expect(page.locator('#sectionChooser')).to_be_hidden()
    b.close()
   F.call('user',{'name':'Employee','password':'testpassword'})
   F.call('logout',{});F.call('login',{'name':'Employee','password':'testpassword'})
