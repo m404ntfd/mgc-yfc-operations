@@ -26,7 +26,7 @@ def run():
             admin=login('Admin');staff=login('Staff')
             admin.route('**/api/update-check',lambda route:route.fulfill(json=dict(available=True,latest='0.39.1',current='0.39.0',notes='Test release')))
             admin.locator('#serverUpdateButton').click()
-            expect(admin.locator('#updateConnectionsStatus')).to_contain_text('1 other signed-in connection')
+            expect(admin.locator('#updateConnectionsStatus')).to_contain_text('1 other active connection')
             expect(admin.locator('#updateConnectionsList')).to_contain_text('Staff')
             expect(admin.locator('#installUpdate')).to_be_disabled()
             expect(staff.locator('#updateConnectionsPanel')).to_be_hidden()
@@ -34,11 +34,11 @@ def run():
             second=admin.context.new_page();second.goto(origin)
             expect(second.locator('#app')).to_be_visible()
             admin.locator('#refreshUpdateConnections').click()
-            expect(admin.locator('#updateConnectionsStatus')).to_contain_text('2 other signed-in connections')
+            expect(admin.locator('#updateConnectionsStatus')).to_contain_text('2 other active connections')
             second.evaluate('sendConnectionPresence(true)');second.close()
             staff.locator('#logout').click();expect(staff.locator('#auth')).to_be_visible()
             admin.locator('#refreshUpdateConnections').click()
-            expect(admin.locator('#updateConnectionsStatus')).to_have_text('No other signed-in connections reported.')
+            expect(admin.locator('#updateConnectionsStatus')).to_have_text('No other active users. Inactive connections do not hold updates.')
             expect(admin.locator('#installUpdate')).to_be_enabled()
             # A new login after the UI check cannot bypass the server guard.
             def race(route):

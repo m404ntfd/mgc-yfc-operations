@@ -632,6 +632,7 @@ def comm_post(handler, c, u, path, d):
 
 
 def init_workforce(c):
+    c.execute('CREATE TABLE IF NOT EXISTS work_shift_save_receipts(request TEXT PRIMARY KEY, actor TEXT, payload TEXT, result TEXT)')
     c.executescript("""
         CREATE TABLE IF NOT EXISTS work_job_definitions(name TEXT PRIMARY KEY);
         CREATE TABLE IF NOT EXISTS work_requests(
@@ -1378,6 +1379,7 @@ def work_post(handler,c,u,path,d,clock_only=False):
             if action=='out': c.execute('UPDATE work_periods SET end=?,site_out=? WHERE id=?',(now,site,period['id']))
         c.commit()
         if clock_only:
+            flow_depart(handler,clock=True)
             CLOCK_SESSIONS.pop(clock_pin_cookie(handler),None)
             return handler.send({'ok':True},cookie='clock_session=; HttpOnly; SameSite=Strict; Path=/api/workforce/quick; Max-Age=0')
         return handler.send({'ok':True})
@@ -1406,6 +1408,14 @@ def work_post(handler,c,u,path,d,clock_only=False):
         return handler.send({'ok':True})
     if path=='shift':
         if not has_permission(u,'manage_staff_schedule'): raise Problem('Schedule management permission required.',403)
+        request=d.get('save_request');payload=json.dumps(d,sort_keys=True)
+        if request is not None:
+            if not isinstance(request,str) or not re.fullmatch(r'[a-f0-9]{32}',request):raise Problem('Invalid save request.')
+            receipt=c.execute('SELECT * FROM work_shift_save_receipts WHERE request=?',(request,)).fetchone()
+            if receipt:
+                if receipt['actor']!=u['name'] or receipt['payload']!=payload:raise Problem('This save request was already used.',409)
+                return handler.send(json.loads(receipt['result']))
+
         ident=d.get('id')
         if ident is not None and (type(ident) is not int or not 0<ident<2**63): raise Problem('Invalid shift.')
         if ident is not None:
@@ -1443,9 +1453,12 @@ def work_post(handler,c,u,path,d,clock_only=False):
                 c.execute('UPDATE work_shifts SET account=?,start=?,end=?,location=?,notes=?,job=?,revision=revision+1 WHERE id=?',
                           fields+(ident,))
             else:
-                c.execute('INSERT INTO work_shifts(account,start,end,location,notes,job) VALUES(?,?,?,?,?,?)',fields)
+                ident=c.execute('INSERT INTO work_shifts(account,start,end,location,notes,job) VALUES(?,?,?,?,?,?)',fields).lastrowid
+        saved=c.execute('SELECT id,revision FROM work_shifts WHERE id=?',(ident,)).fetchone()
+        result={'ok':True,'shift':dict(saved) if saved else None}
+        if request:c.execute('INSERT INTO work_shift_save_receipts VALUES(?,?,?,?)',(request,u['name'],payload,json.dumps(result)))
         c.commit()
-        return handler.send({'ok':True})
+        return handler.send(result)
     if path=='site':
         if not has_permission(u,'manage_work_sites'): raise Problem('Work site management permission required.',403)
         ident=d.get('id')
@@ -1516,6 +1529,7 @@ CREATE TABLE IF NOT EXISTS audit(at TEXT, actor TEXT, action TEXT, job TEXT);'''
         c.execute("CREATE TABLE IF NOT EXISTS appearance_preferences(name TEXT PRIMARY KEY COLLATE NOCASE, mode TEXT NOT NULL)")
         c.execute('CREATE TABLE IF NOT EXISTS journal_archives(file TEXT PRIMARY KEY, sha256 TEXT NOT NULL, records INTEGER NOT NULL, archived_at TEXT NOT NULL)')
         c.execute('CREATE TABLE IF NOT EXISTS user_grants(name TEXT PRIMARY KEY COLLATE NOCASE, body TEXT)')
+        c.execute('CREATE TABLE IF NOT EXISTS connection_activity_settings(id INTEGER PRIMARY KEY CHECK(id=1), inactive_minutes INTEGER NOT NULL)')
         c.execute('CREATE TABLE IF NOT EXISTS app_migrations(name TEXT PRIMARY KEY)')
         if not c.execute("SELECT 1 FROM app_migrations WHERE name='schedule-view-default-v1'").fetchone():
             for row in c.execute('SELECT name,body FROM user_grants').fetchall():
@@ -1580,6 +1594,17 @@ def section_options(u):
 CONNECTION_RECENT_SECONDS=60
 
 
+def activity_timeout(c):
+    row=c.execute('SELECT inactive_minutes FROM connection_activity_settings WHERE id=1').fetchone()
+    return (row[0] if row else 5)*60
+
+def local_update_controller(handler,u):
+    token=os.environ.get('DISPATCH_CONTROL_TOKEN','')
+    return bool(u.get('admin') and u.get('local_admin') and token and handler.client_address[0] in ('127.0.0.1','::1')
+                and not handler.headers.get('X-Forwarded-For') and not handler.headers.get('X-Forwarded-Proto')
+                and not handler.headers.get('CF-Connecting-IP') and hmac.compare_digest(handler.headers.get('X-Local-Control',''),token))
+
+
 def connection_key(handler):
     value=handler.headers.get('X-Dispatch-Connection','')
     return value if re.fullmatch(r'[a-f0-9]{32}',value) else 'legacy'
@@ -1589,6 +1614,8 @@ def record_connection(handler,session):
     key=connection_key(handler)
     connections=session.setdefault('connections',{})
     now=time.time()
+    # A browser adopts its own headerless bootstrap session; other identified tabs remain separate.
+    if key!='legacy' and set(connections)=={'legacy'}: connections.pop('legacy')
     if key not in connections:
         connections[key]=dict(connected_at=now,last_active=session.get('last_active',now))
     connections[key]['last_seen']=now
@@ -1596,30 +1623,167 @@ def record_connection(handler,session):
 
 
 def update_connection_rows(handler,c,current):
-    now=time.time()
+    now=time.time();timeout=activity_timeout(c)
     rows=[]
     for session in list(SESSIONS.values()):
-        if session_expired(session,now): continue
+        if session.get('local_admin') or session_expired(session,now): continue
         for key,connection in session.get('connections',{}).items():
             seen=connection['last_seen']
             activity=connection.get('last_active',session.get('last_active',seen))
             rows.append(dict(name=session['name'],current=session is current and key==connection_key(handler),
                 kind='Desktop manager' if session.get('local_admin') else 'Browser' if key!='legacy' else 'Other client',
-                status='not-seen' if now-seen>CONNECTION_RECENT_SECONDS else 'active' if now-activity<300 else 'idle',
+                status='active' if now-activity<timeout else 'inactive',
                 last_seen=seen,last_active=activity))
     for account,expires,_ in list(CLOCK_SESSIONS.values()):
         if expires<=now: continue
         person=c.execute('SELECT name FROM receipt_profiles WHERE profile_id=?',(account,)).fetchone()
         rows.append(dict(name=person['name'] if person else 'Time Clock user',current=False,kind='Time Clock PIN',
-                         status='active',last_seen=None,last_active=None))
+                         status='active' if now-(expires-180)<timeout else 'inactive',last_seen=None,last_active=expires-180))
     rows.sort(key=lambda row:(not row['current'],row['name'].casefold(),row['kind']))
-    return dict(connections=rows,other_connections=sum(not row['current'] for row in rows),checked_at=now)
+    return dict(connections=rows,other_connections=sum(not row['current'] and row['status']=='active' for row in rows),inactive_connections=sum(row['status']=='inactive' for row in rows),inactive_minutes=timeout//60,checked_at=now)
 
 
 def ensure_update_connections_clear(handler,c,current):
     status=update_connection_rows(handler,c,current)
     if status['other_connections']:
-        raise Problem('Update blocked: other signed-in connections remain. Ask users to save their work and sign out or close their tabs, then refresh Connections. Idle or unconfirmed connections also block installation.',409)
+        raise Problem('Update blocked: other users are active. Notify them and wait for readiness, or use the local server administrator override.',409)
+
+
+# Coordinated updates keep readiness in memory; only a completion receipt is persisted.
+UPDATE_FLOW=None
+
+def flow_active(): return UPDATE_FLOW is not None and UPDATE_FLOW['phase'] in ('preparing','waiting','applying')
+
+def flow_identity(handler):
+    if handler.path.startswith('/api/workforce/quick'):
+        return 'clock:'+hashlib.sha256(clock_pin_cookie(handler).encode()).hexdigest()
+    cookie=SimpleCookie(handler.headers.get('Cookie',''))
+    token=cookie['session'].value if 'session' in cookie else ''
+    return hashlib.sha256((token+':'+connection_key(handler)).encode()).hexdigest()
+
+def flow_collect(c):
+    result={};now=time.time()
+    for token,session in list(SESSIONS.items()):
+        if session.get('local_admin') or session_expired(session,now):continue
+        for key,conn in session.get('connections',{}).items():
+            ident=hashlib.sha256((token+':'+key).encode()).hexdigest()
+            result[ident]=dict(name=session['name'],kind='Browser' if key!='legacy' else 'Other client',last_seen=conn['last_seen'],last_active=conn.get('last_active',session.get('last_active',conn['last_seen'])))
+    for token,(account,expires,_) in list(CLOCK_SESSIONS.items()):
+        if expires<=now:continue
+        row=c.execute('SELECT name FROM receipt_profiles WHERE profile_id=?',(account,)).fetchone()
+        result['clock:'+hashlib.sha256(token.encode()).hexdigest()]=dict(name=row['name'] if row else 'Time Clock user',kind='Time Clock PIN',last_seen=now,last_active=expires-180)
+    return result
+
+def flow_sync(c):
+    if not flow_active():return
+    for key,row in flow_collect(c).items():
+        if key==UPDATE_FLOW['requester']:continue
+        previous=UPDATE_FLOW['participants'].setdefault(key,{**row,'ready':False})
+        previous.update(row)
+
+def flow_depart(handler,all_tabs=False,clock=False):
+    if not flow_active():return
+    if clock:keys=['clock:'+hashlib.sha256(clock_pin_cookie(handler).encode()).hexdigest()]
+    elif all_tabs:
+        cookie=SimpleCookie(handler.headers.get('Cookie',''));token=cookie['session'].value if 'session' in cookie else ''
+        keys=[hashlib.sha256((token+':'+key).encode()).hexdigest() for key in SESSIONS.get(token,{}).get('connections',{})]
+    else:keys=[flow_identity(handler)]
+    for key in keys:
+        if key in UPDATE_FLOW['participants']:UPDATE_FLOW['participants'][key]['ready']=True
+
+def flow_persist():
+    data={key:UPDATE_FLOW[key] for key in ('id','version','phase','receipt_hash','error')}
+    path=DATA/'update-coordination.json';tmp=path.with_suffix('.tmp')
+    tmp.write_text(json.dumps(data));os.replace(tmp,path)
+
+def flow_status(handler,c):
+    if not UPDATE_FLOW:return {'active':False}
+    flow_sync(c);f=UPDATE_FLOW;who=flow_identity(handler);mine=who==f['requester']
+    person=f['participants'].get(who)
+    result=dict(active=flow_active(),id=f['id'],version=f['version'],phase=f['phase'],requester=mine,
+                ready=bool(person and person['ready']),receipt=f['receipt'],waiting=sum(not p['ready'] and time.time()-p['last_active']<activity_timeout(c) for p in f['participants'].values()),error=f['error'])
+    result['inactive_minutes']=activity_timeout(c)//60
+    result['force']=f.get('force',False)
+    if mine or (handler.headers.get('X-Local-Control') and local_update_controller(handler,handler.user())):result['connections']=[{**p,'status':'Ready' if p['ready'] else 'Inactive' if time.time()-p['last_active']>=activity_timeout(c) else 'Finishing work'} for p in f['participants'].values()]
+    return result
+
+def flow_result(receipt):
+    path=DATA/'update-coordination.json'
+    if not path.exists():raise Problem('Update request not found.',404)
+    result=json.loads(path.read_text())
+    if not hmac.compare_digest(result['receipt_hash'],hashlib.sha256(receipt.encode()).hexdigest()):raise Problem('Update request not found.',404)
+    phase=result['phase']
+    if not UPDATE_FLOW and phase in ('preparing','waiting','applying'):
+        phase='complete' if updater.current()==result['version'] else 'failed'
+        result['error']='' if phase=='complete' else 'The update did not complete. Sign in and check the update screen before retrying.'
+    return dict(id=result['id'],version=result['version'],current=updater.current(),phase=phase,error=result['error'])
+
+def flow_worker(server,ident):
+    global RESTART
+    try:
+        updater.stage(UPDATE_FLOW['version'])
+        with LOCK:
+            if not flow_active() or UPDATE_FLOW['id']!=ident:return
+            UPDATE_FLOW['phase']='waiting';flow_persist()
+        while True:
+            time.sleep(.5)
+            with LOCK,connect() as c:
+                if not flow_active() or UPDATE_FLOW['id']!=ident:return
+                flow_sync(c)
+                if not UPDATE_FLOW.get('force') and any(not p['ready'] and time.time()-p['last_active']<activity_timeout(c) for p in UPDATE_FLOW['participants'].values()):continue
+                UPDATE_FLOW['phase']='applying';flow_persist();RESTART=True
+            server.shutdown();return
+    except Exception as error:
+        with LOCK:
+            if UPDATE_FLOW and UPDATE_FLOW['id']==ident:
+                UPDATE_FLOW['phase']='failed';UPDATE_FLOW['error']=str(error);flow_persist()
+
+def flow_post(handler,c,u,path,data):
+    global UPDATE_FLOW
+    if path=='force':
+        if not local_update_controller(handler,u):raise Problem('Override is available only to an administrator in the local server program.',403)
+        if data.get('ready') is not True:raise Problem('Confirm the override may interrupt unsaved work.')
+        if flow_active():
+            UPDATE_FLOW['force']=True
+            c.execute('INSERT INTO audit VALUES(?,?,?,?)',(dt.datetime.now().isoformat(timespec='seconds'),u['name'],'Local administrator overrode update acknowledgements',UPDATE_FLOW['version']))
+            return handler.send(flow_status(handler,c))
+    if path in ('start','force'):
+        if not has_permission(u,'install_updates'):raise Problem('Install updates permission required.',403)
+        if flow_active():raise Problem('An update request is already pending.',409)
+        if connection_key(handler)=='legacy':raise Problem('Open the update screen in a current browser before requesting an update.',400)
+        if data.get('ready') is not True:raise Problem('Save your own work before requesting the update.')
+        if os.environ.get('DISPATCH_LAUNCHER')!='1':raise Problem('Start the managed server to enable installation.')
+        version=str(data.get('version',''));updater.version(version)
+        if updater.version(version)<=updater.version(updater.current()):raise Problem('Choose a newer available release.')
+        receipt=secrets.token_hex(32)
+        UPDATE_FLOW=dict(id=secrets.token_hex(16),version=version,phase='preparing',requester=flow_identity(handler),
+                         participants={},force=path=='force',receipt=receipt,receipt_hash=hashlib.sha256(receipt.encode()).hexdigest(),error='')
+        flow_sync(c);flow_persist()
+        c.execute('INSERT INTO audit VALUES(?,?,?,?)',(dt.datetime.now().isoformat(timespec='seconds'),u['name'],'Local administrator overrode update acknowledgements' if path=='force' else 'Requested coordinated update',version))
+        threading.Thread(target=flow_worker,args=(handler.server,UPDATE_FLOW['id']),daemon=True).start()
+        return handler.send({**flow_status(handler,c),'receipt':receipt})
+    if not flow_active() or data.get('id')!=UPDATE_FLOW['id']:raise Problem('This update request is no longer active.',409)
+    if path=='cancel':
+        if not has_permission(u,'install_updates'):raise Problem('Install updates permission required.',403)
+        if UPDATE_FLOW['phase']=='applying':raise Problem('The update is already installing.',409)
+        if UPDATE_FLOW['phase']=='preparing':raise Problem('Wait for the update download to finish before canceling.',409)
+        UPDATE_FLOW['phase']='canceled';flow_persist();return handler.send({'ok':True})
+    if path=='acknowledge':
+        if data.get('ready') is not True:raise Problem('Confirm that your current work is saved.')
+        flow_sync(c);person=UPDATE_FLOW['participants'].get(flow_identity(handler))
+        if person:person['ready']=True
+        return handler.send(flow_status(handler,c))
+    raise Problem('Not found',404)
+
+def flow_guard(handler):
+    if not flow_active():return
+    path=handler.path
+    if path.startswith('/api/update-flow/') or path=='/api/workforce/quick/update-flow/acknowledge' or path in ('/api/account/connection','/api/account/activity','/api/activity-settings','/api/logout','/api/workforce/quick/close'):return
+    if path in ('/api/login','/api/setup','/api/workforce/quick/login','/api/update-install','/api/admin/restart'):
+        raise Problem('An update is pending. Please wait until it finishes.',423)
+    person=UPDATE_FLOW['participants'].get(flow_identity(handler))
+    if flow_identity(handler)==UPDATE_FLOW['requester'] or (person and person['ready']):
+        raise Problem('Your connection is ready for the update. Please wait until it finishes.',423)
 
 
 def session_expired(session, now):
@@ -1949,6 +2113,14 @@ class Handler(BaseHTTPRequestHandler):
                 if filename=='index.html':body=body.replace(b'</head>',b'<link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="apple-touch-icon" sizes="180x180" href="/app-icon-180.png"><link rel="manifest" href="/manifest.webmanifest"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="YFC Operations"></head>')
                 return self.send(body,kind=kind)
             with LOCK, connect() as c:
+                if self.path.startswith('/api/update-result?'):
+                    return self.send(flow_result(parse_qs(urlsplit(self.path).query).get('receipt',[''])[0]))
+                if self.path=='/api/activity-settings':
+                    self.user();return self.send({'inactive_minutes':activity_timeout(c)//60})
+                if self.path=='/api/update-flow':
+                    self.user();return self.send(flow_status(self,c))
+                if self.path=='/api/workforce/quick/update-flow':
+                    clock_pin_user(self,c);return self.send(flow_status(self,c))
                 if self.path=='/api/page-colors':
                     row=c.execute('SELECT body FROM page_colors WHERE id=1').fetchone()
                     return self.send({'pages':json.loads(row['body']) if row else DEFAULT_PAGE_COLORS,'defaults':DEFAULT_PAGE_COLORS})
@@ -2099,6 +2271,7 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(d,dict): raise Problem('Invalid request.')
             with LOCK, connect() as c:
                 if RESTART or STOPPING: raise Problem('Update is restarting the server. Please wait and sign in again.',503)
+                flow_guard(self)
                 if self.path=='/api/local/stop':
                     expected=os.environ.get('DISPATCH_CONTROL_TOKEN','')
                     if self.client_address[0] not in ('127.0.0.1','::1') or not expected or not hmac.compare_digest(str(d.get('token','')),expected): raise Problem('Local server controller required.',403)
@@ -2106,9 +2279,12 @@ class Handler(BaseHTTPRequestHandler):
                     self.send({'ok':True})
                     threading.Thread(target=self.server.shutdown,daemon=True).start()
                     return
+                if self.path=='/api/workforce/quick/update-flow/acknowledge':
+                    return flow_post(self,c,clock_pin_user(self,c),'acknowledge',d)
                 if self.path=='/api/workforce/quick/login':
                     return clock_pin_login(self,c,d)
                 if self.path=='/api/workforce/quick/close':
+                    flow_depart(self,clock=True)
                     CLOCK_SESSIONS.pop(clock_pin_cookie(self),None)
                     return self.send({'ok':True},cookie='clock_session=; HttpOnly; SameSite=Strict; Path=/api/workforce/quick; Max-Age=0')
                 if self.path=='/api/workforce/quick/punch':
@@ -2186,6 +2362,15 @@ class Handler(BaseHTTPRequestHandler):
                     c.execute('INSERT INTO receipt_details VALUES(?,?,?)',(ident,int(reimbursement),int(uploader is None)))
                     return self.send({'ok':True,'id':ident,'email_pending':True})
                 u=self.user()
+                if self.path=='/api/activity-settings':
+                    if not u['admin']:raise Problem('Administrator access required.',403)
+                    minutes=d.get('inactive_minutes')
+                    if type(minutes) is not int or not 1<=minutes<=120:raise Problem('Choose 1 to 120 whole minutes.')
+                    c.execute('INSERT OR REPLACE INTO connection_activity_settings VALUES(1,?)',(minutes,))
+                    c.execute('INSERT INTO audit VALUES(?,?,?,?)',(dt.datetime.now().isoformat(timespec='seconds'),u['name'],'Changed connection inactivity timeout',str(minutes)))
+                    return self.send({'inactive_minutes':minutes})
+                if self.path.startswith('/api/update-flow/'):
+                    return flow_post(self,c,u,self.path.rsplit('/',1)[-1],d)
                 if self.path.startswith('/api/profile/'):
                     return profile_post(self,c,u,self.path[len('/api/profile/'):],d)
                 if self.path.startswith('/api/workforce/'):
@@ -2207,6 +2392,7 @@ class Handler(BaseHTTPRequestHandler):
                 if self.path=='/api/account/connection':
                     if type(d.get('closing',False)) is not bool: raise Problem('Invalid connection status.')
                     if d.get('closing'):
+                        flow_depart(self)
                         u.get('connections',{}).pop(connection_key(self),None)
                     return self.send({'ok':True})
                 if self.path=='/api/account/activity':
@@ -2286,6 +2472,7 @@ class Handler(BaseHTTPRequestHandler):
                     c.execute('DELETE FROM pages WHERE at<?',(time.time()-86400,))
                     return self.send({'ok':True})
                 if self.path=='/api/logout':
+                    flow_depart(self,all_tabs=True)
                     if push_device(d.get('pushDevice')):
                         c.execute('DELETE FROM comm_push_devices WHERE device=? AND account=?',
                                   (d['pushDevice'],u['receipt_owner']))

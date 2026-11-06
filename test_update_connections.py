@@ -21,6 +21,7 @@ class ConnectionTests(unittest.TestCase):
         with sqlite3.connect(':memory:') as c,patch.object(server,'SESSIONS',{'admin-secret':current,'staff-secret':other,'expired-secret':expired}),patch.object(server,'CLOCK_SESSIONS',{}):
             c.row_factory=sqlite3.Row
             c.execute('CREATE TABLE receipt_profiles(name,profile_id)')
+            c.execute('CREATE TABLE connection_activity_settings(id INTEGER PRIMARY KEY,inactive_minutes INTEGER)')
             c.execute("INSERT INTO receipt_profiles VALUES('PIN staff','pin-staff')")
             server.record_connection(handler,current)
             self.assertEqual(server.update_connection_rows(handler,c,current)['other_connections'],0)
@@ -28,12 +29,12 @@ class ConnectionTests(unittest.TestCase):
             server.record_connection(SimpleNamespace(headers={}),other)
             server.record_connection(SimpleNamespace(headers={}),expired)
             rows=server.update_connection_rows(handler,c,current)
-            self.assertEqual(rows['other_connections'],2)
+            self.assertEqual(rows['other_connections'],1)
             self.assertNotIn('admin-secret',str(rows));self.assertNotIn('staff-secret',str(rows))
-            self.assertEqual(next(r['status'] for r in rows['connections'] if r['name']=='Staff'),'idle')
+            self.assertEqual(next(r['status'] for r in rows['connections'] if r['name']=='Staff'),'inactive')
             other['connections']['legacy']['last_seen']=now-120
             rows=server.update_connection_rows(handler,c,current)
-            self.assertEqual(next(r['status'] for r in rows['connections'] if r['name']=='Staff'),'not-seen')
+            self.assertEqual(next(r['status'] for r in rows['connections'] if r['name']=='Staff'),'inactive')
             with self.assertRaises(server.Problem) as error:server.ensure_update_connections_clear(handler,c,current)
             self.assertEqual(error.exception.status,409)
             current['connections'].pop('b'*32);other['connections'].clear()
@@ -54,7 +55,7 @@ class ConnectionTests(unittest.TestCase):
         self.assertEqual(call('admin/update-connections',client=staff)[0],403)
         self.assertEqual(call('admin/update-connections')[1]['other_connections'],1)
         status,result=call('update-install',dict(version='0.39.1'))
-        self.assertEqual(status,409);self.assertIn('other signed-in',result['error'])
+        self.assertEqual(status,409);self.assertIn('other users are active',result['error'])
         self.assertEqual(call('account/connection',dict(closing=True),staff)[0],200)
         self.assertEqual(call('admin/update-connections')[1]['other_connections'],0)
         # Any later request from that connection is seen again.

@@ -1,5 +1,5 @@
 """HTTP client for MGC YFC Operations Remote Manager; credentials stay in memory."""
-import http.cookiejar,json,urllib.request,urllib.error,urllib.parse
+import http.cookiejar,json,secrets,urllib.request,urllib.error,urllib.parse
 
 def normalize_address(value):
     value=value.strip()
@@ -21,10 +21,12 @@ class Client:
         self.address=normalize_address(address)
         if local_control and urllib.parse.urlsplit(self.address).hostname not in ('localhost','127.0.0.1','::1'):raise ValueError('Local sign-in requires the server computer.')
         self.local_control=local_control;self.session_path=session_path;self.session_token=None
+        self.connection_id=secrets.token_hex(16)
         self.cookies=http.cookiejar.CookieJar()
         self.opener=urllib.request.build_opener(urllib.request.ProxyHandler({}),NoRedirect(),urllib.request.HTTPCookieProcessor(self.cookies))
-    def request(self,path,data=None):
-        headers={'X-Dispatch':'1','X-Dispatch-Activity':'1','Content-Type':'application/json'}
+    def request(self,path,data=None,activity=True):
+        headers={'X-Dispatch':'1','X-Dispatch-Connection':self.connection_id,'Content-Type':'application/json'}
+        if activity and not self.local_control:headers['X-Dispatch-Activity']='1'
         if self.local_control:headers['X-Local-Control']=self.local_control
         if self.session_token:headers['Cookie']='session='+self.session_token
         req=urllib.request.Request(self.address+'/api/'+path,data=None if data is None else json.dumps(data).encode(),headers=headers)

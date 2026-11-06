@@ -100,7 +100,7 @@ def run():
             form.locator('[name=end]').fill(week+'T16:00')
             expect(form.locator('[name=location]')).to_have_value('Main Office')
             expect(form.locator('[name=job]')).to_have_value('Trainer')
-            form.get_by_role('button',name='Save shift').click()
+            form.get_by_role('button',name='Save & close').click()
             expect(manager.locator('#workTeamShifts')).to_contain_text('Staff')
             assert manager.locator('#workforce .workHead').evaluate(
                 "(element)=>getComputedStyle(element.closest('#workforce')).borderTopColor")=='rgb(203, 4, 207)'

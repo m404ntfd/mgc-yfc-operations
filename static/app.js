@@ -463,7 +463,7 @@ $('userUpdateDialog').addEventListener('cancel',()=>{updateReminderAfter=Date.no
  $('skipVideo').onclick=finish;phone.onended=fadeIntro;phone.onerror=finish;phone.addEventListener('timeupdate',()=>{if(!intro.hidden&&phone.currentTime>=introEnd)fadeIntro();});document.addEventListener('visibilitychange',()=>{if(document.hidden&&!intro.hidden)finish();});
  $('pauseVideo').onclick=()=>{if(desktop.paused)playDesktop();else{clearTimeout(desktopTimeout);desktop.pause();$('pauseVideo').textContent='Play video'}};
  $('replayIntro').onclick=()=>{if(isMobileView())playIntro(true);else{desktop.currentTime=0;playDesktop()}};
- $('receiptShortcut').onclick=openReceiptUpload;
+ $('receiptShortcut').onclick=()=>openReceiptUpload();
  new MutationObserver(sync).observe($('auth'),{attributes:true,attributeFilter:['hidden']});
  mobile.addEventListener('change',()=>{finish();desktop.pause();if(!mobile.matches&&!reduce.matches&&!$('auth').hidden)playDesktop()});
  reduce.addEventListener('change',()=>{if(reduce.matches){finish();showFallback()}else if(!mobile.matches&&!$('auth').hidden)playDesktop()});sync();
@@ -484,7 +484,7 @@ async function openReceiptUpload(){
  try{if(!user){const people=await api('receipt-users');for(const person of people.users)$('receiptAssignee').add(new Option(person.name,person.id));if(!people.users.length)$('receiptResult').textContent='No receipt submitters are configured. Ask an administrator for help.';}const r=await api('receipt-categories');for(const code of r.categories)$('receiptCategory').add(new Option(code,code));$('receiptCategoryHelp').textContent=r.categories.length?'':'An administrator needs to add receipt categories in Settings before you can submit.';}
  catch(e){$('receiptCategoryHelp').textContent=e.message;}
 }
-$('openReceiptUpload').onclick=openReceiptUpload;
+$('openReceiptUpload').onclick=()=>openReceiptUpload();
 const resetDialog=document.createElement('dialog');resetDialog.id='receiptResetDialog';resetDialog.innerHTML='<h2>Reset receipt form?</h2><p>This will clear the information and attachment you entered.</p><button type="button" id="confirmReceiptReset">Yes, reset form</button><button type="button" id="cancelReceiptReset">No, keep my information</button>';document.body.append(resetDialog);
 $('receiptForm').onreset=resetReceipt;
 $('receiptForm').querySelector('[type=reset]').onclick=e=>{e.preventDefault();resetDialog.showModal();};
@@ -543,7 +543,7 @@ window.addEventListener("hashchange",()=>{if(["#login","#settings"].includes(loc
 // Only deliberate user interaction extends an active session across midnight.
 let lastActivitySent=0;
 function reportActivity(event){if(!event.isTrusted||!user||Date.now()-lastActivitySent<30000)return;lastActivitySent=Date.now();api('account/activity',{}).catch(()=>{});}
-for(const type of ['pointerdown','keydown','input','touchstart','scroll'])document.addEventListener(type,reportActivity,{passive:true,capture:true});
+for(const type of ['pointerdown','pointermove','keydown','input','touchstart','scroll'])document.addEventListener(type,reportActivity,{passive:true,capture:true});
 setInterval(()=>{if(user)api('account/landing').catch(()=>{});},30000);
 
 const receiptDivider=document.createElement('hr');$('receipts').querySelector('h1').after(receiptDivider);
@@ -1362,7 +1362,7 @@ workPanel.innerHTML = `
    <label>Job<input name="job" list="workShiftJobs" maxlength="80"></label><datalist id="workShiftJobs"></datalist>
    <label>Location<input name="location" list="workShiftSites" maxlength="100"></label><datalist id="workShiftSites"></datalist>
    <label>Notes<textarea name="notes" maxlength="500" rows="2"></textarea></label>
-   <div class="actions"><button type="button" id="workDeleteShift" hidden>Delete shift</button><button type="button" id="workCancelShift">Cancel</button><button class="primary">Save shift</button></div>
+   <div class="actions"><button type="button" id="workDeleteShift" hidden>Delete shift</button><button type="button" id="workCancelShift">Cancel</button><button type="submit" class="primary">Save shift</button></div>
    <p id="workShiftError" role="alert"></p>
   </form></dialog>
  </section>
@@ -2865,9 +2865,9 @@ const updateConnectionsPanel=document.createElement('section');
 updateConnectionsPanel.id='updateConnectionsPanel';updateConnectionsPanel.hidden=true;
 updateConnectionsPanel.innerHTML=`<div class="connectionPanelHead"><h3>Connections before updating</h3><button type="button" id="refreshUpdateConnections">Refresh connections</button></div>
  <p id="updateConnectionsStatus" role="status">Checking connections…</p>
- <p>Ask everyone to save their work and sign out or close all application tabs before installing. Idle or unconfirmed connections still block installation. Your other tabs count as separate connections.</p>
+ <p>Your current connection is excluded. Notify others and wait for them to finish, or install immediately when no other connections remain. Other tabs still count separately.</p>
  <div id="updateConnectionsList"></div><p id="updateConnectionsChecked" class="connectionPanelNote"></p>
- <p class="connectionPanelNote">This shows signed-in connections, not unsaved form contents. Check guest/kiosk activity separately. If a connection is unconfirmed, ask that user to reconnect and sign out.</p>`;
+ <p class="connectionPanelNote">Activity means interacting with the app, not automatic polling. The local server controller is excluded. Inactive users do not delay updates; unsaved work may be interrupted. Check guest activity separately.</p>`;
 $('updateConfig').before(updateConnectionsPanel);
 let updateConnectionsState=null,updateConnectionsChecking=false,updateConnectionsAt=0;
 function updateInstallButton(){
@@ -2888,9 +2888,9 @@ async function refreshUpdateConnections(){
   if(user!==signedIn)return false;
   updateConnectionsState=result;updateConnectionsAt=Date.now();
   updateConnectionsPanel.dataset.blocked=String(result.other_connections>0);
-  $('updateConnectionsStatus').textContent=result.other_connections?`${result.other_connections} other signed-in ${result.other_connections===1?'connection':'connections'} — installation blocked.`:'No other signed-in connections reported.';
-  $('updateConnectionsList').innerHTML=result.connections.map(row=>`<article class="updateConnectionRow"><div><strong>${esc(row.name)}${row.current?' · You (this connection)':''}</strong><span>${esc(row.kind)}</span></div><div><b>${({active:'Active recently',idle:'Connected · idle','not-seen':'Unconfirmed · not recently seen'})[row.status]}</b><span>Last activity: ${connectionAge(row.last_active,result.checked_at)}</span><span>Last seen: ${connectionAge(row.last_seen,result.checked_at)}</span></div></article>`).join('')||'<p>No signed-in connections reported.</p>';
-  $('updateConnectionsChecked').textContent='Checked '+new Date(result.checked_at*1000).toLocaleTimeString()+'. Refreshes every 15 seconds while this screen is open.';
+  $('updateConnectionsStatus').textContent=result.other_connections?`${result.other_connections} other active ${result.other_connections===1?'connection':'connections'} — use the notification option or wait.`:'No other active users. Inactive connections do not hold updates.';
+  $('updateConnectionsList').innerHTML=result.connections.filter(row=>!row.current).map(row=>`<article class="updateConnectionRow"><div><strong>${esc(row.name)}${row.current?' · You (this connection)':''}</strong><span>${esc(row.kind)}</span></div><div><b>${({active:'Active',inactive:'Inactive'})[row.status]}</b><span>Last activity: ${connectionAge(row.last_active,result.checked_at)}</span><span>Last seen: ${connectionAge(row.last_seen,result.checked_at)}</span></div></article>`).join('')||'<p>No signed-in connections reported.</p>';
+  $('updateConnectionsChecked').textContent='Checked '+new Date(result.checked_at*1000).toLocaleTimeString()+'. Inactive after '+result.inactive_minutes+' minutes without interaction. Refreshes every 15 seconds.';
   return result.other_connections===0;
  }catch(error){
   if(user===signedIn){updateConnectionsState=null;updateConnectionsPanel.dataset.blocked='true';$('updateConnectionsStatus').textContent='Connection status unavailable. Installation is disabled until the status can be checked.';$('updateConnectionsList').replaceChildren();$('updateConnectionsChecked').textContent='';}
@@ -2985,3 +2985,144 @@ $('userPersonalForm').onsubmit=async e=>{e.preventDefault();const button=e.submi
 userEditor.addEventListener('close',()=>{++employeePermissionVersion;individualDialog.close();});
 
 $('roleName').addEventListener('invalid',()=>selectRoleEditorTab('properties'));
+// Coordinated updates: finishing work, acknowledgement, then an automatic restart.
+let updateFlow=null,updateFlowSeen='',updateFlowMandatory=false,updateFlowPolling=false,flowReceipt=null;
+let writesInFlight=0,submittedForm=null;
+const changedForms=new Map();
+const formSnapshot=form=>JSON.stringify([...new FormData(form)].map(([key,value])=>[key,typeof value==='string'?value:[value.name,value.size,value.lastModified]]));
+document.addEventListener('input',event=>{const form=event.target.form;if(form)changedForms.set(form,formSnapshot(form));},true);
+document.addEventListener('change',event=>{const form=event.target.form;if(form)changedForms.set(form,formSnapshot(form));},true);
+document.addEventListener('reset',event=>changedForms.delete(event.target),true);
+document.addEventListener('submit',event=>{submittedForm=event.target;const form=event.target;setTimeout(()=>{if(submittedForm===form)submittedForm=null;},0);},true);
+const apiBeforeCoordination=api;
+api=async function(path,data){
+ const mutation=!!data&&!['account/activity','account/connection','update-check'].includes(path)&&!path.includes('update-flow');
+ const form=mutation?submittedForm:null,snapshot=form?formSnapshot(form):null;
+ if(mutation)writesInFlight++;
+ try{const result=await apiBeforeCoordination(path,data);if(form&&formSnapshot(form)===snapshot)changedForms.delete(form);return result;}
+ finally{if(mutation)writesInFlight--;}
+};
+function hasUnfinishedWork(){
+ for(const form of [...changedForms.keys()]){if(!form.isConnected){changedForms.delete(form);continue;}const dialog=form.closest('dialog');if((!dialog||dialog.open)&&!form.closest('[hidden]'))return true;}
+ return writesInFlight>0||shiftAutoBusy||shiftAutoDirty||!!shiftAutoAttempt||!!receiptBusy||!!workBusy;
+}
+const updatePendingBadge=document.createElement('button');updatePendingBadge.id='updatePendingBadge';updatePendingBadge.type='button';updatePendingBadge.hidden=true;updatePendingBadge.textContent='Update pending';document.querySelector('body>header').append(updatePendingBadge);
+const updateFlowDialog=document.createElement('dialog');updateFlowDialog.id='updateFlowDialog';updateFlowDialog.setAttribute('aria-labelledby','updateFlowTitle');
+updateFlowDialog.innerHTML='<h2 id="updateFlowTitle">Update pending</h2><p id="updateFlowMessage"></p><div id="updateFlowPeople"></div><p id="updateFlowError" role="status"></p><div class="actions"><button type="button" id="minimizeUpdateFlow">Finish my current task</button><button type="button" class="primary" id="acknowledgeUpdateFlow">My work is saved — ready to update</button><button type="button" id="cancelUpdateFlow">Cancel update request</button><button type="button" id="finishUpdateFlow" hidden>Return to sign in</button></div>';
+document.body.append(updateFlowDialog);
+const updateFlowActions=document.createElement('div');updateFlowActions.className='updateFlowActions';updateFlowActions.innerHTML='<button type="button" id="requestCoordinatedUpdate">Notify users & update when ready</button><p>Users may finish their current task. The server updates automatically after everyone is ready.</p>';$('installUpdate').before(updateFlowActions);
+function renderUpdateFlow(){
+ if(!updateFlow)return;
+ const phase=updateFlow.phase,terminal=['complete','failed','canceled'].includes(phase),owner=updateFlow.requester;
+ updatePendingBadge.hidden=terminal;updatePendingBadge.textContent=updateFlow.ready?'Ready for update':'Update pending';
+ $('minimizeUpdateFlow').hidden=owner||updateFlowMandatory||updateFlow.ready||terminal;
+ $('acknowledgeUpdateFlow').hidden=owner||updateFlow.ready||terminal;
+ $('cancelUpdateFlow').hidden=!owner||phase!=='waiting';
+ $('finishUpdateFlow').hidden=!terminal;
+ $('finishUpdateFlow').textContent=phase==='complete'?'Update complete — sign in':phase==='failed'?'Close update notice':'Return to work';
+ $('updateFlowTitle').textContent=phase==='complete'?'Update complete':phase==='failed'?'Update could not finish':phase==='canceled'?'Update canceled':owner?'Coordinating update':updateFlow.ready?'Ready — waiting for update':updateFlowMandatory?'The system will now update':'Update pending';
+ $('updateFlowMessage').textContent=phase==='complete'?`Version ${updateFlow.version} is installed. Your saved work is retained.`:phase==='failed'?(updateFlow.error||'The update was not completed.'):phase==='canceled'?'You can continue working.':phase==='preparing'?'Downloading and verifying the update. Other users can continue their current tasks.':phase==='applying'?'Everyone is ready. Installing the update and restarting the server…':owner?`Waiting for ${updateFlow.waiting} other active connection(s). Your requesting connection and the local server controller are excluded. Installation starts automatically when everyone is ready.`:updateFlow.ready?'Your connection is paused. The update will begin after everyone has acknowledged.':updateFlowMandatory?'Confirm that your work is saved. Your connection will then pause until the update finishes.':'An update is pending. Finish your current form or task. You can minimize this notice to the header. When you leave this page, acknowledgement will be required.';
+ $('updateFlowPeople').innerHTML=owner?(updateFlow.connections||[]).map(p=>`<div class="updateConnectionRow"><strong>${esc(p.name)}</strong><span>${esc(p.kind)} · ${esc(p.status)}</span></div>`).join(''):'';
+}
+function showUpdateFlow(mandatory=false){updateFlowMandatory ||= mandatory;renderUpdateFlow();if(!updateFlowDialog.open)updateFlowDialog.showModal();}
+updateFlowDialog.addEventListener('cancel',event=>{event.preventDefault();if(!updateFlowMandatory&&!updateFlow?.requester&&!updateFlow?.ready)updateFlowDialog.close();});
+$('minimizeUpdateFlow').onclick=()=>updateFlowDialog.close();updatePendingBadge.onclick=()=>showUpdateFlow();
+function updateFlowPath(action=''){return (workQuick?'workforce/quick/update-flow':'update-flow')+(action?'/'+action:'');}
+function rememberFlow(result){if(result.receipt){flowReceipt=result.receipt;try{sessionStorage.setItem('yfc-update-receipt',flowReceipt);}catch{}}}
+async function pollUpdateFlow(){
+ if(updateFlowPolling)return;updateFlowPolling=true;
+ try{
+  if(flowReceipt){
+   const response=await fetch('/api/update-result?receipt='+encodeURIComponent(flowReceipt),{signal:AbortSignal.timeout(5000)});
+   if(response.ok){const result=await response.json();if(['complete','failed','canceled'].includes(result.phase)){updateFlow={...updateFlow,...result};showUpdateFlow(true);return;}if(result.phase==='applying'){updateFlow={...updateFlow,...result};showUpdateFlow(true);return;}}
+  }
+  if(!user&&!workQuick)return;
+  const result=await api(updateFlowPath());
+  if(!result.active){if(updateFlow&&['failed','canceled'].includes(result.phase)){updateFlow=result;showUpdateFlow(true);}return;}
+  updateFlow=result;rememberFlow(result);renderUpdateFlow();
+  if(updateFlowSeen!==result.id){updateFlowSeen=result.id;updateFlowMandatory=false;showUpdateFlow(result.requester||result.ready);}
+  else if(result.ready||result.requester)showUpdateFlow(true);
+ }catch(error){if(updateFlowDialog.open&&updateFlow)$('updateFlowError').textContent='Waiting for the server. Keep this page open; completion will be confirmed after it reconnects.';}
+ finally{updateFlowPolling=false;}
+}
+$('requestCoordinatedUpdate').onclick=async()=>{
+ if(!updateVersion){$('updateStatus').textContent='Check for an available update first.';return;}
+ if(hasUnfinishedWork()){toast('Save or finish your current work before requesting the update.');return;}
+ if(!confirm('Your current work is saved. Notify other users, wait for their acknowledgement, then install automatically?'))return;
+ const button=$('requestCoordinatedUpdate');button.disabled=true;
+ try{updateFlow=await api('update-flow/start',{version:updateVersion,ready:true});rememberFlow(updateFlow);updateFlowSeen=updateFlow.id;showUpdateFlow(true);}
+ catch(error){$('updateStatus').textContent=error.message;}finally{button.disabled=false;}
+};
+$('acknowledgeUpdateFlow').onclick=async()=>{
+ if(hasUnfinishedWork()){ $('updateFlowError').textContent='There is unfinished work or a save still in progress. Finish and save it before acknowledging.';return;}
+ const button=$('acknowledgeUpdateFlow');button.disabled=true;
+ try{updateFlow=await api(updateFlowPath('acknowledge'),{id:updateFlow.id,ready:true});rememberFlow(updateFlow);showUpdateFlow(true);$('updateFlowError').textContent='';}
+ catch(error){$('updateFlowError').textContent=error.message;}finally{button.disabled=false;}
+};
+$('cancelUpdateFlow').onclick=async()=>{try{await api('update-flow/cancel',{id:updateFlow.id});await pollUpdateFlow();}catch(error){$('updateFlowError').textContent=error.message;}};
+$('finishUpdateFlow').onclick=()=>{const complete=updateFlow?.phase==='complete';updateFlow=null;flowReceipt=null;updateFlowMandatory=false;updatePendingBadge.hidden=true;try{sessionStorage.removeItem('yfc-update-receipt');}catch{}updateFlowDialog.close();if(complete)location.reload();};
+function guardUpdateNavigation(){
+ if(!updateFlow?.active||updateFlow.requester)return true;
+ if(hasUnfinishedWork()){toast('An update is pending. Finish or save your current task before changing pages.');return false;}
+ showUpdateFlow(true);return false;
+}
+for(const [get,set]of [[()=>tab,v=>tab=v],[()=>storeSection,v=>storeSection=v],[()=>workSelect,v=>workSelect=v],[()=>settingsSection,v=>settingsSection=v],[()=>settingsCategory,v=>settingsCategory=v],[()=>openReceiptHistory,v=>openReceiptHistory=v],[()=>workOpen,v=>workOpen=v],[()=>chooseLanding,v=>chooseLanding=v],[()=>commOpen,v=>commOpen=v],[()=>commOpenThread,v=>commOpenThread=v],[()=>openReceiptUpload,v=>openReceiptUpload=v]]){const original=get();set(function(...args){if(!guardUpdateNavigation())return original.constructor.name==='AsyncFunction'?Promise.resolve(false):false;return original.apply(this,args);});}
+try{flowReceipt=sessionStorage.getItem('yfc-update-receipt');}catch{}
+setInterval(pollUpdateFlow,3000);setTimeout(pollUpdateFlow,1000);
+window.addEventListener('beforeunload',event=>{if(hasUnfinishedWork()){event.preventDefault();event.returnValue='';}});
+
+// Every valid shift edit is persisted; retries reuse an immutable operation key.
+let shiftAutoDirty=false,shiftAutoBusy=false,shiftAutoAttempt=null,shiftAutoTimer=null,shiftAutoLast='';
+const shiftForm=$('workShiftForm');
+const shiftSaveStatus=document.createElement('p');shiftSaveStatus.id='shiftSaveStatus';shiftSaveStatus.setAttribute('role','status');shiftForm.prepend(shiftSaveStatus);
+const originalEditShift=workEditShift;
+workEditShift=function(...args){if(shiftAutoBusy||shiftAutoDirty||shiftAutoAttempt){toast('Finish saving the open shift first.');return;}originalEditShift(...args);shiftAutoLast=formSnapshot(shiftForm);shiftSaveStatus.textContent='Changes save automatically. Invalid or incomplete fields stay here until corrected.';};
+function queueShiftSave(){shiftAutoDirty=formSnapshot(shiftForm)!==shiftAutoLast;clearTimeout(shiftAutoTimer);shiftSaveStatus.textContent='Unsaved changes…';shiftAutoTimer=setTimeout(saveShiftAutomatically,650);}
+shiftForm.addEventListener('input',queueShiftSave);shiftForm.addEventListener('change',queueShiftSave);
+async function saveShiftAutomatically(){
+ clearTimeout(shiftAutoTimer);if(shiftAutoBusy)return false;
+ if(!shiftAutoDirty&&!shiftAutoAttempt)return true;
+ if(!shiftAutoAttempt&&!shiftForm.checkValidity()){shiftSaveStatus.textContent='Not saved yet — complete the required fields.';return false;}
+ shiftAutoBusy=true;
+ try{
+  while(shiftAutoDirty||shiftAutoAttempt){
+   if(!shiftAutoAttempt){
+    if(!shiftForm.checkValidity())return false;
+    const snapshot=formSnapshot(shiftForm),data=Object.fromEntries(new FormData(shiftForm));
+    if(workEditingShift)Object.assign(data,{id:workEditingShift.id,revision:workEditingShift.revision});
+    data.save_request=Array.from(crypto.getRandomValues(new Uint8Array(16)),n=>n.toString(16).padStart(2,'0')).join('');
+    shiftAutoAttempt={data,snapshot};
+   }
+   shiftSaveStatus.textContent='Saving…';
+   const attempt=shiftAutoAttempt,result=await workApi('shift',attempt.data);
+   workEditingShift={...attempt.data,...result.shift};$('workDeleteShift').hidden=false;
+   shiftAutoLast=attempt.snapshot;shiftAutoAttempt=null;shiftAutoDirty=formSnapshot(shiftForm)!==shiftAutoLast;
+   if(!shiftAutoDirty)changedForms.delete(shiftForm);
+  }
+  $('workShiftError').textContent='';shiftSaveStatus.textContent='All changes saved.';return true;
+ }catch(error){if(error.status>=400&&error.status<500)shiftAutoAttempt=null;shiftSaveStatus.textContent='Not saved — your edits are still in this form.';$('workShiftError').textContent=error.message+' Use Save & close to retry.';return false;}
+ finally{shiftAutoBusy=false;}
+}
+async function finishShiftEditing(){if(await saveShiftAutomatically()){changedForms.delete(shiftForm);$('workShiftDialog').close();await workLoad();}}
+shiftForm.querySelector('[type=submit]').textContent='Save & close';
+shiftForm.onsubmit=event=>{event.preventDefault();if(!workEditingShift&&!shiftAutoDirty)shiftAutoDirty=true;finishShiftEditing();};
+$('workCancelShift').textContent='Done';$('workCancelShift').onclick=finishShiftEditing;
+$('workShiftDialog').addEventListener('cancel',event=>{event.preventDefault();finishShiftEditing();});
+$('workDeleteShift').onclick=async event=>{if(shiftAutoBusy){toast('Wait for the current save to finish.');return;}if(shiftAutoAttempt){toast('Resolve the uncertain save before deleting this shift.');return;}const shift=workEditingShift;if(shift&&confirm('Remove this scheduled shift?')){shiftAutoDirty=false;changedForms.delete(shiftForm);clearTimeout(shiftAutoTimer);await workSave('shift',{id:shift.id,revision:shift.revision,remove:true},event.currentTarget,shiftForm);}};
+
+const discardShiftDraft=document.createElement('button');discardShiftDraft.type='button';discardShiftDraft.textContent='Discard unsaved edits';$('workCancelShift').after(discardShiftDraft);
+discardShiftDraft.onclick=async()=>{if(shiftAutoBusy||shiftAutoAttempt){toast('Wait for or retry the uncertain save before discarding edits.');return;}if(shiftAutoDirty&&!confirm('Discard only the unsaved edits? Changes already saved remain on the schedule.'))return;clearTimeout(shiftAutoTimer);shiftAutoDirty=false;changedForms.delete(shiftForm);$('workShiftDialog').close();await workLoad();};
+
+const openProfileBeforeUpdate=profileMenu.onclick;profileMenu.onclick=async function(event){if(guardUpdateNavigation())return openProfileBeforeUpdate.call(this,event);};
+const updateInstallButtonBeforeFlow=updateInstallButton;
+updateInstallButton=function(){updateInstallButtonBeforeFlow();updateFlowActions.hidden=!can('install_updates');$('requestCoordinatedUpdate').disabled=updateBusy||!updateVersion||!!updateFlow?.active;};
+updateInstallButton();
+
+// Administrator-configurable interaction timeout, used by both update entry points.
+const activityPanel=document.createElement('div');activityPanel.className='panel';activityPanel.id='activitySettings';activityPanel.hidden=true;
+activityPanel.innerHTML='<button type="button" id="activitySettingsBack">‹ Back to settings</button><h2>Connection activity</h2><p>A user is active while interacting with application pages. Background checks and the local server controller do not count as activity.</p><form id="activitySettingsForm"><label>Minutes without interaction before becoming inactive<input name="inactive_minutes" type="number" min="1" max="120" step="1" value="5" required></label><p>Default: 5 minutes. Inactive users do not delay updates, so their unsaved work may be interrupted. Saved timecards and reservations remain intact.</p><button type="submit" class="primary">Save activity settings</button><p id="activitySettingsStatus" role="status"></p></form>';
+$('settings').append(activityPanel);const activityPanelIndex=settingsPanels.length;settingsPanels.push(activityPanel);settingsNames.push('Connection Activity');settingsGroups[0].panels.push(activityPanelIndex);
+const settingsAllowedBeforeActivity=settingsAllowed;settingsAllowed=function(index){return index===activityPanelIndex?!!user?.admin:settingsAllowedBeforeActivity(index);};
+let activityLoadVersion=0;const settingsSectionBeforeActivity=settingsSection;settingsSection=function(index){const result=settingsSectionBeforeActivity(index);if(index===activityPanelIndex&&!activityPanel.hidden){const version=++activityLoadVersion,form=$('activitySettingsForm'),input=form.elements.inactive_minutes,button=form.querySelector('[type=submit]');input.disabled=button.disabled=true;$('activitySettingsStatus').textContent='Loading settings…';api('activity-settings').then(data=>{if(version!==activityLoadVersion)return;input.value=data.inactive_minutes;input.disabled=button.disabled=false;$('activitySettingsStatus').textContent='';}).catch(error=>{if(version===activityLoadVersion)$('activitySettingsStatus').textContent=error.message;});}return result;};
+$('activitySettingsBack').onclick=()=>settingsCategory(0);
+$('activitySettingsForm').onsubmit=async event=>{event.preventDefault();const button=event.submitter;button.disabled=true;try{const result=await api('activity-settings',{inactive_minutes:Number(event.target.elements.inactive_minutes.value)});$('activitySettingsStatus').textContent='Saved. Connections become inactive after '+result.inactive_minutes+' minutes without interaction.';}catch(error){$('activitySettingsStatus').textContent=error.message;}finally{button.disabled=false;}};

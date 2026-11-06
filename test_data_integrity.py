@@ -14,6 +14,7 @@ class DataIntegrityTests(unittest.TestCase):
         server.init_workforce(connection)
         # v0.38.5 has the same workforce tables, without the new job catalogue.
         connection.execute('DROP TABLE work_job_definitions')
+        connection.execute('DROP TABLE work_shift_save_receipts')
         connection.executescript('''
             CREATE TABLE jobs(id TEXT PRIMARY KEY, revision INTEGER, body TEXT);
             CREATE TABLE photos(job TEXT, position INTEGER, body BLOB, PRIMARY KEY(job,position));

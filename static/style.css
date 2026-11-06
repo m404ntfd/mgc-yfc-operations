@@ -448,3 +448,9 @@ header #currentSection {flex-basis:auto;order:0;font-size:.85rem;margin-left:4px
 #rolePermissions,#permissionChecklist {max-height:460px;overflow:auto}
 .permissionToggle input {margin:0!important;flex-shrink:0}
 .userPropertyActions .actions {justify-content:flex-start;flex-wrap:wrap}
+#updatePendingBadge {background:#fff1c9;color:#573b11;border:1px solid #d5b26b;white-space:normal}
+#updateFlowDialog {width:min(650px,calc(100vw - 32px));max-height:88dvh;overflow:auto;padding:26px}
+#updateFlowDialog .actions {display:flex;gap:10px;flex-wrap:wrap}
+#updateFlowPeople {max-height:260px;overflow:auto}
+.updateFlowActions {margin:18px 0;padding:16px;border:1px solid #8885;border-radius:10px}
+.updateFlowActions p,#shiftSaveStatus {font-size:.9rem}

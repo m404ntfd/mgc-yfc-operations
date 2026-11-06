@@ -1,5 +1,5 @@
 """MGC YFC Operations Remote Manager — native Windows control panel."""
-import json,os,queue,sys,threading,webbrowser
+import json,os,queue,sys,threading,webbrowser,time
 from pathlib import Path
 import tkinter as tk
 from tkinter import ttk,messagebox
@@ -8,19 +8,24 @@ try:
 except ImportError:
     from client import Client
 NAME='MGC YFC Operations Remote Manager'
-VERSION='0.39.0'
+VERSION='0.39.3'
 CONFIG=Path(os.environ.get('APPDATA',Path.home()))/'ThriftMartDispatchRemoteManager'/'config.json'
 
 class App:
     def __init__(self,root,local=False,container=None,address=None,local_control=None,session_path=None):
         self.root=root;self.client=None;self.release=None;self.busy=False;self.results=queue.Queue()
-        self.local=local;self.local_control=local_control;self.session_path=session_path
+        self.local=local;self.local_control=local_control;self.session_path=session_path;self.update_receipt=None;self.flow=None;self.notice_id=None;self.monitor_client=None
         if container is None:
             root.title('MGC YFC Operations Server — Administration' if local else NAME);root.geometry('800x830');root.minsize(720,760)
             icon=Path(getattr(sys,'_MEIPASS',Path(__file__).resolve().parents[1]))/'assets'/('dispatch.ico' if local else 'remote.ico')
             if icon.exists():root.iconbitmap(str(icon))
         style=ttk.Style();style.theme_use('clam');style.configure('TButton',padding=9);style.configure('TLabel',font=('Segoe UI',10));style.configure('Title.TLabel',font=('Segoe UI',22,'bold'));style.configure('TEntry',padding=7)
-        frame=ttk.Frame(container if container is not None else root,padding=16);frame.pack(fill='both',expand=True)
+        outer=ttk.Frame(container if container is not None else root);outer.pack(fill='both',expand=True)
+        canvas=tk.Canvas(outer,highlightthickness=0);scrollbar=ttk.Scrollbar(outer,orient='vertical',command=canvas.yview)
+        scrollbar.pack(side='right',fill='y');canvas.pack(side='left',fill='both',expand=True);canvas.configure(yscrollcommand=scrollbar.set)
+        frame=ttk.Frame(canvas,padding=16);window=canvas.create_window((0,0),window=frame,anchor='nw')
+        frame.bind('<Configure>',lambda e:canvas.configure(scrollregion=canvas.bbox('all')))
+        canvas.bind('<Configure>',lambda e:canvas.itemconfigure(window,width=e.width))
         ttk.Label(frame,text='MGC YFC Operations',style='Title.TLabel').pack(anchor='w')
         ttk.Label(frame,text=('Server administration' if local else 'Remote Manager')+' • '+VERSION+'  |  Staff network').pack(anchor='w',pady=(2,16))
         box=ttk.LabelFrame(frame,text='Connect to your store server',padding=12);box.pack(fill='x')
@@ -44,21 +49,36 @@ class App:
         ttk.Button(account_actions,text='Manage employees',command=self.employees).pack(side='left')
         ttk.Button(account_actions,text='Change a user’s password',command=self.passwords).pack(side='left',padx=8)
         ttk.Button(account_actions,text='Login security / unlock',command=self.login_security).pack(side='left')
+        connections=ttk.LabelFrame(frame,text='Active connections',padding=10);connections.pack(fill='x',pady=(12,0))
+        self.connection_summary=tk.StringVar(value='Sign in to view active and inactive users. The server itself is excluded.')
+        ttk.Label(connections,textvariable=self.connection_summary,wraplength=690).pack(anchor='w')
+        self.connection_list=ttk.Treeview(connections,columns=('name','state','activity'),show='headings',height=4)
+        for key,title,width in [('name','User / connection',260),('state','Status',130),('activity','Last interaction',170)]:self.connection_list.heading(key,text=title);self.connection_list.column(key,width=width)
+        self.connection_list.pack(fill='x',pady=6)
+        ttk.Button(connections,text='Refresh connections',command=self.refresh_connections).pack(anchor='w')
         updates=ttk.LabelFrame(frame,text='Server updates from GitHub',padding=12);updates.pack(fill='both',expand=True,pady=16)
         row=ttk.Frame(updates);row.pack(fill='x');ttk.Button(row,text='Check for server updates',command=self.check).pack(side='left');self.install=ttk.Button(row,text='Install update & restart',command=self.install_update,state='disabled');self.install.pack(side='left',padx=8)
-        self.notes=tk.Text(updates,height=7,wrap='word',font=('Segoe UI',10),state='disabled');self.notes.pack(fill='both',expand=True,pady=8)
+        flow_buttons=ttk.Frame(updates);flow_buttons.pack(fill='x',pady=8)
+        self.notify=ttk.Button(flow_buttons,text='Notify users & update when ready',command=self.notify_update);self.notify.pack(side='left')
+        self.cancel_pending=ttk.Button(flow_buttons,text='Cancel pending update',command=self.cancel_update);self.cancel_pending.pack(side='left',padx=6)
+        if self.local_control:
+            self.override=ttk.Button(updates,text='Override waiting users & install anyway',command=self.force_update);self.override.pack(anchor='w',pady=4)
+        if not self.local_control:ttk.Button(updates,text='Ready for pending update',command=self.acknowledge_update).pack(anchor='w',pady=4)
+        self.notes=tk.Text(updates,height=5,wrap='word',font=('Segoe UI',10),state='disabled');self.notes.pack(fill='both',expand=True,pady=8)
         ttk.Label(frame,text='Manage employee accounts here; open the browser for schedules and vehicles.\nThe browser requires its own sign-in. Closing this app does not stop the server.',wraplength=690).pack(anchor='w')
         ttk.Button(frame,text='Remote Manager downloads / updates',command=lambda:webbrowser.open('https://github.com/m404ntfd/mgc-yfc-operations/releases/latest')).pack(anchor='w',pady=(8,0))
         root.after(100,self.deliver)
+        root.after(2000,self.poll_connections)
         if local_control and session_path:
             client=self.new_client()
             def restored(result):
                 if result:self.client=client;self.show_status(result)
                 else:self.status.set('Sign in with an administrator account. Local sign-in is kept until an application update or sign-out.')
             self.run(client.restore_local_session,restored)
-    def run(self,work,done):
+    def run(self,work,done,quiet=False):
         if self.busy:return
-        self.busy=True;self.status.set('Working…')
+        self.busy=True
+        if not quiet:self.status.set('Working…')
         def worker():
             try:self.results.put((True,work(),done))
             except Exception as e:self.results.put((False,str(e),done))
@@ -208,6 +228,76 @@ class App:
                 self.run(lambda:self.client.request('admin/password',payload),done)
             ttk.Button(f,text='Change password',command=save).pack(anchor='w')
         self.run(lambda:self.client.request('admin/users'),show)
+    def render_connections(self,data):
+        self.connection_list.delete(*self.connection_list.get_children())
+        count=sum(row['status']=='active' for row in data['connections'])
+        self.connection_summary.set(f"{count} active · {data.get('inactive_connections',0)} inactive · inactive after {data.get('inactive_minutes',5)} minutes. Server controller excluded.")
+        for row in data['connections']:
+            stamp=row.get('last_active');age='Just now' if stamp and time.time()-stamp<60 else f"{int((time.time()-stamp)/60)} min ago" if stamp else 'PIN task'
+            self.connection_list.insert('', 'end',values=(row['name']+' · '+row['kind'],row['status'].title(),age))
+    def refresh_connections(self):
+        if self.require():self.run(lambda:self.client.request('admin/update-connections',activity=False),self.render_connections,quiet=True)
+    def poll_connections(self):
+        self.root.after(5000,self.poll_connections)
+        if self.busy:return
+        if self.update_receipt and self.monitor_client:
+            def complete(result):
+                phase=result['phase']
+                if phase in ('complete','failed','canceled'):
+                    self.update_receipt=None;self.flow=None
+                    text='Update complete: version '+result['version']+'. Sign in again.' if phase=='complete' else result.get('error') or 'Update request canceled.'
+                    self.status.set(text)
+                    if phase=='complete':self.client=None;self.release=None;self.install.config(state='disabled');messagebox.showinfo(NAME,text,parent=self.root)
+                else:
+                    self.status.set('Update '+result['version']+' · '+phase+'. Keep this window open.')
+                    if self.client and phase in ('preparing','waiting'):self.refresh_flow()
+            self.run(lambda:self.monitor_client.request('update-result?receipt='+self.update_receipt,activity=False),complete,quiet=True)
+        elif self.client:self.refresh_flow()
+    def refresh_flow(self):
+        if not self.require():return
+        client=self.client
+        def work():return client.request('admin/update-connections',activity=False),client.request('update-flow',activity=False)
+        def done(result):
+            connections,flow=result;self.render_connections(connections);self.flow=flow
+            if not flow.get('active'):return
+            self.status.set('Update '+flow['version']+': '+str(flow['waiting'])+' active connection(s) still finishing.')
+            if flow.get('receipt'):self.update_receipt=flow['receipt'];self.monitor_client=client
+            if not self.local_control and not flow.get('requester') and not flow.get('ready') and self.notice_id!=flow['id']:
+                self.notice_id=flow['id']
+                if messagebox.askyesno(NAME,'An update is pending. Is your current work saved and are you ready? Choose No to finish your work first.',parent=self.root):
+                    self.run(lambda:client.request('update-flow/acknowledge',{'id':flow['id'],'ready':True}),lambda r:self.status.set('Ready. Waiting for the update.'))
+        self.run(work,done,quiet=True)
+    def start_flow(self,force=False):
+        if not self.require():return
+        version=(self.flow or {}).get('version') if force and (self.flow or {}).get('active') else self.release
+        if not version:self.status.set('Check for a newer release first.');return
+        question=('Override user notifications and acknowledgements and install version '+version+' now? This can interrupt unsaved work. Saved records are backed up before installation.' if force else 'Notify active users, let them finish, and install version '+version+' automatically when ready? Your current work must be saved.')
+        if not messagebox.askyesno(NAME,question,parent=self.root):return
+        client=self.client
+        def done(result):
+            self.flow=result;self.update_receipt=result['receipt'];self.monitor_client=client
+            self.status.set('Override requested. Downloading/installing safely.' if force else 'Users notified. Waiting for active users to finish.')
+        self.run(lambda:client.request('update-flow/'+('force' if force else 'start'),{'version':version,'ready':True}),done)
+    def acknowledge_update(self):
+        if not self.require():return
+        if not messagebox.askyesno(NAME,'Confirm your work is saved. This connection will pause until the update finishes.',parent=self.root):return
+        client=self.client
+        def work():
+            flow=client.request('update-flow',activity=False)
+            if not flow.get('active'):raise ValueError('There is no pending update.')
+            return client.request('update-flow/acknowledge',{'id':flow['id'],'ready':True})
+        self.run(work,lambda result:self.status.set('Ready. Waiting for the update.'))
+    def notify_update(self):self.start_flow()
+    def force_update(self):
+        if self.local_control:self.start_flow(force=True)
+    def cancel_update(self):
+        if not self.require():return
+        client=self.client
+        def work():
+            flow=client.request('update-flow',activity=False)
+            if not flow.get('active'):raise ValueError('There is no pending update.')
+            return client.request('update-flow/cancel',{'id':flow['id']})
+        self.run(work,lambda r:self.status.set('Update request canceled.'))
     def restart(self):
         if not self.require():return
         if not messagebox.askyesno(NAME,'Restart the server? Ask employees to save their appointments first. Everyone will be signed out.'):return

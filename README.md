@@ -131,3 +131,24 @@ Edit user separates Properties, Role, Personal, and User view. Role assignment u
 Roles has Properties and Permissions tabs. Search or filter permissions by category; Enable shown and Disable shown affect only visible permissions that the signed-in manager may change. Saving retains permissions hidden by a filter. Cancel changes reloads the saved role. Existing individual access remains intact and can be edited separately by an administrator; simply opening or saving an unchanged role selection does not rewrite individual permissions.
 
 This redesign adds no database migrations or changes to timecard/reservation storage. Browser regression coverage includes preserved individual grants, shared-role filtering, restricted role managers, personal details, mobile/dark layouts, and unchanged sample reservations, attachments, and open timecards/breaks.
+
+## Coordinated updates and automatic shift saves
+
+Use **Notify users & update when ready** after checking for an available release. Confirm the requesting connection's work is saved. That connection is excluded; other browser tabs and devices are independent participants. A headerless login/bootstrap connection is adopted by its first identified browser connection so it is not counted twice.
+
+The update downloads and verifies in the background. Other signed-in users receive a popup they can minimize to **Update pending** in the header while finishing their current task. Leaving the current page requires acknowledgement. Navigation is held while a form or save is unfinished; the user must save or explicitly finish/discard that task first. Once acknowledged, the connection is paused and the server rejects further writes from it. New sign-ins are held until the update finishes or is canceled. Active Time Clock PIN users can finish their punch/exit or acknowledge the notice.
+
+The requester sees who is finishing, ready, or unconfirmed. Connections with no interaction for the configured timeout are inactive and no longer delay installation. The default is five minutes. Explicit sign-out/closing ends that connection's participation; other open tabs still count. The requester can cancel during the waiting phase. An authenticated administrator in the trusted local server program can override waiting users after an explicit warning; the override is recorded in the audit log. Guest activity is outside the signed-in list and must still be checked separately.
+
+After every remaining connection is ready, the server uses its existing verified update, backup, restart, and rollback path. A private completion receipt lets the requester and waiting users see success or failure even after the restart signs them out. Keep the page open. Acknowledgement is an explicit confirmation that work is saved; the app cannot infer completion of tasks outside its forms.
+
+Valid shift-form changes save automatically after a short typing pause. The form shows saving, saved, or unsaved status. Invalid/incomplete edits remain in the form and block acknowledgement. Save & close retries failures; Done also waits for saving. Discard unsaved edits does not undo already saved changes. A small additive `work_shift_save_receipts` table makes retries idempotent, so losing a response cannot duplicate a shift or apply the same revision twice. Existing shifts retain their revision/conflict checks; timecards, reservations, their identifiers, audit records, and attachments are not rewritten.
+
+
+## Activity and the native server controller (0.39.3)
+
+The server program's Administration tab shows active and inactive connections. Its trusted local administrator session is control traffic and is never counted as an active user. Browser and remote-controller interactions count as activity; automatic polling does not. A user becomes inactive after five minutes by default. Administrators can change this to 1–120 minutes under Application Settings → Connection Activity. The setting is stored in the database and included in backups.
+
+The native **Notify users & update when ready** button uses the same popup/acknowledgement workflow as browsers. The local-only **Override waiting users & install anyway** action bypasses activity and acknowledgement gates, but never bypasses checksum verification, backup, data preservation, or rollback. It requires the native local administrator session and the server controller's secret on loopback; a browser administrator or remote controller cannot invoke it. Inactive users and overrides may interrupt unsaved work, so coordinate with staff when practical.
+
+Use the full 0.39.3 Windows installer to replace both the server executable and its embedded controller. The in-app ZIP updates web/server code only. Exit the server through its tray menu, run the installer over the existing folder, and restart; do not uninstall or delete the data directory. The same installer also offers the standalone Remote Manager component.
