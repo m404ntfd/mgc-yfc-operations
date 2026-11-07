@@ -12,8 +12,13 @@ def run():
   data=target/'data';data.mkdir();(data/'schedule.db').write_bytes(b'preserve-operational-data');before=settings.read_bytes()
   manifest=Path(tmp)/'install.json';manifest.write_text(json.dumps({'installer':str(setup),'sha256':hashlib.sha256(setup.read_bytes()).hexdigest(),'exe':str(exe),'pid':0,'version':'1.1.0','settings':str(settings)}))
   kernel=Mock();kernel.OpenProcess.return_value=None
-  with patch('ctypes.WinDLL',return_value=kernel),patch.object(pos_updater.subprocess,'Popen') as launch:
-   pos_updater.apply_update(manifest);launch.assert_called_once()
+  original_popen=subprocess.Popen;restarted=[]
+  def launch(command,*args,**kwargs):
+   if command==[str(exe)]:restarted.append(command);return Mock()
+   return original_popen(command,*args,**kwargs)
+  with patch('ctypes.WinDLL',return_value=kernel),patch.object(pos_updater.subprocess,'Popen',side_effect=launch):
+   pos_updater.apply_update(manifest)
+  assert restarted==[[str(exe)]]
   result=json.loads((settings.parent/'pos-update-result.json').read_text());assert result['ok'],result
   assert settings.read_bytes()==before;assert (Path(tmp)/'settings-backup.json').read_bytes()==before
   assert (data/'schedule.db').read_bytes()==b'preserve-operational-data'
