@@ -18,7 +18,7 @@ try:
 except ImportError:
     WebPush = None
 
-WEB_ASSETS={}
+WEB_ASSETS={} # prepared by prepare_web_assets.py
 
 def web_asset(key):
     value=WEB_ASSETS.get(key)
@@ -1487,7 +1487,7 @@ def work_post(handler,c,u,path,d,clock_only=False):
 
 
 # POS foundation: isolated additive tables; integer cents; no card-processing path.
-POS_ASSETS={}
+POS_ASSETS={} # prepared POS application assets
 
 def init_pos(c):
     c.executescript('''
