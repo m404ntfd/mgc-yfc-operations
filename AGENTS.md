@@ -9,3 +9,16 @@ The owner requires this and every future update to preserve the integrity of tim
 - If a requested change actually requires modifying existing operational records, make that change explicit, preserve an appropriate backup and audit trail, and resolve any ambiguity with the owner before the destructive step.
 
 These requirements apply to future releases as well as the scheduling redesign.
+
+# CoastYouth Retail naming and application direction
+
+The user selected CoastYouth Retail as the suite name, CoastYouth Retail DESK
+for checkout, and CoastYouth Retail OFFICE for POS configuration. Custom icons
+will be provided later. Preserve existing installation IDs, device configuration
+paths, employee/account identifiers, and updater compatibility during rebranding.
+DESK and OFFICE must use the existing Operations server data rather than duplicate
+or migrate timecards/reservations into a separate application database.
+Reference: https://support.bowlingvision.com/search?collectionId=662181b6be54930e8933c65e&query=sync+office
+Use Office task sections and Desk product groups as inspiration, retaining retail
+functions and excluding bowling-lane controls. This development version is not
+published; prepare preview screens before release.

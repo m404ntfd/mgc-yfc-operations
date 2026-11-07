@@ -2391,8 +2391,8 @@ class Handler(BaseHTTPRequestHandler):
             if self.path=='/manifest.webmanifest':return self.send(json.dumps({'name':'MGC YFC Operations','short_name':'YFC Operations','start_url':'/','scope':'/','display':'standalone','background_color':'#101821','theme_color':'#073ea6','icons':[{'src':'/app-icon-'+str(size)+'.png','sizes':str(size)+'x'+str(size),'type':'image/png','purpose':'any'} for size in (192,512)]}).encode(),kind='application/manifest+json')
             if self.path in ('/favicon.svg','/favicon.ico'):
                 return self.send(FAVICON_SVG.encode(),kind='image/svg+xml')
-            if request.path in ('/pos','/pos/','/pos.js','/pos.css'):
-                filename={'/pos':'pos.html','/pos/':'pos.html','/pos.js':'pos.js','/pos.css':'pos.css'}[request.path]
+            if request.path in ('/pos','/pos/','/office','/office/','/pos.js','/pos.css'):
+                filename={'/pos':'pos.html','/pos/':'pos.html','/office':'pos.html','/office/':'pos.html','/pos.js':'pos.js','/pos.css':'pos.css'}[request.path]
                 source=ROOT/'static'/filename
                 body=POS_ASSETS[filename].encode('utf-8') if filename in POS_ASSETS else source.read_bytes()
                 return self.send(body,kind={'pos.html':'text/html; charset=utf-8','pos.js':'text/javascript; charset=utf-8','pos.css':'text/css; charset=utf-8'}[filename])

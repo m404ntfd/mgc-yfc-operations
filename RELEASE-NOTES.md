@@ -1,16 +1,12 @@
-# POS 1.2.0 + Operations 0.39.7
+# CoastYouth Retail DESK 1.3.0, OFFICE 1.0.0, Operations 0.40.0
 
-Adds customer and employee store-credit accounts with search, account history,
-permission-controlled adjustments, required reasons, and store-credit checkout.
-Credit can cover all or part of a sale, with cash for the remainder. Payments and
-balance deductions are atomic and safe to retry after an interrupted connection.
+Install Operations/server 0.40.0 first in its existing installation folder. Then update DESK using its existing installation folder and install the separate OFFICE application. Connect both clients to the same existing Operations server.
 
-The server window now groups Operations/server updates, POS updates, and full
-server/controller installer downloads. POS retains its warning countdown and
-unfinished-sale protection. Credit-card processing remains a future update.
+- Separate DESK checkout and OFFICE configuration applications, each with its approved blue or orange icon.
+- Products/groups, receipts/taxes, account administration, shared users/roles, and update controls are managed in OFFICE. DESK retains checkout, protected Exit, time clock, reservations, and paging.
+- Users created in OFFICE or Operations share one directory and permissions; no duplicate employee database.
+- First-time DESK admin passcode setup is retained. Administrators can change the local checkout passcode in OFFICE on that same Windows login and server; running DESK reads the updated protection before exiting.
+- The server tray icon now uses three red rings and a computer.
+- Credit cards will be added in future updates.
 
-Install the Operations update first, then update POS. To receive the updated
-Windows server/controller buttons, run the Operations installer in the existing
-installation folder. Data migrations only add account tables; existing timecards,
-open punches/breaks, reservations, attachments, identifiers and audit history are
-preserved. Existing backup and rollback safeguards remain in place.
+Existing timecards, open punches/breaks, reservations, attachments, audits and store-credit accounts stay in the existing server data directory. No reset or data relocation is required. The release includes upgrade, backup/rollback, checkout, native client and installer preservation checks. Before installing, finish active transactions and create a current server backup. Do not uninstall or delete the existing data folder.

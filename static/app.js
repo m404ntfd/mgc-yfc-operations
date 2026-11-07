@@ -3132,6 +3132,7 @@ $('activitySettingsForm').onsubmit=async event=>{event.preventDefault();const bu
 const chooseLandingBeforePos=chooseLanding;
 chooseLanding=async function(force=false){
  const target=location.hash;
+ if(!force&&['#retail-users','#retail-roles'].includes(target)){history.replaceState(null,'',location.pathname+location.search);if(!guardUpdateNavigation())return;if(!can(target==='#retail-roles'?'manage_roles':'manage_users')){toast('Your role does not have access to this setting.');return;}tab('settings');settingsSection(4);selectUserSettings(target==='#retail-roles'?'roles':'users');return;}
  if(!force&&['#pos-time-clock','#pos-reservations','#pos-paging'].includes(target)){
   history.replaceState(null,'',location.pathname+location.search);
   if(!guardUpdateNavigation())return;
@@ -3142,7 +3143,7 @@ chooseLanding=async function(force=false){
  }
  return chooseLandingBeforePos(force);
 };
-window.addEventListener('hashchange',()=>{if(user&&location.hash.startsWith('#pos-'))chooseLanding();});
+window.addEventListener('hashchange',()=>{if(user&&(location.hash.startsWith('#pos-')||location.hash.startsWith('#retail-')))chooseLanding();});
 
 // Keep Operations inside the protected POS window when launched by its native shell.
 window.posKioskCanLeave=()=>!hasUnfinishedWork()&&guardUpdateNavigation();

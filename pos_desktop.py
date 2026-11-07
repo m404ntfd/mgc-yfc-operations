@@ -27,7 +27,7 @@ def open_pos(address,store):
  except Exception as e:raise ValueError('Cannot reach the Operations server. Check that it is running and that this computer is connected to the store network.') from e
  if not compatible:raise ValueError('Update the Operations server to the matching full-screen POS release before opening this POS version.')
  bridge=KioskBridge(store,address)
- window=webview.create_window('MGC YFC Point of Sale',address+'/pos?kiosk=1',js_api=bridge,fullscreen=True,frameless=True,easy_drag=False,resizable=False,confirm_close=False)
+ window=webview.create_window('CoastYouth Retail DESK',address+'/pos?kiosk=1',js_api=bridge,fullscreen=True,frameless=True,easy_drag=False,resizable=False,confirm_close=False)
  bridge._window=window
  window.events.closing+=bridge._closing
  webview.settings['OPEN_DEVTOOLS_IN_DEBUG']=False
@@ -80,9 +80,9 @@ def main():
   try:open_pos(address,store);return
   except Exception as e:
    root=tk.Tk();root.withdraw();messagebox.showerror('Unable to open POS',str(e));root.destroy();return
- root=tk.Tk();root.title('MGC YFC Point of Sale '+VERSION);root.geometry('520x270');root.resizable(False,False)
+ root=tk.Tk();root.title('CoastYouth Retail DESK '+VERSION);root.geometry('520x270');root.resizable(False,False)
  frame=ttk.Frame(root,padding=24);frame.pack(fill='both',expand=True)
- ttk.Label(frame,text='Connect Point of Sale',font=('Segoe UI',18,'bold')).pack(anchor='w')
+ ttk.Label(frame,text='Connect CoastYouth Retail DESK',font=('Segoe UI',18,'bold')).pack(anchor='w')
  ttk.Label(frame,text='Use the address shown by your Operations server.\nThis computer does not need a separate database.').pack(anchor='w',pady=14)
  value=tk.StringVar(value=address);entry=ttk.Entry(frame,textvariable=value);entry.pack(fill='x');entry.focus_set()
  selected=[]

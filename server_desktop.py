@@ -25,7 +25,7 @@ class ServerWindow:
             from console_control import ConsoleWindow
             self.console=ConsoleWindow(ASSETS/'dispatch.ico');root.withdraw()
             print('MGC YFC Operations Server — console mode',flush=True)
-            print('Minimize sends this command window to the YFC rings and building icon in the system tray.',flush=True)
+            print('Minimize sends this command window to the three red rings and computer icon in the system tray.',flush=True)
             print('Double-click the YFC icon to reopen. To stop: right-click the YFC icon > Exit server.',flush=True)
         root.protocol('WM_DELETE_WINDOW',self.hide);root.bind('<Unmap>',self.on_minimize)
         style=ttk.Style();style.theme_use('clam');style.configure('TButton',padding=10);style.configure('TLabel',font=('Segoe UI',10))
@@ -44,13 +44,14 @@ class ServerWindow:
         ttk.Label(f,text=address_text,wraplength=600).pack(anchor='w')
         row=ttk.Frame(f);row.pack(fill='x',pady=18)
         ttk.Button(row,text='Login to Operations',command=self.open_login).pack(side='left')
+        ttk.Button(row,text='Retail OFFICE',command=lambda:self.open_page('office')).pack(side='left',padx=4)
         ttk.Button(row,text='Manage / update server',command=self.manage).pack(side='left',padx=8)
         updates=ttk.LabelFrame(f,text='Software updates',padding=10);updates.pack(fill='x',pady=(0,12))
         ttk.Button(updates,text='Operations / server update',command=self.manage).pack(side='left')
         ttk.Button(updates,text='Update POS applications',command=lambda:self.open_page('#pos-updates')).pack(side='left',padx=8)
         ttk.Button(updates,text='Server / controller installer',command=self.installer_downloads).pack(side='left')
         ttk.Button(row,text='Minimize to tray',command=self.hide).pack(side='left')
-        ttk.Label(f,text='Minimize or close this window to keep the server running in the tray.\nDouble-click the YFC rings and building icon to reopen. Use Exit server to stop it.',wraplength=600).pack(anchor='w')
+        ttk.Label(f,text='Minimize or close this window to keep the server running in the tray.\nDouble-click the three red rings and computer icon to reopen. Use Exit server to stop it.',wraplength=600).pack(anchor='w')
         bottom=ttk.Frame(f);bottom.pack(fill='x',pady=14)
         ttk.Button(bottom,text='Open server log',command=self.open_log).pack(side='left')
         self.exit_button=ttk.Button(bottom,text='Exit server',command=self.ask_exit);self.exit_button.pack(side='right')
@@ -218,6 +219,6 @@ def main():
     kernel=ctypes.windll.kernel32;kernel.CreateMutexW.restype=ctypes.c_void_p
     mutex=kernel.CreateMutexW(None,False,'ThriftMartDispatchTray')
     if kernel.GetLastError()==183:
-        root=tk.Tk();root.withdraw();messagebox.showinfo(NAME,'The server application is already open. Double-click its white YFC rings and building icon in the system tray.');root.destroy();return
+        root=tk.Tk();root.withdraw();messagebox.showinfo(NAME,'The server application is already open. Double-click its three red rings and computer icon in the system tray.');root.destroy();return
     root=tk.Tk();ServerWindow(root,smoke='--smoke-test' in sys.argv,console='--console' in sys.argv);root.mainloop()
 if __name__=='__main__':main()

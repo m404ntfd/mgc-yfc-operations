@@ -28,7 +28,7 @@ def run():
    w.evaluate_js("document.querySelector('#login [name=name]').value='Admin';document.querySelector('#login [name=password]').value='testpassword';document.querySelector('#login').requestSubmit()")
    wait("document.querySelector('#kioskSetupDialog').open")
    w.evaluate_js("document.querySelector('#kioskPasscodeForm [name=code]').value='123456';document.querySelector('#kioskPasscodeForm [name=confirm]').value='123456';document.querySelector('#kioskPasscodeForm').requestSubmit()")
-   wait("document.body.dataset.kiosk==='ready'");assert store.verify('123456')
+   wait("document.body.dataset.kiosk==='ready'");assert KioskStore(store.path).verify('123456')
    assert bridge._closing() is False
    wait("document.querySelector('#posExitDialog').open")
    w.evaluate_js("document.querySelector('#posExitCancel').click()")
@@ -37,13 +37,19 @@ def run():
     wait("document.querySelector('#returnNativePos') && document.querySelector('"+target+"') && !document.querySelector('"+target+"').hidden")
     wait('window.posKioskCanLeave && window.posKioskCanLeave()');print('Returning to POS',flush=True);result=bridge.open_operations('pos');assert result.get('ok'),result
     wait("document.body.dataset.kiosk==='ready'")
+   wait('window.posKioskCanLeave && window.posKioskCanLeave()');assert bridge.open_operations('office').get('ok')
+   wait("document.querySelector('#officeHub') && !document.querySelector('#officeHub').hidden && document.body.dataset.kiosk==='ready'")
+   assert bridge._trusted();assert bridge._closing() is False
+   wait("document.querySelector('#posExitDialog').open");w.evaluate_js("document.querySelector('#posExitCancel').click()")
    w.evaluate_js("document.querySelector('#posAdmin').open=true;document.querySelector('#changeKioskPasscode').click();document.querySelector('#kioskPasscodeForm [name=code]').value='987654';document.querySelector('#kioskPasscodeForm [name=confirm]').value='987654';document.querySelector('#kioskPasscodeForm').requestSubmit()")
    wait("!document.querySelector('#kioskSetupDialog').open && !kioskBusy")
-   assert not store.verify('123456');assert store.verify('987654')
+   assert not KioskStore(store.path).verify('123456');assert KioskStore(store.path).verify('987654')
+   wait('window.posKioskCanLeave && window.posKioskCanLeave()');assert bridge.open_operations('pos').get('ok')
+   wait("document.body.dataset.kiosk==='ready'")
    # Real dirty form blocks native exit even with the correct passcode.
-   w.evaluate_js("let el=document.querySelector('#posSetup [name=store]');el.value='unfinished';el.dispatchEvent(new Event('input',{bubbles:true}))")
+   w.evaluate_js("let el=document.querySelector('#posManual [name=name]');el.value='unfinished';el.dispatchEvent(new Event('input',{bubbles:true}))")
    assert 'error' in bridge.request_exit('987654')
-   w.evaluate_js("document.querySelector('#posSetup').reset()")
+   w.evaluate_js("document.querySelector('#posManual').reset()")
    wait('!unfinished()')
    assert bridge.request_exit('987654').get('ok')
   except Exception:

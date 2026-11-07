@@ -1,6 +1,6 @@
 import hashlib,json,tempfile,unittest
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock,patch
 import server
 from pos_kiosk import KioskStore,KioskBridge
 from test_update_coordination import CoordinatorFixture
@@ -33,6 +33,21 @@ class StoreTests(unittest.TestCase):
    w.get_current_url.return_value='https://other.example/pos';self.assertIn('error',b.request_exit('123456'))
    self.assertIn('error',b.configure_passcode('a'*64,'111111','111111'))
    w.get_current_url.return_value='http://localhost:8080/';self.assertTrue(b.request_exit('123456')['ok']);w.destroy.assert_called_once();self.assertTrue(b._closing())
+
+class OfficeDeviceTests(unittest.TestCase):
+ def test_office_passcode_change_is_seen_by_running_desk(self):
+  from office_desktop import OfficeBridge
+  with tempfile.TemporaryDirectory() as tmp,patch.dict('os.environ',{'APPDATA':tmp}):
+   path=Path(tmp)/'MGCYFCPOS'/'settings.json'
+   store=KioskStore(path);store.data['server']='http://localhost:8080';store.set_passcode('123456','123456')
+   desk=KioskBridge(store,'http://localhost:8080');desk._window=Mock();desk._window.get_current_url.return_value='http://localhost:8080/pos';desk._window.evaluate_js.return_value=True
+   office=OfficeBridge('http://localhost:8080');office._window=Mock();office._window.get_current_url.return_value='http://localhost:8080/office'
+   info=office.office_kiosk_info();self.assertTrue(info['configured'])
+   office._kiosk._redeem=lambda token:dict(admin=True,device=info['device'],nonce=info['nonce'])
+   self.assertTrue(office.office_configure_passcode('a'*64,'987654','987654')['ok'])
+   self.assertIn('error',desk.request_exit('123456'));desk._window.destroy.assert_not_called()
+   self.assertTrue(desk.request_exit('987654')['ok'])
+   other=OfficeBridge('http://other.example');self.assertTrue(other.office_kiosk_info()['unavailable'])
 
 class ApprovalTests(unittest.TestCase):
  def setUp(self):self.f=CoordinatorFixture();server.POS_KIOSK_APPROVALS.clear()

@@ -65,7 +65,7 @@ class KioskBridge:
   url=self._window.get_current_url() if self._window else None
   if not url:return False
   p=urlsplit(url);base=urlsplit(self._address)
-  return (p.scheme,p.netloc)==(base.scheme,base.netloc) and p.path in ('/pos','/pos/','/')
+  return (p.scheme,p.netloc)==(base.scheme,base.netloc) and p.path in ('/pos','/pos/','/office','/office/','/')
  def _redeem_remote(self,token):
   req=Request(self._address+'/api/pos/kiosk-redeem',data=json.dumps({'token':token,'device':self._store.data['device'],'nonce':self._nonce}).encode(),headers={'Content-Type':'application/json','X-Dispatch':'1'})
   try:
@@ -77,6 +77,7 @@ class KioskBridge:
  def kiosk_info(self):
   if not self._trusted():return {'error':'Open the configured Operations server.'}
   from pos_updater import VERSION
+  self._store=KioskStore(self._store.path)
   result=None
   try:result=json.loads((self._store.path.parent/'pos-update-result.json').read_text(encoding='utf-8'))
   except (OSError,ValueError):pass
@@ -102,6 +103,8 @@ class KioskBridge:
   try:
    with self._lock:
     if not self._trusted():raise ValueError('Return to POS before exiting.')
+    # OFFICE may have changed this computer's passcode since DESK opened.
+    self._store=KioskStore(self._store.path)
     if self._store.configured and not self._store.verify(code):raise ValueError('Incorrect admin passcode.')
     if self._window.evaluate_js('window.posKioskCanLeave ? window.posKioskCanLeave() : false') is not True:raise ValueError('Finish or save your current work before exiting.')
     self._exiting=True;self._window.destroy();return {'ok':True}
@@ -109,7 +112,7 @@ class KioskBridge:
  def open_operations(self,tool):
   try:
    if not self._trusted() or not self._store.configured:raise ValueError('Complete admin passcode setup first.')
-   targets={'clock':'#pos-time-clock','reservations':'#pos-reservations','paging':'#pos-paging','pos':'pos?kiosk=1'}
+   targets={'clock':'#pos-time-clock','reservations':'#pos-reservations','paging':'#pos-paging','pos':'pos?kiosk=1','office':'office?kiosk=1','users':'#retail-users','roles':'#retail-roles','server':'#settings'}
    if tool not in targets:raise ValueError('Unknown Operations function.')
    if self._window.evaluate_js('window.posKioskCanLeave ? window.posKioskCanLeave() : false') is not True:raise ValueError('Finish or save your current work first.')
    self._window.load_url(self._address+'/'+targets[tool]);return {'ok':True}
