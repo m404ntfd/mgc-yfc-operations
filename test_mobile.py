@@ -19,7 +19,7 @@ def run():
                 except OSError:
                     time.sleep(.1)
             with sync_playwright() as p:
-                browser = p.chromium.launch()
+                browser = p.chromium.launch(**({'executable_path':os.environ['TEST_CHROMIUM']} if os.environ.get('TEST_CHROMIUM') else {}))
                 phone = browser.new_context(viewport={'width':375,'height':812}, is_mobile=True, has_touch=True)
                 page = phone.new_page()
                 errors = []
@@ -131,8 +131,8 @@ def run():
                 page.locator('#statusFilter').select_option('')
                 page.locator('#weekTab').click()
                 expect(page.locator('.weekDay')).to_have_count(7)
-                expect(page.locator('.weekDay h2').first).to_contain_text('Sunday')
-                expect(page.locator('.weekDay h2').last).to_contain_text('Saturday')
+                expect(page.locator('.weekDay > h2').first).to_contain_text('Sunday')
+                expect(page.locator('.weekDay > h2').last).to_contain_text('Saturday')
                 expect(page.locator('#jobs')).to_contain_text('Phone customer')
                 page.locator('#nextWeekTab').click()
                 expect(page.locator('#jobs .job')).to_have_count(0)
