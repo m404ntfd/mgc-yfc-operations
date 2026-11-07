@@ -12,7 +12,7 @@ document.addEventListener('reset',e=>changedForms.delete(e.target),true);
 document.addEventListener('submit',e=>{submittedForm=e.target;setTimeout(()=>submittedForm=null,0);},true);
 function unfinished(){return writeCount>0||posBusy||!!posPending||changedForms.size>0;}
 async function api(path,data){
- const form=submittedForm,stamp=form?snapshot(form):null,mutation=!!data&&!['account/activity','account/connection'].includes(path)&&!path.startsWith('update-flow');
+ const form=submittedForm,stamp=form?snapshot(form):null,mutation=!!data&&!['account/activity','account/connection','pos-update/heartbeat'].includes(path)&&!path.startsWith('update-flow');
  if(mutation)writeCount++;
  try{
   const r=await fetch('/api/'+path,{method:data?'POST':'GET',headers:{'X-Dispatch-Connection':connectionId,...(data?{'Content-Type':'application/json','X-Dispatch':'1'}:{})},body:data?JSON.stringify(data):undefined,signal:AbortSignal.timeout(20000)});

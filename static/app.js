@@ -2996,7 +2996,7 @@ document.addEventListener('reset',event=>changedForms.delete(event.target),true)
 document.addEventListener('submit',event=>{submittedForm=event.target;const form=event.target;setTimeout(()=>{if(submittedForm===form)submittedForm=null;},0);},true);
 const apiBeforeCoordination=api;
 api=async function(path,data){
- const mutation=!!data&&!['account/activity','account/connection','update-check'].includes(path)&&!path.includes('update-flow');
+ const mutation=!!data&&!['account/activity','account/connection','update-check','pos-update/heartbeat'].includes(path)&&!path.includes('update-flow');
  const form=mutation?submittedForm:null,snapshot=form?formSnapshot(form):null;
  if(mutation)writesInFlight++;
  try{const result=await apiBeforeCoordination(path,data);if(form&&formSnapshot(form)===snapshot)changedForms.delete(form);return result;}

@@ -33,9 +33,9 @@ def run():
    wait("document.querySelector('#posExitDialog').open")
    w.evaluate_js("document.querySelector('#posExitCancel').click()")
    for tool,target in [('clock','#workforce'),('reservations','#schedule'),('paging','#paging')]:
-    print('Opening',tool,flush=True);assert bridge.open_operations(tool).get('ok'),tool
+    wait('window.posKioskCanLeave && window.posKioskCanLeave()');print('Opening',tool,flush=True);result=bridge.open_operations(tool);assert result.get('ok'),result
     wait("document.querySelector('#returnNativePos') && document.querySelector('"+target+"') && !document.querySelector('"+target+"').hidden")
-    print('Returning to POS',flush=True);assert bridge.open_operations('pos').get('ok')
+    wait('window.posKioskCanLeave && window.posKioskCanLeave()');print('Returning to POS',flush=True);result=bridge.open_operations('pos');assert result.get('ok'),result
     wait("document.body.dataset.kiosk==='ready'")
    w.evaluate_js("document.querySelector('#posAdmin').open=true;document.querySelector('#changeKioskPasscode').click();document.querySelector('#kioskPasscodeForm [name=code]').value='987654';document.querySelector('#kioskPasscodeForm [name=confirm]').value='987654';document.querySelector('#kioskPasscodeForm').requestSubmit()")
    wait("!document.querySelector('#kioskSetupDialog').open && !kioskBusy")
