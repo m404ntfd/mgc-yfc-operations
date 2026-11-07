@@ -3159,3 +3159,83 @@ function installPosNativeToolbar(){
 }
 window.addEventListener('pywebviewready',installPosNativeToolbar);
 installPosNativeToolbar();
+
+// POS update controls shared by the register and Operations screens.
+(()=>{
+ const inPos=typeof posPanel!=='undefined',node=document.createElement('section');node.id='posApplicationUpdates';node.hidden=true;
+ node.innerHTML='<h2>POS application updates</h2><p>Warn checkout staff, let transactions finish, then update their POS applications.</p><button type="button" id="openPosUpdates">Manage POS updates</button>';
+ (inPos?document.getElementById('posAdmin'):document.getElementById('settings')).append(node);
+ const dialog=document.createElement('dialog');dialog.id='posUpdatesDialog';dialog.innerHTML='<h2>POS application updates</h2><p>Updates do not change timecards or reservations. Each checkout computer receives its full warning period and waits for staff to finish the current sale.</p><form id="posUpdateSettings"><label>Employee warning (seconds)<input name="seconds" type="number" min="30" max="3600" value="120" required></label><button>Save warning time</button></form><div class="actions"><button type="button" id="checkPosRelease">Check for updates</button><button type="button" id="startPosRelease" disabled>Notify staff and update POS</button><button type="button" id="cancelPosRelease">Cancel update request</button></div><label>Checkout computers<select id="posUpdateTarget"><option value="all">All connected POS computers</option></select></label><p id="posReleaseStatus" role="status"></p><div id="posDeviceList"></div><button type="button" id="closePosUpdates">Close</button>';
+ document.body.append(dialog);
+ const banner=document.createElement('aside');banner.id='posInstallBanner';banner.hidden=true;banner.setAttribute('role','status');banner.innerHTML='<strong>POS update pending</strong><span id="posInstallMessage"></span><button type="button" id="posInstallReady">My work is finished — update</button>';document.body.append(banner);
+ const get=id=>document.getElementById(id);let state=null,info=null,busy=false,lastStatus='',deadline=0,campaignId=null,seconds=0,installing=false;
+ const setBanner=shown=>{banner.hidden=!shown;document.body.classList.toggle('posInstallWarning',shown);};
+ function render(data){
+  state=data;if(!user?.admin)return;
+  const release=data.release||{},campaign=data.campaign;
+  get('posReleaseStatus').textContent=release.checking?'Checking the published POS release…':release.error||('Latest POS: '+(release.version||'Check for updates')+(campaign?' · Update requested by '+campaign.by:''));
+  get('startPosRelease').disabled=!release.version||release.checking||!!campaign;
+  get('cancelPosRelease').disabled=!campaign;
+  const target=get('posUpdateTarget').value;get('posUpdateTarget').replaceChildren(new Option('All connected POS computers','all'));
+  get('posDeviceList').replaceChildren();
+  for(const device of data.devices||[]){
+   const active=Date.now()/1000-device.seen<45;
+   const text=device.user+' · '+device.device.slice(0,6)+' · POS '+device.version+' · '+(active?device.status:'Not recently connected')+(device.updater?'':' · One-time installer required');
+   const row=document.createElement('p');row.textContent=text;get('posDeviceList').append(row);
+   if(active)get('posUpdateTarget').append(new Option(device.user+' · '+device.device.slice(0,6),device.device));
+  }
+  if([...get('posUpdateTarget').options].some(x=>x.value===target))get('posUpdateTarget').value=target;
+ }
+ async function action(name,body={}){
+  try{render(await api('pos-update/'+name,body));}catch(e){get('posReleaseStatus').textContent=e.message;}
+ }
+ get('openPosUpdates').onclick=async()=>{dialog.showModal();try{const data=await api('pos-update/state');render(data);get('posUpdateSettings').elements.seconds.value=data.seconds;}catch(e){get('posReleaseStatus').textContent=e.message;}};
+ get('closePosUpdates').onclick=()=>dialog.close();get('checkPosRelease').onclick=()=>action('check');get('cancelPosRelease').onclick=()=>action('cancel');
+ get('startPosRelease').onclick=()=>action('start',{target:get('posUpdateTarget').value});
+ get('posUpdateSettings').onsubmit=async e=>{e.preventDefault();await action('settings',{seconds:Number(e.target.elements.seconds.value)});};
+ get('posInstallReady').onclick=async()=>{
+  if(!inPos){const result=await window.pywebview.api.open_operations('pos');if(result.error)get('posInstallMessage').textContent=result.error;return;}
+  if(!info?.updater){get('posInstallMessage').textContent='This older POS needs the one-time installer. Ask an administrator to finish this installation.';return;}
+  const result=await window.pywebview.api.install_update();if(result?.error){get('posInstallMessage').textContent=result.error;lastStatus=result.error;}
+ };
+ async function poll(){
+  if(busy||!user||installing)return;busy=true;
+  try{
+   node.hidden=!user.admin;
+   if(location.hash==='#pos-updates'&&user.admin&&!dialog.open){get('openPosUpdates').click();history.replaceState(null,'',location.pathname);}
+   const native=window.pywebview?.api;
+   if(native){
+    info=await native.kiosk_info();
+    if(info.device){
+     const result=await api('pos-update/heartbeat',{device:info.device,version:info.version||'1.0.1',updater:!!info.updater,status:lastStatus||'Connected'});render(result);
+    }
+   }else if(user.admin&&dialog.open)render(await api('pos-update/state'));
+   if(!native||!info?.device)return;
+   const campaign=state?.campaign;
+   if(!campaign||(campaign.target!=='all'&&campaign.target!==info.device)){setBanner(false);campaignId=null;if(info.updater)await native.update_status(null);return;}
+   if(info.updater){
+    const update=await native.update_status(campaign.id);lastStatus=update.state==='complete'?'Update complete · POS '+info.version:update.error||update.state+(update.seconds?' · '+update.seconds+' seconds':'');
+    if(update.state==='complete'||update.state==='idle'){setBanner(false);return;}
+    seconds=update.seconds||0;deadline=Date.now()+seconds*1000;campaignId=campaign.id;setBanner(true);
+    get('posInstallMessage').textContent=update.error|| (seconds?'Update in '+seconds+' seconds. Finish your current transaction.':'Warning time ended. Finish or cancel the current sale, then confirm you are ready.')+(update.state==='downloading'?' Downloading the verified installer…':'');
+    get('posInstallReady').disabled=update.state!=='ready'||seconds>0;
+    if(!inPos){get('posInstallReady').disabled=false;get('posInstallReady').textContent='Return to POS to finish update';}
+    window.posUpdateCountdownDone=seconds===0;
+   }else{
+    if(campaignId!==campaign.id){campaignId=campaign.id;deadline=Date.now()+campaign.seconds*1000;}
+    setBanner(true);get('posInstallReady').disabled=true;get('posInstallMessage').textContent='An update is pending. Finish your transaction. This older POS requires an administrator to install the new version once.';lastStatus='One-time installer required';
+   }
+  }catch(e){if(!banner.hidden)get('posInstallMessage').textContent='Update paused: '+e.message;}
+  finally{busy=false;}
+ }
+ setInterval(()=>{if(!banner.hidden&&deadline>Date.now()&&info?.updater)get('posInstallMessage').textContent='Update in '+Math.ceil((deadline-Date.now())/1000)+' seconds. Please finish your current transaction.';},1000);
+ setInterval(poll,4000);window.addEventListener('pywebviewready',poll);setTimeout(poll,1000);
+ if(inPos){
+  window.posUpdateFreeze=()=>{
+   if(unfinished()||posCurrent?.lines.length||flow?.active)return false;
+   installing=true;window.posUpdateInstalling=true;document.body.classList.add('posInstalling');get('posInstallMessage').textContent='Installing POS update. The application will reopen when finished.';return true;
+  };
+  window.posUpdateUnfreeze=()=>{installing=false;window.posUpdateInstalling=false;document.body.classList.remove('posInstalling');};
+  const original=posDo;posDo=async function(action,...args){if(window.posUpdateInstalling)return;if(action==='new'&&window.posUpdateCountdownDone&&!banner.hidden){posMessage('An update is ready. Finish this transaction and update before starting another.');return;}return original(action,...args);};
+ }
+})();

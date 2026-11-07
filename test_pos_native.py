@@ -6,15 +6,18 @@ from pos_kiosk import KioskStore,KioskBridge
 from test_update_coordination import CoordinatorFixture
 
 def run():
+ import faulthandler
+ faulthandler.dump_traceback_later(100,exit=True)
  f=CoordinatorFixture();tmp=tempfile.TemporaryDirectory();errors=[]
  store=KioskStore(Path(tmp.name)/'settings.json');origin=f'http://127.0.0.1:{f.port}'
  bridge=KioskBridge(store,origin)
  w=webview.create_window('POS isolated native test',origin+'/pos?kiosk=1',js_api=bridge,hidden=True,fullscreen=True,frameless=True,easy_drag=False,resizable=False)
  bridge._window=w;w.events.closing+=bridge._closing
+ w.events.loaded+=lambda:print('Native page loaded',flush=True)
  def wait(js):
   for _ in range(100):
    try:
-    if w.evaluate_js(js):return
+    if w.events.loaded.is_set() and w.evaluate_js("document.readyState==='complete' && ("+js+")"):return
    except Exception:pass
    time.sleep(.1)
   raise AssertionError('Timed out: '+js)
@@ -30,9 +33,9 @@ def run():
    wait("document.querySelector('#posExitDialog').open")
    w.evaluate_js("document.querySelector('#posExitCancel').click()")
    for tool,target in [('clock','#workforce'),('reservations','#schedule'),('paging','#paging')]:
-    assert bridge.open_operations(tool).get('ok'),tool
+    print('Opening',tool,flush=True);assert bridge.open_operations(tool).get('ok'),tool
     wait("document.querySelector('#returnNativePos') && document.querySelector('"+target+"') && !document.querySelector('"+target+"').hidden")
-    assert bridge.open_operations('pos').get('ok')
+    print('Returning to POS',flush=True);assert bridge.open_operations('pos').get('ok')
     wait("document.body.dataset.kiosk==='ready'")
    w.evaluate_js("document.querySelector('#posAdmin').open=true;document.querySelector('#changeKioskPasscode').click();document.querySelector('#kioskPasscodeForm [name=code]').value='987654';document.querySelector('#kioskPasscodeForm [name=confirm]').value='987654';document.querySelector('#kioskPasscodeForm').requestSubmit()")
    wait("!document.querySelector('#kioskSetupDialog').open && !kioskBusy")

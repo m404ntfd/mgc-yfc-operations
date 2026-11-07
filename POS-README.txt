@@ -1,44 +1,38 @@
-MGC YFC Point of Sale 1.0.1
+MGC YFC Point of Sale 1.1.0
 
-INSTALLATION
-1. Make a complete Operations backup and let staff finish/save their work.
-2. Update Operations to 0.39.5 first, using the in-app updater or installing over
-   the existing server folder after exiting the server. Do not uninstall or
-   delete the data folder. Existing timecards and reservations remain intact.
-3. Close the previous POS, then run MGC-YFC-POS-Setup-v1.0.1.exe on each checkout
-   computer using the same Windows account. Microsoft Edge WebView2 Runtime
-   must be installed. The existing server address is retained.
-4. Open Point of Sale. On first use, enter the Operations server address if needed,
-   sign in as an Operations administrator, and set a 6-12 digit exit passcode.
-5. Grant staff Use Point of Sale through Operations permissions. Configure the
-   receipt name and actual tax rate in POS setup before the first sale.
+INSTALL
+Back up Operations and let employees finish/save their work. Exit the server,
+then install Operations 0.39.6 over the existing installation folder. Do not
+uninstall or delete data. Close the old POS and install POS 1.1.0 under the same
+Windows account on checkout computers. Existing exit passcodes and server
+settings remain intact. WebView2 Runtime is required.
 
-FULL-SCREEN AND EXIT
-The installed POS has no normal minimize/close controls. Exit POS requires the
-admin exit passcode and blocks exit while work is unsaved. Ordinary close requests
-open the protected Exit dialog. Administrators can change the passcode under
-POS setup / Checkout computer. The passcode hash and server address are stored
-in %APPDATA%\MGCYFCPOS\settings.json. Preserve that file during upgrades.
-Setup is per Windows account on each checkout computer. Windows kiosk policies
-are needed to restrict Windows shortcuts and switching to other applications.
+REGISTER
+Large category and product buttons, right-side receipt, and checkout action rail.
+Pay now expands cash payment. Catalog/manual items and server-saved carts remain
+available. Credit cards will be added in future updates. Existing cash-only USD,
+single-tax-rate and receipt behavior is retained; no refunds/voids are added.
 
-OPERATIONS AND SALES
-Time Clock, Reservations, and Paging open inside the protected window with
-Return to POS and Exit POS controls. Permissions remain enforced by Operations.
-Reservations means the existing pickup/delivery scheduling screen.
-Catalog and manual items, server-saved carts, cash tender/change, printable
-receipts, and sales history are available. Credit cards will be added in future
-updates. No card payments can be charged or recorded as completed.
-Cash sales use USD with one configured tax rate and per-line rounding. Saved
-carts retain their original tax rate. Refunds/voids, discounts, inventory counts,
-cash-drawer hardware, and Clover catalog import are not included. Sales history
-shows the latest 100 accessible sales; older records are retained.
+UPDATES
+Administrators: POS setup > POS application updates. The same controls are in
+Operations settings and the server window's Update POS applications button.
+Check for releases, choose one/all checkout computers, set warning seconds,
+then Notify staff and update POS. Default warning: 120 seconds (30-3600 allowed).
+Staff see a banner at the top. Finish or cancel the current sale and save all
+entries, then acknowledge readiness after the countdown. The countdown cannot
+force an unfinished transaction to close. New sales pause after the countdown.
+The official installer is checksum-verified. POS closes only after the safety
+check, then installs and reopens. Settings are backed up before replacement.
+The administrator status list shows connected device versions and progress.
+Cancel stops requests that have not yet entered installation.
+POS 1.0.x requires this installer once; later updates can run from the application.
 
-SAFE SAVING AND UPDATES
-If an action is interrupted, use Retry / check last action before another action.
-Do not clear application/browser storage to resolve an uncertain sale; inspect
-Sales history first. POS participates in Operations update notifications.
-Save/finish open fields before acknowledging. Saved carts remain on the server.
-The server must be available for checkout; offline checkout is not provided.
-No operational records are stored in the POS settings file. This update does not
-reset, replace, or migrate timecards or reservations.
+DATA AND EXIT PROTECTION
+Timecards, reservations, attachments and audit records are preserved. No changes
+to those records are required by this update. Do not delete the Operations data
+folder or %APPDATA%\MGCYFCPOS\settings.json. That settings file holds this Windows
+account's server address and salted exit-passcode hash. POS setup lets Operations
+administrators change the exit passcode. Exit remains protected and blocks unsaved
+work. Restricting Windows shortcuts requires separate Windows kiosk configuration.
+If a sale response is interrupted, use Retry / check last action. Never clear app
+storage to resolve an uncertain payment. Offline checkout is not provided.

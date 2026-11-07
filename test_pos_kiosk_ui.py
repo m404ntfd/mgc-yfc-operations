@@ -20,7 +20,7 @@ def run():
    expect(p.locator('#kioskSetupDialog')).to_be_visible()
    form=p.locator('#kioskPasscodeForm');form.locator('[name=code]').fill('123456');form.locator('[name=confirm]').fill('123456');form.locator('button.primary').click()
    expect(p.locator('#kioskSetupDialog')).to_be_hidden();expect(p.locator('#posRoot')).to_be_visible()
-   p.locator('#posAdmin summary').click();form=p.locator('#posSetup');form.locator('[name=store]').fill('MGC YFC');form.locator('[name=tax]').fill('0');form.locator('[name=confirmed]').check();form.locator('button').click()
+   p.locator('#navSetup').click();form=p.locator('#posSetup');form.locator('[name=store]').fill('MGC YFC');form.locator('[name=tax]').fill('0');form.locator('[name=confirmed]').check();form.locator('button').click()
    expect(p.locator('#posNew')).to_be_enabled();p.locator('#navCheckout').click()
    p.screenshot(path=str(out/'POS-Full-Screen-Preview.png'))
    p.locator('#posExitButton').click();p.locator('#posExitForm [name=code]').fill('000000');p.locator('#posExitForm button.primary').click();expect(p.locator('#posExitError')).to_contain_text('Incorrect')

@@ -45,6 +45,7 @@ class ServerWindow:
         row=ttk.Frame(f);row.pack(fill='x',pady=18)
         ttk.Button(row,text='Login to Operations',command=self.open_login).pack(side='left')
         ttk.Button(row,text='Manage / update server',command=self.manage).pack(side='left',padx=8)
+        ttk.Button(f,text='Update POS applications',command=lambda:self.open_page('#pos-updates')).pack(anchor='w')
         ttk.Button(row,text='Minimize to tray',command=self.hide).pack(side='left')
         ttk.Label(f,text='Minimize or close this window to keep the server running in the tray.\nDouble-click the YFC rings and building icon to reopen. Use Exit server to stop it.',wraplength=600).pack(anchor='w')
         bottom=ttk.Frame(f);bottom.pack(fill='x',pady=14)

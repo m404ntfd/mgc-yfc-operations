@@ -12,11 +12,11 @@ def run():
    origin=f'http://127.0.0.1:{f.port}';p.goto(origin+'/pos')
    p.locator('#login [name=name]').fill('Admin');p.locator('#login [name=password]').fill('testpassword');p.locator('#login button').click()
    expect(p.locator('#posPanel')).to_be_visible();expect(p.locator('#posNew')).to_be_disabled()
-   p.locator('#posAdmin summary').click();form=p.locator('#posSetup')
+   p.locator('#navSetup').click();form=p.locator('#posSetup')
    form.locator('[name=store]').fill('MGC Test Store');form.locator('[name=tax]').fill('7.25');form.locator('[name=confirmed]').check();form.locator('button').click()
    expect(p.locator('#posNew')).to_be_enabled()
    product=p.locator('#posProduct');product.locator('[name=name]').fill('Catalog shirt');product.locator('[name=category]').fill('Clothing');product.locator('[name=price]').fill('3.99');product.locator('button').click()
-   expect(p.locator('#posCatalog')).to_contain_text('Catalog shirt');p.locator('#posNew').click();expect(p.locator('#posCart')).to_contain_text('Saved on server')
+   expect(p.locator('#posCatalog')).to_contain_text('Catalog shirt');p.locator('#posAdmin summary').click();p.locator('#posNew').click();expect(p.locator('#posCart')).to_contain_text('Saved on server')
    p.locator('[data-pos-product]').click();expect(p.locator('#posCart')).to_contain_text('$4.28')
    p.locator('summary').filter(has_text='Manual item').click();form=p.locator('#posManual')
    form.locator('[name=name]').fill('Manual item');form.locator('[name=category]').fill('Housewares');form.locator('[name=price]').fill('2.00');form.locator('[name=taxable]').uncheck();form.locator('button').click()
@@ -26,7 +26,7 @@ def run():
    def lose(route):
     route.fetch();route.abort();p.unroute('**/api/pos/cash',lose)
    p.route('**/api/pos/cash',lose)
-   p.locator('#posCash [name=tender]').fill('10.00');p.locator('#posCash button.primary').click()
+   p.locator('#posPayNow').click();p.locator('#posCash [name=tender]').fill('10.00');p.locator('#posCash button.primary').click()
    expect(p.locator('#posRetry')).to_be_visible();p.locator('#posRetry').click()
    expect(p.locator('#posReceipt')).to_contain_text('Change: $3.72')
    with __import__('server').connect() as c:assert c.execute('SELECT COUNT(*) FROM pos_sales').fetchone()[0]==1

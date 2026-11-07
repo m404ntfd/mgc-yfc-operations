@@ -57,6 +57,8 @@ class KioskStore:
 
 class KioskBridge:
  def __init__(self,store,address,redeem=None):
+  from pos_updater import PosUpdater
+  self._updates=PosUpdater(self)
   self._store=store;self._address=address.rstrip('/');self._window=None;self._nonce=secrets.token_hex(32);self._exiting=False;self._lock=threading.RLock();self._redeem=redeem or self._redeem_remote
  def _trusted(self):
   from urllib.parse import urlsplit
@@ -74,7 +76,16 @@ class KioskBridge:
    raise ValueError(message) from e
  def kiosk_info(self):
   if not self._trusted():return {'error':'Open the configured Operations server.'}
-  return {'device':self._store.data['device'],'nonce':self._nonce,'configured':self._store.configured}
+  from pos_updater import VERSION
+  result=None
+  try:result=json.loads((self._store.path.parent/'pos-update-result.json').read_text(encoding='utf-8'))
+  except (OSError,ValueError):pass
+  return {'device':self._store.data['device'],'nonce':self._nonce,'configured':self._store.configured,'version':VERSION,'updater':True,'update_result':result}
+ def update_status(self,ident=None):
+  return self._updates.observe(ident)
+ def install_update(self):
+  try:return self._updates.install()
+  except Exception as e:return {'error':str(e)}
  def configure_passcode(self,token,code,confirmation):
   try:
    with self._lock:

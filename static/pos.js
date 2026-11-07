@@ -30,7 +30,7 @@ async function boot(){
   if(s.setup){$('authError').textContent='Set up the Operations server first, then sign in here.';return;}
   if(!user)return;
   if(!can('use_pos')){$('posRoot').hidden=true;$('auth').hidden=false;$('authError').textContent='Ask an administrator to grant Point of Sale access to your role.';return;}
-  $('navSetup').hidden=!can('manage_pos');
+  $('navSetup').hidden=!can('manage_pos');$('posSetupShortcut').hidden=!can('manage_pos');
   for(const [id,allowed]of [['linkClock',true],['linkReservations',can('view_schedule')],['linkPaging',can('send_pages')]]){$(id).setAttribute('aria-disabled',String(!allowed));$(id).tabIndex=allowed?0:-1;}
   await posLoad();
  }catch(e){$('authError').textContent=e.message;}
@@ -66,7 +66,7 @@ function navigationAllowed(){
 document.addEventListener('click',e=>{
  const link=e.target.closest('.operationsLinks a');
  if(link&&(link.getAttribute('aria-disabled')==='true'||!user)){e.preventDefault();return;}
- if(e.target.closest('.operationsLinks a,#navCheckout,#navSales,#navSetup,#posNew,#signOut')&&!navigationAllowed()){e.preventDefault();e.stopImmediatePropagation();}
+ if(e.target.closest('.operationsLinks a,#navCheckout,#navSales,#navSetup,#posNew,#signOut,#posSalesShortcut,#posSetupShortcut')&&!navigationAllowed()){e.preventDefault();e.stopImmediatePropagation();}
 },true);
 window.addEventListener('beforeunload',e=>{if(unfinished()){e.preventDefault();e.returnValue='';}});
 
@@ -82,23 +82,57 @@ posPanel.innerHTML=`<h1>Point of Sale</h1>
 <form id="posProduct"><h2>Add catalog item</h2><label>Name<input name="name" maxlength="120" required></label><label>Category<input name="category" maxlength="60" required></label><label>Unit price ($)<input name="price" type="number" min="0.01" max="100000" step="0.01" required></label><label><input name="taxable" type="checkbox" checked> Taxable</label><button>Save catalog item</button></form></div></details>
 <section id="posSales" hidden><h2>Recent sales</h2><p>Latest 100 sales visible to your account.</p><div id="posSaleList"></div></section><section id="posReceipt" hidden></section><button id="posPrint" hidden>Print receipt</button>`;
 $('posRoot').append(posPanel);
-let posOverview=null,posCurrent=null,posBusy=false,posPending=null,posLastUser=null;
+// Touch-friendly register layout. Existing cash/cart operations remain server-backed.
+const register=$('posPanel').querySelector('.posLayout');register.classList.add('registerLayout');
+const items=register.children[0],receipt=register.children[1];items.classList.add('itemsPane');receipt.classList.add('receiptPane');
+items.querySelector('h2').remove();
+const searchLabel=$('posSearch').parentElement;searchLabel.classList.add('catalogSearch');searchLabel.firstChild.textContent='Search items';$('posSearch').placeholder='Name or category';
+const categoryPane=document.createElement('section');categoryPane.className='categoryPane';categoryPane.innerHTML='<h2>Categories</h2><div id="posCategories"></div>';items.prepend(categoryPane);
+const productPane=document.createElement('div');productPane.className='productPane';productPane.innerHTML='<div class="catalogHeading"><h2 id="posCategoryTitle">All items</h2><span id="posItemCount"></span></div>';items.append(productPane);productPane.append(searchLabel,$('posCatalog'),$('posManual').parentElement);
+receipt.querySelector('h2').outerHTML='<div class="receiptHeading"><span id="posSaleNumber">CURRENT SALE</span><h2>Receipt</h2><span class="receiptCurrency">USD</span></div>';
+const receiptBody=document.createElement('div');receiptBody.className='receiptBody';receipt.insertBefore(receiptBody,$('posCart'));receiptBody.append($('posCart'),$('posReceipt'),$('posPrint'));
+const cashDetails=document.createElement('details');cashDetails.id='posCashDetails';cashDetails.innerHTML='<summary>Cash payment</summary>';receipt.insertBefore(cashDetails,$('posCash'));cashDetails.append($('posCash'));
+const receiptTools=document.createElement('div');receiptTools.className='receiptTools';receiptTools.append($('posDiscard'));receipt.append(receiptTools);
+const rail=document.createElement('aside');rail.className='registerRail';rail.innerHTML='<button id="posPayNow" class="payAction" type="button"><span>Cash</span>Pay now</button><button id="posFindCart" type="button">Find saved sale</button><button id="posPrintLast" type="button">Print last receipt</button><button id="posManualShortcut" type="button">Manual item</button><button id="posSalesShortcut" type="button">Sales history</button><button id="posSetupShortcut" type="button">POS setup</button>';rail.prepend($('posNew'));register.append(rail);
+$('posReload').textContent='Refresh sales';$('posDiscard').textContent='Cancel sale';
+const closeSales=document.createElement('button');closeSales.type='button';closeSales.textContent='Back to register';closeSales.onclick=()=>{$('posSales').hidden=true;};$('posSales').prepend(closeSales);
+$('posPayNow').onclick=()=>{$('posCashDetails').open=true;$('posCash').elements.tender.focus();posMessage('Enter cash received, then complete the cash sale.');};
+$('posFindCart').onclick=()=>{$('posCarts').focus();posMessage('Select a saved sale from the list above the receipt.');};
+$('posPrintLast').onclick=()=>{if(posLastReceipt){posReceipt(posLastReceipt);$('posPrint').click();}};
+$('posManualShortcut').onclick=()=>{$('posManual').parentElement.open=true;$('posManual').scrollIntoView({block:'nearest'});$('posManual').elements.name.focus();};
+$('posSalesShortcut').onclick=()=>$('navSales').click();$('posSetupShortcut').onclick=()=>$('navSetup').click();
+let posOverview=null,posCurrent=null,posBusy=false,posPending=null,posLastUser=null,posCategory='',posLastReceipt=null;
 const posMoney=n=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(n/100);
 function posCents(value){if(!/^\d+(\.\d{1,2})?$/.test(value))throw Error('Use a positive amount with up to two decimal places.');const [a,b='']=value.split('.');return Number(a)*100+Number(b.padEnd(2,'0'));}
 function posPendingKey(){return 'yfc-pos-pending:'+user.name;}
 function posMessage(text){$('posStatus').textContent=text;}
 function posReceipt(sale){
+ posLastReceipt=sale;$('posCart').hidden=true;$('posCashDetails').hidden=true;$('posPayNow').disabled=true;$('posSales').hidden=true;
  $('posReceipt').hidden=false;$('posPrint').hidden=false;
  $('posReceipt').innerHTML=`<h2>${esc(sale.settings.store)}</h2><h3>Receipt #${sale.id}</h3><p>${esc(sale.at)}<br>Cashier: ${esc(sale.cashier)}</p><table><thead><tr><th>Item</th><th>Qty</th><th>Amount</th></tr></thead><tbody>${sale.lines.map(x=>`<tr><td>${esc(x.name)}</td><td>${x.quantity}</td><td>${posMoney(x.subtotal)}</td></tr>`).join('')}</tbody></table><p>Subtotal: ${posMoney(sale.subtotal)}<br>Tax: ${posMoney(sale.tax)}<br><strong>Total: ${posMoney(sale.total)}</strong><br>Cash received: ${posMoney(sale.tender)}<br>Change: ${posMoney(sale.change)}</p>`;
+ const back=document.createElement('button');back.type='button';back.textContent='Back to current sale';back.className='receiptBack';back.onclick=()=>{$('posReceipt').hidden=true;$('posPrint').hidden=true;posRender();};$('posReceipt').append(back);
 }
 function posRender(){
  if(!posOverview)return;
+ sessionStorage.setItem('yfc-pos-selected:'+user.name,posCurrent?.id||'');
  $('posAdmin').hidden=!can('manage_pos');
  const filter=$('posSearch').value.toLowerCase();
- $('posCatalog').innerHTML=posOverview.products.filter(x=>(x.name+' '+x.category).toLowerCase().includes(filter)).map(x=>`<button type="button" data-pos-product="${x.id}">${esc(x.name)}<br><small>${esc(x.category)} · ${posMoney(x.price)}</small></button>`).join('')||'<p>No matching catalog items. Add a manual item or ask a manager to add products.</p>';
+ const categories=[...new Set(posOverview.products.map(x=>x.category))].sort((a,b)=>a.localeCompare(b));
+ if(posCategory&&!categories.includes(posCategory))posCategory='';
+ const color=category=>'tile-'+(Math.max(0,categories.indexOf(category))%6);
+ $('posCategories').innerHTML=[['','All items'],...categories.map(c=>[c,c])].map(([value,label])=>`<button type="button" data-category="${esc(value)}" aria-pressed="${posCategory===value}" class="${value?color(value):'tile-all'}"><span>${esc(label)}</span><small>${value?posOverview.products.filter(x=>x.category===value).length:posOverview.products.length} items</small></button>`).join('');
+ $('posCategoryTitle').textContent=posCategory||'All items';
+ const products=posOverview.products.filter(x=>(!posCategory||x.category===posCategory)&&(x.name+' '+x.category).toLowerCase().includes(filter));
+ $('posItemCount').textContent=products.length+' items';
+ $('posCatalog').innerHTML=products.map(x=>`<button type="button" data-pos-product="${x.id}" class="${color(x.category)}"><span>${esc(x.name)}</span><small>${esc(x.category)}</small><strong>${posMoney(x.price)}</strong></button>`).join('')||'<p class="catalogEmpty">No matching items. Choose another category, search again, or add a manual item.</p>';
  $('posCarts').innerHTML='<option value="">Choose a cart</option>'+posOverview.carts.map(c=>`<option value="${c.id}">${esc(c.lines[0]?.name||'Empty cart')} · ${posMoney(c.total)} · ${c.id.slice(0,6)}</option>`).join('');
  $('posCarts').value=posCurrent?.id||'';
- $('posCart').innerHTML=posCurrent?`<p>Cart ${posCurrent.id.slice(0,6)} · Saved on server · Tax ${(posCurrent.settings.tax_bps/100).toFixed(2)}%</p><table><thead><tr><th>Item</th><th>Qty</th><th>Amount</th><th></th></tr></thead><tbody>${posCurrent.lines.map((x,i)=>`<tr><td>${esc(x.name)}${x.taxable?'':' (non-taxable)'}</td><td>${x.quantity}</td><td>${posMoney(x.subtotal)}</td><td><button type="button" data-pos-remove="${i}">Remove</button></td></tr>`).join('')}</tbody></table><p>Subtotal: ${posMoney(posCurrent.subtotal)}<br>Tax: ${posMoney(posCurrent.tax)}<br><strong>Total: ${posMoney(posCurrent.total)}</strong></p>`:'<p>Start a new sale or reopen a saved cart.</p>';
+ $('posCart').innerHTML=posCurrent?`<p>Cart ${posCurrent.id.slice(0,6)} · Saved on server · Tax ${(posCurrent.settings.tax_bps/100).toFixed(2)}%</p><div class="receiptLines"><table><thead><tr><th>Item</th><th>Qty</th><th>Amount</th><th></th></tr></thead><tbody>${posCurrent.lines.map((x,i)=>`<tr><td>${esc(x.name)}${x.taxable?'':' (non-taxable)'}</td><td>${x.quantity}</td><td>${posMoney(x.subtotal)}</td><td><button type="button" data-pos-remove="${i}">Remove</button></td></tr>`).join('')}</tbody></table></div><p>Subtotal: ${posMoney(posCurrent.subtotal)}<br>Tax: ${posMoney(posCurrent.tax)}<br><strong>Total: ${posMoney(posCurrent.total)}</strong></p>`:'<p>Start a new sale or reopen a saved cart.</p>';
+ $('posPayNow').disabled=posBusy||!!posPending||!posCurrent?.lines.length||!$('posReceipt').hidden;
+ $('posPrintLast').disabled=!posLastReceipt;
+ $('posCart').hidden=!$('posReceipt').hidden;
+ $('posSaleNumber').textContent=posCurrent?'OPEN SALE · '+posCurrent.id.slice(0,6).toUpperCase():!$('posReceipt').hidden?'COMPLETED SALE':'CURRENT SALE';
+ $('posCashDetails').hidden=!posCurrent?.lines.length||!$('posReceipt').hidden;
  $('posCash').hidden=!posCurrent?.lines.length;$('posDiscard').hidden=!posCurrent;
  $('posRetry').hidden=!posPending;
  $('posNew').disabled=posBusy||!!posPending||posOverview.settings.tax_bps===null;
@@ -107,10 +141,11 @@ function posRender(){
 async function posLoad(){
  if(posBusy)return;
  try{
-  if(posLastUser!==user.name){posCurrent=null;posOverview=null;posPending=null;posLastUser=user.name;$('posReceipt').hidden=true;$('posPrint').hidden=true;$('posSales').hidden=true;for(const form of posPanel.querySelectorAll('form'))form.reset();}
+  if(posLastUser!==user.name){posLastReceipt=null;posCategory='';posCurrent=null;posOverview=null;posPending=null;posLastUser=user.name;$('posReceipt').hidden=true;$('posPrint').hidden=true;$('posSales').hidden=true;for(const form of posPanel.querySelectorAll('form'))form.reset();}
   posPending=JSON.parse(sessionStorage.getItem(posPendingKey())||'null');
   posOverview=await api('pos/overview');
-  if(posCurrent)posCurrent=posOverview.carts.find(x=>x.id===posCurrent.id)||null;
+  const selected=posCurrent?.id||sessionStorage.getItem('yfc-pos-selected:'+user.name);
+  posCurrent=posOverview.carts.find(x=>x.id===selected)||null;
   const form=$('posSetup');if(!changedForms.has(form)){form.elements.store.value=posOverview.settings.store;form.elements.tax.value=posOverview.settings.tax_bps===null?'':(posOverview.settings.tax_bps/100).toFixed(2);}
   posRender();if(posPending)posMessage('The last action needs confirmation. Use Retry / check last action before continuing.');
  }catch(error){posMessage(error.message);}
@@ -125,9 +160,10 @@ async function posDo(action,data={},retry=false){
   for(const el of posPanel.querySelectorAll('button,input,select'))el.disabled=true;
   posMessage('Saving…');
   const result=await api('pos/'+posPending.action,posPending.data);
-  if(result.cart){posCurrent=result.cart;if(posPending.action==='new'){$('posCash').reset();changedForms.delete($('posCash'));}}
-  if(result.sale){posReceipt(result.sale);posCurrent=null;$('posCash').reset();changedForms.delete($('posCash'));}
+  if(result.cart){posCurrent=result.cart;$('posReceipt').hidden=true;$('posPrint').hidden=true;if(posPending.action==='new'){$('posCash').reset();changedForms.delete($('posCash'));}}
+  if(result.sale){$('posCashDetails').open=false;posReceipt(result.sale);posCurrent=null;$('posCash').reset();changedForms.delete($('posCash'));}
   if(posPending.action==='discard')posCurrent=null;
+  sessionStorage.setItem('yfc-pos-selected:'+user.name,posCurrent?.id||'');
   const finished=posPending.action;sessionStorage.removeItem(posPendingKey());posPending=null;
   if(active&&['add','cash','product'].includes(finished)){active.reset();changedForms.delete(active);}
   posMessage(result.sale?'Cash sale saved. Change: '+posMoney(result.sale.change):'Saved.');
@@ -141,8 +177,9 @@ async function posDo(action,data={},retry=false){
  }
 }
 function posCartAction(action,extra){if(!posCurrent){posMessage('Start or select a sale first.');return;}return posDo(action,{cart:posCurrent.id,revision:posCurrent.revision,...extra});}
-$('posNew').onclick=()=>posDo('new');$('posReload').onclick=posLoad;$('posRetry').onclick=()=>posDo('',{},true);
-$('posSearch').oninput=posRender;$('posCarts').onchange=()=>{if(posPending)return;posCurrent=posOverview.carts.find(x=>x.id===$('posCarts').value)||null;posRender();};
+$('posNew').onclick=()=>{if(changedForms.has($('posCash'))){posMessage('Finish or clear the cash amount before starting another sale.');return;}$('posSales').hidden=true;posDo('new');};$('posReload').onclick=posLoad;$('posRetry').onclick=()=>posDo('',{},true);
+$('posSearch').oninput=posRender;
+$('posCategories').onclick=e=>{const b=e.target.closest('[data-category]');if(b){posCategory=b.dataset.category;posRender();}};$('posCarts').onchange=()=>{if(posPending)return;if(changedForms.has($('posCash'))){posMessage('Finish or clear the cash amount before switching sales.');$('posCarts').value=posCurrent?.id||'';return;}$('posReceipt').hidden=true;$('posPrint').hidden=true;posCurrent=posOverview.carts.find(x=>x.id===$('posCarts').value)||null;posRender();};
 $('posCatalog').onclick=e=>{const b=e.target.closest('[data-pos-product]');if(b)posCartAction('add',{product:b.dataset.posProduct,quantity:1});};
 $('posCart').onclick=e=>{const b=e.target.closest('[data-pos-remove]');if(b)posCartAction('remove',{index:Number(b.dataset.posRemove)});};
 $('posDiscard').onclick=()=>{if(confirm('Discard this saved cart? Completed sales are not affected.'))posCartAction('discard',{});};
@@ -152,7 +189,7 @@ $('posPrint').onclick=()=>{document.body.classList.add('printingPos');window.pri
 
 $('login').onsubmit=async e=>{e.preventDefault();try{await api('login',Object.fromEntries(new FormData(e.target)));e.target.reset();$('authError').textContent='';await boot();}catch(error){$('authError').textContent=error.message;}};
 $('signOut').onclick=async()=>{if(unfinished()){toast('Save or clear unfinished entries before signing out.');return;}try{await api('logout',{});await boot();}catch(e){toast(e.message);}};
-$('navCheckout').onclick=()=>{$('posSales').hidden=true;$('posReceipt').hidden=true;$('posPrint').hidden=true;$('posAdmin').open=false;$('posPanel').scrollIntoView({behavior:'smooth'});};
+$('navCheckout').onclick=()=>{$('posSales').hidden=true;$('posReceipt').hidden=true;$('posPrint').hidden=true;$('posAdmin').open=false;$('posCart').hidden=false;$('posPanel').scrollIntoView({behavior:'smooth'});};
 $('navSales').onclick=()=>$('posHistory').click();
 $('navSetup').onclick=()=>{$('posAdmin').open=true;$('posAdmin').scrollIntoView({behavior:'smooth'});};
 $('updateBadge').onclick=()=>showFlow(flowMandatory);
@@ -221,3 +258,83 @@ document.addEventListener('click',async e=>{
 window.addEventListener('pywebviewready',refreshKiosk);
 
 boot();
+
+// POS update controls shared by the register and Operations screens.
+(()=>{
+ const inPos=typeof posPanel!=='undefined',node=document.createElement('section');node.id='posApplicationUpdates';node.hidden=true;
+ node.innerHTML='<h2>POS application updates</h2><p>Warn checkout staff, let transactions finish, then update their POS applications.</p><button type="button" id="openPosUpdates">Manage POS updates</button>';
+ (inPos?document.getElementById('posAdmin'):document.getElementById('settings')).append(node);
+ const dialog=document.createElement('dialog');dialog.id='posUpdatesDialog';dialog.innerHTML='<h2>POS application updates</h2><p>Updates do not change timecards or reservations. Each checkout computer receives its full warning period and waits for staff to finish the current sale.</p><form id="posUpdateSettings"><label>Employee warning (seconds)<input name="seconds" type="number" min="30" max="3600" value="120" required></label><button>Save warning time</button></form><div class="actions"><button type="button" id="checkPosRelease">Check for updates</button><button type="button" id="startPosRelease" disabled>Notify staff and update POS</button><button type="button" id="cancelPosRelease">Cancel update request</button></div><label>Checkout computers<select id="posUpdateTarget"><option value="all">All connected POS computers</option></select></label><p id="posReleaseStatus" role="status"></p><div id="posDeviceList"></div><button type="button" id="closePosUpdates">Close</button>';
+ document.body.append(dialog);
+ const banner=document.createElement('aside');banner.id='posInstallBanner';banner.hidden=true;banner.setAttribute('role','status');banner.innerHTML='<strong>POS update pending</strong><span id="posInstallMessage"></span><button type="button" id="posInstallReady">My work is finished — update</button>';document.body.append(banner);
+ const get=id=>document.getElementById(id);let state=null,info=null,busy=false,lastStatus='',deadline=0,campaignId=null,seconds=0,installing=false;
+ const setBanner=shown=>{banner.hidden=!shown;document.body.classList.toggle('posInstallWarning',shown);};
+ function render(data){
+  state=data;if(!user?.admin)return;
+  const release=data.release||{},campaign=data.campaign;
+  get('posReleaseStatus').textContent=release.checking?'Checking the published POS release…':release.error||('Latest POS: '+(release.version||'Check for updates')+(campaign?' · Update requested by '+campaign.by:''));
+  get('startPosRelease').disabled=!release.version||release.checking||!!campaign;
+  get('cancelPosRelease').disabled=!campaign;
+  const target=get('posUpdateTarget').value;get('posUpdateTarget').replaceChildren(new Option('All connected POS computers','all'));
+  get('posDeviceList').replaceChildren();
+  for(const device of data.devices||[]){
+   const active=Date.now()/1000-device.seen<45;
+   const text=device.user+' · '+device.device.slice(0,6)+' · POS '+device.version+' · '+(active?device.status:'Not recently connected')+(device.updater?'':' · One-time installer required');
+   const row=document.createElement('p');row.textContent=text;get('posDeviceList').append(row);
+   if(active)get('posUpdateTarget').append(new Option(device.user+' · '+device.device.slice(0,6),device.device));
+  }
+  if([...get('posUpdateTarget').options].some(x=>x.value===target))get('posUpdateTarget').value=target;
+ }
+ async function action(name,body={}){
+  try{render(await api('pos-update/'+name,body));}catch(e){get('posReleaseStatus').textContent=e.message;}
+ }
+ get('openPosUpdates').onclick=async()=>{dialog.showModal();try{const data=await api('pos-update/state');render(data);get('posUpdateSettings').elements.seconds.value=data.seconds;}catch(e){get('posReleaseStatus').textContent=e.message;}};
+ get('closePosUpdates').onclick=()=>dialog.close();get('checkPosRelease').onclick=()=>action('check');get('cancelPosRelease').onclick=()=>action('cancel');
+ get('startPosRelease').onclick=()=>action('start',{target:get('posUpdateTarget').value});
+ get('posUpdateSettings').onsubmit=async e=>{e.preventDefault();await action('settings',{seconds:Number(e.target.elements.seconds.value)});};
+ get('posInstallReady').onclick=async()=>{
+  if(!inPos){const result=await window.pywebview.api.open_operations('pos');if(result.error)get('posInstallMessage').textContent=result.error;return;}
+  if(!info?.updater){get('posInstallMessage').textContent='This older POS needs the one-time installer. Ask an administrator to finish this installation.';return;}
+  const result=await window.pywebview.api.install_update();if(result?.error){get('posInstallMessage').textContent=result.error;lastStatus=result.error;}
+ };
+ async function poll(){
+  if(busy||!user||installing)return;busy=true;
+  try{
+   node.hidden=!user.admin;
+   if(location.hash==='#pos-updates'&&user.admin&&!dialog.open){get('openPosUpdates').click();history.replaceState(null,'',location.pathname);}
+   const native=window.pywebview?.api;
+   if(native){
+    info=await native.kiosk_info();
+    if(info.device){
+     const result=await api('pos-update/heartbeat',{device:info.device,version:info.version||'1.0.1',updater:!!info.updater,status:lastStatus||'Connected'});render(result);
+    }
+   }else if(user.admin&&dialog.open)render(await api('pos-update/state'));
+   if(!native||!info?.device)return;
+   const campaign=state?.campaign;
+   if(!campaign||(campaign.target!=='all'&&campaign.target!==info.device)){setBanner(false);campaignId=null;if(info.updater)await native.update_status(null);return;}
+   if(info.updater){
+    const update=await native.update_status(campaign.id);lastStatus=update.state==='complete'?'Update complete · POS '+info.version:update.error||update.state+(update.seconds?' · '+update.seconds+' seconds':'');
+    if(update.state==='complete'||update.state==='idle'){setBanner(false);return;}
+    seconds=update.seconds||0;deadline=Date.now()+seconds*1000;campaignId=campaign.id;setBanner(true);
+    get('posInstallMessage').textContent=update.error|| (seconds?'Update in '+seconds+' seconds. Finish your current transaction.':'Warning time ended. Finish or cancel the current sale, then confirm you are ready.')+(update.state==='downloading'?' Downloading the verified installer…':'');
+    get('posInstallReady').disabled=update.state!=='ready'||seconds>0;
+    if(!inPos){get('posInstallReady').disabled=false;get('posInstallReady').textContent='Return to POS to finish update';}
+    window.posUpdateCountdownDone=seconds===0;
+   }else{
+    if(campaignId!==campaign.id){campaignId=campaign.id;deadline=Date.now()+campaign.seconds*1000;}
+    setBanner(true);get('posInstallReady').disabled=true;get('posInstallMessage').textContent='An update is pending. Finish your transaction. This older POS requires an administrator to install the new version once.';lastStatus='One-time installer required';
+   }
+  }catch(e){if(!banner.hidden)get('posInstallMessage').textContent='Update paused: '+e.message;}
+  finally{busy=false;}
+ }
+ setInterval(()=>{if(!banner.hidden&&deadline>Date.now()&&info?.updater)get('posInstallMessage').textContent='Update in '+Math.ceil((deadline-Date.now())/1000)+' seconds. Please finish your current transaction.';},1000);
+ setInterval(poll,4000);window.addEventListener('pywebviewready',poll);setTimeout(poll,1000);
+ if(inPos){
+  window.posUpdateFreeze=()=>{
+   if(unfinished()||posCurrent?.lines.length||flow?.active)return false;
+   installing=true;window.posUpdateInstalling=true;document.body.classList.add('posInstalling');get('posInstallMessage').textContent='Installing POS update. The application will reopen when finished.';return true;
+  };
+  window.posUpdateUnfreeze=()=>{installing=false;window.posUpdateInstalling=false;document.body.classList.remove('posInstalling');};
+  const original=posDo;posDo=async function(action,...args){if(window.posUpdateInstalling)return;if(action==='new'&&window.posUpdateCountdownDone&&!banner.hidden){posMessage('An update is ready. Finish this transaction and update before starting another.');return;}return original(action,...args);};
+ }
+})();

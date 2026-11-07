@@ -5,7 +5,7 @@ from urllib.parse import urlsplit
 import tkinter as tk
 from tkinter import ttk,messagebox
 
-VERSION='1.0.1'
+from pos_updater import VERSION
 def server_url(value):
  value=value.strip()
  if '://' not in value:value='http://'+value
@@ -34,6 +34,9 @@ def open_pos(address,store):
  webview.start(gui='edgechromium',debug=False,private_mode=False,storage_path=str(store.path.parent/'webview'))
 
 def main():
+ if '--apply-pos-update' in sys.argv:
+  from pos_updater import apply_update
+  apply_update(sys.argv[sys.argv.index('--apply-pos-update')+1]);return
  if '--smoke-test' in sys.argv:
   assert server_url('localhost:8080')=='http://localhost:8080'
   assert server_url('https://store.example/')=='https://store.example'

@@ -1526,6 +1526,68 @@ def pos_get(handler,c,u,path,query):
         return handler.send({'sales':[dict(id=r['id'],**json.loads(r['body'])) for r in c.execute('SELECT * FROM pos_sales '+scope+' ORDER BY id DESC LIMIT 100',() if not scope else (owner,))]})
     raise Problem('Not found.',404)
 
+# POS update coordination lives outside the operational database.
+POS_UPDATE_DEVICES={}
+POS_UPDATE_RELEASE={'checking':False}
+def pos_update_read():
+    path=DATA/'pos-update-control.json'
+    if not path.exists():return {'seconds':120,'campaign':None}
+    try:return json.loads(path.read_text(encoding='utf-8'))
+    except Exception:raise Problem('POS update settings cannot be read; no update was authorized.',500)
+def pos_update_save(value):
+    path=DATA/'pos-update-control.json';temp=path.with_suffix('.tmp')
+    temp.write_text(json.dumps(value),encoding='utf-8');os.replace(temp,path)
+def pos_update_check():
+    global POS_UPDATE_RELEASE
+    try:
+        repository='m404ntfd/mgc-yfc-operations'
+        release=json.loads(updater.fetch('https://api.github.com/repos/'+repository+'/releases/latest',1000000))
+        if release.get('draft') or release.get('prerelease'):raise ValueError('A stable release is required.')
+        candidates=[]
+        for asset in release.get('assets',[]):
+            match=re.fullmatch(r'MGC-YFC-POS-Setup-v(\d+\.\d+\.\d+)\.exe',asset.get('name',''))
+            if match and re.fullmatch(r'sha256:[a-f0-9]{64}',asset.get('digest') or ''):candidates.append((updater.version(match[1]),match[1],asset))
+        if not candidates:raise ValueError('No verified POS installer is available.')
+        _,version,asset=max(candidates)
+        if not asset['browser_download_url'].startswith('https://github.com/'+repository+'/releases/download/'):raise ValueError('Unexpected installer address.')
+        with LOCK:POS_UPDATE_RELEASE={'checking':False,'version':version,'url':asset['browser_download_url'],'checked':time.time()}
+    except Exception as e:
+        with LOCK:POS_UPDATE_RELEASE={'checking':False,'error':str(e)}
+def pos_update_state(u):
+    settings=pos_update_read();result={'seconds':settings['seconds'],'campaign':settings.get('campaign')}
+    if u.get('admin'):result.update(release=POS_UPDATE_RELEASE,devices=list(POS_UPDATE_DEVICES.values()))
+    return result
+def pos_update_post(handler,u,path,d):
+    global POS_UPDATE_RELEASE
+    if path=='heartbeat':
+        device=d.get('device','');version=d.get('version','')
+        if not re.fullmatch('[a-f0-9]{32}',str(device)) or not re.fullmatch(r'\d+\.\d+\.\d+',str(version)):raise Problem('Invalid POS device.')
+        if not has_permission(u,'use_pos') and not u.get('admin'):raise Problem('POS access required.',403)
+        for key,row in list(POS_UPDATE_DEVICES.items()):
+            if row['seen']<time.time()-86400:POS_UPDATE_DEVICES.pop(key,None)
+        POS_UPDATE_DEVICES[device]={'device':device,'version':version,'user':u['name'],'seen':time.time(),'status':str(d.get('status','Connected'))[:200],'updater':d.get('updater') is True}
+        return handler.send(pos_update_state(u))
+    if not u.get('admin'):raise Problem('Administrator access required.',403)
+    settings=pos_update_read()
+    if path=='check':
+        if not POS_UPDATE_RELEASE.get('checking'):
+            POS_UPDATE_RELEASE={'checking':True};threading.Thread(target=pos_update_check,daemon=True).start()
+    elif path=='settings':
+        seconds=d.get('seconds')
+        if type(seconds) is not int or not 30<=seconds<=3600:raise Problem('Choose 30 to 3600 whole seconds.')
+        settings['seconds']=seconds;pos_update_save(settings)
+    elif path=='start':
+        release=POS_UPDATE_RELEASE
+        if release.get('checking') or not release.get('version') or time.time()-release.get('checked',0)>600:raise Problem('Check for POS updates first.',409)
+        if settings.get('campaign'):raise Problem('Cancel the current POS update request before starting another.',409)
+        target=d.get('target','all')
+        if target!='all' and target not in POS_UPDATE_DEVICES:raise Problem('Select a connected POS computer.')
+        settings['campaign']={'id':secrets.token_hex(32),'version':release['version'],'seconds':settings['seconds'],'target':target,'by':u['name'],'at':time.time()};pos_update_save(settings)
+    elif path=='cancel':settings['campaign']=None;pos_update_save(settings)
+    else:raise Problem('Unknown POS update action.',404)
+    return handler.send(pos_update_state(u))
+
+
 POS_KIOSK_APPROVALS={}
 
 def pos_kiosk_approval(c,u,d):
@@ -2270,6 +2332,11 @@ class Handler(BaseHTTPRequestHandler):
             with LOCK, connect() as c:
                 if self.path.startswith('/api/update-result?'):
                     return self.send(flow_result(parse_qs(urlsplit(self.path).query).get('receipt',[''])[0]))
+                if self.path.startswith('/api/pos-update/ticket?'):
+                    ident=parse_qs(urlsplit(self.path).query).get('id',[''])[0];campaign=pos_update_read().get('campaign')
+                    if not campaign or not secrets.compare_digest(campaign['id'],ident):raise Problem('POS update request was canceled or expired.',404)
+                    return self.send(campaign)
+                if self.path=='/api/pos-update/state':return self.send(pos_update_state(self.user()))
                 if self.path=='/api/activity-settings':
                     self.user();return self.send({'inactive_minutes':activity_timeout(c)//60})
                 if self.path=='/api/update-flow':
@@ -2529,6 +2596,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send({'inactive_minutes':minutes})
                 if self.path.startswith('/api/update-flow/'):
                     return flow_post(self,c,u,self.path.rsplit('/',1)[-1],d)
+                if self.path.startswith('/api/pos-update/'):
+                    return pos_update_post(self,u,self.path.rsplit('/',1)[-1],d)
                 if self.path.startswith('/api/pos/'):
                     return pos_post(self,c,u,self.path[len('/api/pos/'):],d)
                 if self.path.startswith('/api/profile/'):
