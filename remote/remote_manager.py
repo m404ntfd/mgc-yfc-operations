@@ -66,7 +66,7 @@ class App:
         if not self.local_control:ttk.Button(updates,text='Ready for pending update',command=self.acknowledge_update).pack(anchor='w',pady=4)
         self.notes=tk.Text(updates,height=5,wrap='word',font=('Segoe UI',10),state='disabled');self.notes.pack(fill='both',expand=True,pady=8)
         ttk.Label(frame,text='Manage employee accounts here; open the browser for schedules and vehicles.\nThe browser requires its own sign-in. Closing this app does not stop the server.',wraplength=690).pack(anchor='w')
-        ttk.Button(frame,text='Remote Manager downloads / updates',command=lambda:webbrowser.open('https://github.com/m404ntfd/mgc-yfc-operations/releases/latest')).pack(anchor='w',pady=(8,0))
+        ttk.Button(frame,text='Server / controller installer downloads',command=lambda:webbrowser.open('https://github.com/m404ntfd/mgc-yfc-operations/releases/latest')).pack(anchor='w',pady=(8,0))
         root.after(100,self.deliver)
         root.after(2000,self.poll_connections)
         if local_control and session_path:

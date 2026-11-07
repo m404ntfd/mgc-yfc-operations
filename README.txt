@@ -77,3 +77,29 @@ Version 0.8.1 appointment forms require a phone number and split addresses into 
 Email reports: In Reports, select filters and choose Email report. Review the preview and open your email app to choose recipients and send. For long reports, download the full text report and attach it manually. Email is sent by your own email app, not the dispatch server.
 
 Cloudflare Tunnel: run cloudflared on the dispatch server and route operations.coastyfc.com to http://localhost:8080 (or the configured port). Preserve the original Host header. Only loopback connectors may supply X-Forwarded-Proto: https; HTTPS cookies are Secure and requests must match the exact external origin. Keep the hostname protected with Cloudflare Access staff policies. Do initial administrator setup locally before publishing. Install server updates through the local address if external login reports Invalid origin.
+
+
+STORE-CREDIT ACCOUNTS (POS 1.2.0 / Operations 0.39.7)
+Open Accounts from the POS action buttons. Search customer and employee accounts,
+filter by type, and select an account to view its balance and full paginated history.
+Create accounts at zero balance, then add credit with an adjustment reason/reference.
+Employee accounts use existing stable employee identifiers; payroll and timecards
+are not changed. One store-credit account is allowed per employee.
+The role permissions "Look up accounts and redeem store credit" and "Create
+store-credit accounts and adjust balances" control access separately.
+Payments may use store credit alone or store credit plus cash. Change is paid only
+from the cash portion. Negative balances are rejected. Adjustments and payment
+history cannot be rewritten or deleted; corrections use a new offsetting adjustment.
+If a connection interrupts a payment, use Retry / check last action. Do not start a
+second payment: the original request is retained to prevent duplicate deductions.
+New account tables are additive. No production records are bundled or modified.
+Unfinished sales remain saved carts, separate from customer/employee credit.
+Credit-card processing remains reserved for future updates.
+
+SERVER SOFTWARE UPDATES
+The server window groups Operations/server updates, POS updates, and the full
+server/controller installer download. The in-app Operations update refreshes
+server web software; use the full installer in the existing installation folder
+to update the Windows server/controller executables. Update Operations before
+POS when installing this accounts release. POS updates retain the configurable
+warning countdown and block installation while a sale or unsaved form remains.

@@ -18,7 +18,7 @@ try:
 except ImportError:
     WebPush = None
 
-WEB_ASSETS={} # prepared by prepare_web_assets.py
+WEB_ASSETS={}
 
 def web_asset(key):
     value=WEB_ASSETS.get(key)
@@ -1487,10 +1487,15 @@ def work_post(handler,c,u,path,d,clock_only=False):
 
 
 # POS foundation: isolated additive tables; integer cents; no card-processing path.
-POS_ASSETS={} # prepared POS application assets
+POS_ASSETS={}
 
 def init_pos(c):
     c.executescript('''
+CREATE TABLE IF NOT EXISTS pos_credit_accounts(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,kind TEXT NOT NULL CHECK(kind IN ('customer','employee')),employee TEXT UNIQUE,contact TEXT NOT NULL,active INTEGER NOT NULL DEFAULT 1);
+CREATE TABLE IF NOT EXISTS pos_credit_ledger(id INTEGER PRIMARY KEY AUTOINCREMENT,account INTEGER NOT NULL REFERENCES pos_credit_accounts(id),amount INTEGER NOT NULL CHECK(amount!=0),balance INTEGER NOT NULL CHECK(balance>=0),at TEXT NOT NULL,actor TEXT NOT NULL,reason TEXT NOT NULL,sale INTEGER UNIQUE);
+CREATE INDEX IF NOT EXISTS pos_credit_history ON pos_credit_ledger(account,id);
+CREATE TRIGGER IF NOT EXISTS pos_credit_no_update BEFORE UPDATE ON pos_credit_ledger BEGIN SELECT RAISE(ABORT,'Credit history is immutable'); END;
+CREATE TRIGGER IF NOT EXISTS pos_credit_no_delete BEFORE DELETE ON pos_credit_ledger BEGIN SELECT RAISE(ABORT,'Credit history is immutable'); END;
 CREATE TABLE IF NOT EXISTS pos_settings(id INTEGER PRIMARY KEY CHECK(id=1),body TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS pos_products(id TEXT PRIMARY KEY,body TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS pos_carts(id TEXT PRIMARY KEY,owner TEXT NOT NULL,revision INTEGER NOT NULL,status TEXT NOT NULL,body TEXT NOT NULL,updated REAL NOT NULL);
@@ -1515,9 +1520,33 @@ def pos_settings(c):
 def pos_cart(row):
     return dict(id=row['id'],revision=row['revision'],status=row['status'],**json.loads(row['body']))
 
+def pos_credit_account(c,ident):
+    row=c.execute('SELECT a.*,p.name AS employee_name FROM pos_credit_accounts a LEFT JOIN receipt_profiles p ON p.profile_id=a.employee WHERE a.id=?',(ident,)).fetchone()
+    if not row:raise Problem('Store-credit account not found.',404)
+    result=dict(row);result['name']=result.pop('employee_name') or result['name']
+    latest=c.execute('SELECT id,balance FROM pos_credit_ledger WHERE account=? ORDER BY id DESC LIMIT 1',(ident,)).fetchone()
+    result.update(code='AC'+str(ident).zfill(6),revision=latest['id'] if latest else 0,balance=latest['balance'] if latest else 0)
+    return result
+
+def pos_credit_access(u,manage=False):
+    if not has_permission(u,'manage_store_credit' if manage else 'use_store_credit') and (manage or not has_permission(u,'manage_store_credit')):raise Problem('Store-credit permission required.',403)
+
 def pos_get(handler,c,u,path,query):
     if not has_permission(u,'use_pos'):raise Problem('Point of Sale permission required.',403)
     owner=u.get('receipt_owner')
+    if path in ('accounts','account'):
+        pos_credit_access(u)
+        if path=='account':
+            try:ident=int(query.get('id',[''])[0]);before=int(query.get('before',['9223372036854775807'])[0])
+            except (ValueError,TypeError):raise Problem('Invalid account identifier.')
+            account=pos_credit_account(c,ident)
+            history=[dict(r) for r in c.execute('SELECT * FROM pos_credit_ledger WHERE account=? AND id<? ORDER BY id DESC LIMIT 101',(ident,before))]
+            return handler.send({'account':account,'history':history[:100],'more':len(history)>100})
+        search=str(query.get('search',[''])[0]).strip().casefold()
+        accounts=[pos_credit_account(c,r[0]) for r in c.execute('SELECT id FROM pos_credit_accounts ORDER BY name COLLATE NOCASE')]
+        accounts=[a for a in accounts if search in (a['name']+' '+a['code']+' '+a['contact']).casefold()]
+        employees=[dict(r) for r in c.execute('SELECT p.profile_id AS id,p.name FROM receipt_profiles p JOIN users u ON u.name=p.name ORDER BY p.name')]
+        return handler.send({'accounts':accounts,'employees':employees})
     if path=='overview':
         return handler.send({'settings':pos_settings(c),'products':[dict(id=r['id'],**json.loads(r['body'])) for r in c.execute('SELECT * FROM pos_products ORDER BY rowid')],
             'carts':[pos_cart(r) for r in c.execute("SELECT * FROM pos_carts WHERE owner=? AND status='open' ORDER BY updated DESC LIMIT 100",(owner,))]})
@@ -1632,6 +1661,32 @@ def pos_post(handler,c,u,path,d):
         c.execute('INSERT INTO audit VALUES(?,?,?,?)',(now,u['name'],action,''))
         c.commit()
         return handler.send(result)
+    if path in ('account-create','account-adjust'):
+        pos_credit_access(u,True)
+        if path=='account-create':
+            kind=d.get('kind')
+            if kind not in ('customer','employee'):raise Problem('Choose customer or employee.')
+            employee=None;name=pos_text(d.get('name'),'an account name')
+            if kind=='employee':
+                employee=pos_text(d.get('employee'),'an employee',64)
+                profile=c.execute('SELECT p.name FROM receipt_profiles p JOIN users u ON u.name=p.name WHERE p.profile_id=?',(employee,)).fetchone()
+                if not profile:raise Problem('Choose a current employee.')
+                if c.execute('SELECT 1 FROM pos_credit_accounts WHERE employee=?',(employee,)).fetchone():raise Problem('This employee already has a store-credit account.',409)
+                name=profile['name']
+            contact=d.get('contact','')
+            if not isinstance(contact,str) or len(contact)>200:raise Problem('Contact/reference must be at most 200 characters.')
+            ident=c.execute('INSERT INTO pos_credit_accounts(name,kind,employee,contact) VALUES(?,?,?,?)',(name,kind,employee,contact.strip())).lastrowid
+        else:
+            ident=pos_int(d.get('account'),'account',1);account=pos_credit_account(c,ident)
+            if d.get('account_revision')!=account['revision']:raise Problem('Balance changed. Refresh the account before adjusting.',409)
+            amount=pos_int(d.get('amount'),'adjustment amount',1)
+            if d.get('direction') not in ('add','subtract'):raise Problem('Choose add or subtract.')
+            amount*=1 if d['direction']=='add' else -1
+            balance=account['balance']+amount
+            if not 0<=balance<=10000000:raise Problem('Balance must remain between $0 and $100,000.')
+            reason=pos_text(d.get('reason'),'an adjustment reason/reference',500)
+            c.execute('INSERT INTO pos_credit_ledger(account,amount,balance,at,actor,reason) VALUES(?,?,?,?,?,?)',(ident,amount,balance,now,u['name'],reason))
+        return finish({'account':pos_credit_account(c,ident)},'Store-credit '+path+' AC'+str(ident).zfill(6))
     if path=='settings':
         if not has_permission(u,'manage_pos'):raise Problem('Manage POS permission required.',403)
         if d.get('confirmed') is not True:raise Problem('Confirm the store tax rate before enabling checkout.')
@@ -1684,6 +1739,23 @@ def pos_post(handler,c,u,path,d):
     if path=='discard':
         c.execute("UPDATE pos_carts SET status='discarded',revision=revision+1 WHERE id=?",(ident,))
         return finish({'ok':True},'POS cart discarded')
+    if path=='credit':
+        pos_credit_access(u)
+        if not has_permission(u,'use_store_credit'):raise Problem('Redeem store credit permission required.',403)
+        if not cart['lines'] or cart['total']<=0:raise Problem('Add an item before checkout.')
+        account=pos_credit_account(c,pos_int(d.get('account'),'account',1))
+        if not account['active']:raise Problem('Account is inactive.',409)
+        if d.get('account_revision')!=account['revision']:raise Problem('Balance changed. Refresh the account before paying.',409)
+        amount=pos_int(d.get('amount'),'store credit',1,min(account['balance'],cart['total']))
+        remaining=cart['total']-amount
+        tender=pos_int(d.get('tender'),'cash received',remaining,20000000 if remaining else 0)
+        balance=account['balance']-amount
+        sale={k:v for k,v in cart.items() if k not in ('id','revision','status')}
+        sale.update(at=now,cashier=u['name'],method='store_credit_cash' if remaining else 'store_credit',tender=tender,change=tender-remaining,store_credit=amount,credit_account=account['code'],credit_name=account['name'],credit_balance=balance)
+        sale_id=c.execute('INSERT INTO pos_sales(cart,owner,body) VALUES(?,?,?)',(ident,owner,json.dumps(sale))).lastrowid
+        c.execute('INSERT INTO pos_credit_ledger(account,amount,balance,at,actor,reason,sale) VALUES(?,?,?,?,?,?,?)',(account['id'],-amount,balance,now,u['name'],'Payment for receipt #'+str(sale_id),sale_id))
+        c.execute("UPDATE pos_carts SET status='paid',revision=revision+1 WHERE id=?",(ident,))
+        return finish({'sale':dict(id=sale_id,**sale)},'POS store-credit sale completed #'+str(sale_id))
     if path=='cash':
         if not cart['lines'] or cart['total']<=0:raise Problem('Add an item before checkout.')
         tender=pos_int(d.get('tender'),'cash received',cart['total'],20000000)
@@ -1760,6 +1832,7 @@ PERMISSIONS={
  'submit_requests':'Submit pickup and delivery requests', 'review_requests':'Review and approve requests',
  'see_requests':'Show flashing Pending Requests button', 'call_contacts':'Show customer call button',
  'text_contacts':'Show On Our Way text button', 'navigate':'Show navigation button',
+ 'use_store_credit':'Look up accounts and redeem store credit', 'manage_store_credit':'Create store-credit accounts and adjust balances',
  'use_pos':'Use Point of Sale and view own sales', 'manage_pos':'Configure POS and add catalog items', 'view_pos_sales':'View all POS sales',
  'manage_roles':'Create and edit permission roles',
  'manage_comms_groups':'Create and manage groups',
@@ -1789,7 +1862,7 @@ def permission_groups():
     dispatch={'view_reports','view_schedule','create_appointments','edit_appointments','delete_appointments','update_status','cancel_appointments','submit_requests','review_requests','see_requests','call_contacts','text_contacts','navigate','manage_vehicles','show_vehicle_filter','show_search'}
     paging={'send_pages','receive_pages'};receipts={'submit_receipts','view_all_receipts'}
     workforce={'manage_staff_schedule','manage_work_sites','edit_time_cards','add_time_cards','export_payroll'}
-    pos={'use_pos','manage_pos','view_pos_sales'}
+    pos={'use_pos','manage_pos','view_pos_sales','use_store_credit','manage_store_credit'}
     return {'Point of Sale':[k for k in PERMISSIONS if k in pos],'Application Settings':[k for k in PERMISSIONS if k not in dispatch|paging|receipts|workforce|pos],'Thrift Mart Dispatch':[k for k in PERMISSIONS if k in dispatch],'Store Associate Paging':[k for k in PERMISSIONS if k in paging],'Receipts & Accounting':[k for k in PERMISSIONS if k in receipts],'Print with a Purpose':[],'Scheduling & Time Clock':[k for k in PERMISSIONS if k in workforce]}
 
 def has_permission(u,key): return bool(u['admin'] or u.get('grants',{}).get(key,False))

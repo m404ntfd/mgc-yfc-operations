@@ -45,7 +45,10 @@ class ServerWindow:
         row=ttk.Frame(f);row.pack(fill='x',pady=18)
         ttk.Button(row,text='Login to Operations',command=self.open_login).pack(side='left')
         ttk.Button(row,text='Manage / update server',command=self.manage).pack(side='left',padx=8)
-        ttk.Button(f,text='Update POS applications',command=lambda:self.open_page('#pos-updates')).pack(anchor='w')
+        updates=ttk.LabelFrame(f,text='Software updates',padding=10);updates.pack(fill='x',pady=(0,12))
+        ttk.Button(updates,text='Operations / server update',command=self.manage).pack(side='left')
+        ttk.Button(updates,text='Update POS applications',command=lambda:self.open_page('#pos-updates')).pack(side='left',padx=8)
+        ttk.Button(updates,text='Server / controller installer',command=self.installer_downloads).pack(side='left')
         ttk.Button(row,text='Minimize to tray',command=self.hide).pack(side='left')
         ttk.Label(f,text='Minimize or close this window to keep the server running in the tray.\nDouble-click the YFC rings and building icon to reopen. Use Exit server to stop it.',wraplength=600).pack(anchor='w')
         bottom=ttk.Frame(f);bottom.pack(fill='x',pady=14)
@@ -97,6 +100,8 @@ class ServerWindow:
         try:
             if not webbrowser.open(target,new=2):raise OSError('No browser accepted the request.')
         except OSError as e:messagebox.showerror(NAME,'Cannot open the browser. Open '+target+' manually.\n'+str(e))
+    def installer_downloads(self):
+        webbrowser.open('https://github.com/m404ntfd/mgc-yfc-operations/releases/latest',new=2)
     def open_login(self):self.open_page('#login')
     def on_tab_changed(self,event=None):
         if self.tabs.select()==str(self.admin_tab):self.manage()

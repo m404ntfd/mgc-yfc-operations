@@ -17,7 +17,7 @@ async function api(path,data){
  try{
   const r=await fetch('/api/'+path,{method:data?'POST':'GET',headers:{'X-Dispatch-Connection':connectionId,...(data?{'Content-Type':'application/json','X-Dispatch':'1'}:{})},body:data?JSON.stringify(data):undefined,signal:AbortSignal.timeout(20000)});
   const value=await r.json();$('connection').textContent='Connected to Operations';
-  if(!r.ok){if(r.status===401){user=null;$('posRoot').hidden=true;$('auth').hidden=false;$('cashier').textContent='';}throw Object.assign(Error(value.error||'Request failed'),{status:r.status});}
+  if(!r.ok){if(r.status===401){$('creditDialog')?.close();user=null;$('posRoot').hidden=true;$('auth').hidden=false;$('cashier').textContent='';}throw Object.assign(Error(value.error||'Request failed'),{status:r.status});}
   if(mutation&&form&&stamp===snapshot(form))changedForms.delete(form);
   return value;
  }catch(e){if(!e.status)$('connection').textContent='Connection interrupted';throw e;}
@@ -66,7 +66,7 @@ function navigationAllowed(){
 document.addEventListener('click',e=>{
  const link=e.target.closest('.operationsLinks a');
  if(link&&(link.getAttribute('aria-disabled')==='true'||!user)){e.preventDefault();return;}
- if(e.target.closest('.operationsLinks a,#navCheckout,#navSales,#navSetup,#posNew,#signOut,#posSalesShortcut,#posSetupShortcut')&&!navigationAllowed()){e.preventDefault();e.stopImmediatePropagation();}
+ if(e.target.closest('.operationsLinks a,#navCheckout,#navSales,#navSetup,#posNew,#signOut,#posSalesShortcut,#posSetupShortcut,#creditOpen')&&!navigationAllowed()){e.preventDefault();e.stopImmediatePropagation();}
 },true);
 window.addEventListener('beforeunload',e=>{if(unfinished()){e.preventDefault();e.returnValue='';}});
 
@@ -105,17 +105,18 @@ let posOverview=null,posCurrent=null,posBusy=false,posPending=null,posLastUser=n
 const posMoney=n=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(n/100);
 function posCents(value){if(!/^\d+(\.\d{1,2})?$/.test(value))throw Error('Use a positive amount with up to two decimal places.');const [a,b='']=value.split('.');return Number(a)*100+Number(b.padEnd(2,'0'));}
 function posPendingKey(){return 'yfc-pos-pending:'+user.name;}
-function posMessage(text){$('posStatus').textContent=text;}
+function posMessage(text){$('posStatus').textContent=text;if($('creditStatus'))$('creditStatus').textContent=text;}
 function posReceipt(sale){
  posLastReceipt=sale;$('posCart').hidden=true;$('posCashDetails').hidden=true;$('posPayNow').disabled=true;$('posSales').hidden=true;
  $('posReceipt').hidden=false;$('posPrint').hidden=false;
- $('posReceipt').innerHTML=`<h2>${esc(sale.settings.store)}</h2><h3>Receipt #${sale.id}</h3><p>${esc(sale.at)}<br>Cashier: ${esc(sale.cashier)}</p><table><thead><tr><th>Item</th><th>Qty</th><th>Amount</th></tr></thead><tbody>${sale.lines.map(x=>`<tr><td>${esc(x.name)}</td><td>${x.quantity}</td><td>${posMoney(x.subtotal)}</td></tr>`).join('')}</tbody></table><p>Subtotal: ${posMoney(sale.subtotal)}<br>Tax: ${posMoney(sale.tax)}<br><strong>Total: ${posMoney(sale.total)}</strong><br>Cash received: ${posMoney(sale.tender)}<br>Change: ${posMoney(sale.change)}</p>`;
+ $('posReceipt').innerHTML=`<h2>${esc(sale.settings.store)}</h2><h3>Receipt #${sale.id}</h3><p>${esc(sale.at)}<br>Cashier: ${esc(sale.cashier)}</p><table><thead><tr><th>Item</th><th>Qty</th><th>Amount</th></tr></thead><tbody>${sale.lines.map(x=>`<tr><td>${esc(x.name)}</td><td>${x.quantity}</td><td>${posMoney(x.subtotal)}</td></tr>`).join('')}</tbody></table><p>Subtotal: ${posMoney(sale.subtotal)}<br>Tax: ${posMoney(sale.tax)}<br><strong>Total: ${posMoney(sale.total)}</strong><br>${sale.store_credit?`Store credit: ${posMoney(sale.store_credit)}<br>${esc(sale.credit_account)} · ${esc(sale.credit_name)}<br>Credit remaining: ${posMoney(sale.credit_balance)}<br>`:''}Cash received: ${posMoney(sale.tender)}<br>Change: ${posMoney(sale.change)}</p>`;
  const back=document.createElement('button');back.type='button';back.textContent='Back to current sale';back.className='receiptBack';back.onclick=()=>{$('posReceipt').hidden=true;$('posPrint').hidden=true;posRender();};$('posReceipt').append(back);
 }
 function posRender(){
  if(!posOverview)return;
  sessionStorage.setItem('yfc-pos-selected:'+user.name,posCurrent?.id||'');
  $('posAdmin').hidden=!can('manage_pos');
+ $('creditOpen').hidden=!can('use_store_credit')&&!can('manage_store_credit');
  const filter=$('posSearch').value.toLowerCase();
  const categories=[...new Set(posOverview.products.map(x=>x.category))].sort((a,b)=>a.localeCompare(b));
  if(posCategory&&!categories.includes(posCategory))posCategory='';
@@ -134,14 +135,14 @@ function posRender(){
  $('posSaleNumber').textContent=posCurrent?'OPEN SALE · '+posCurrent.id.slice(0,6).toUpperCase():!$('posReceipt').hidden?'COMPLETED SALE':'CURRENT SALE';
  $('posCashDetails').hidden=!posCurrent?.lines.length||!$('posReceipt').hidden;
  $('posCash').hidden=!posCurrent?.lines.length;$('posDiscard').hidden=!posCurrent;
- $('posRetry').hidden=!posPending;
+ $('posRetry').hidden=!posPending;$('creditRetry').hidden=!posPending;
  $('posNew').disabled=posBusy||!!posPending||posOverview.settings.tax_bps===null;
  if(posOverview.settings.tax_bps===null)posMessage('Configure receipt and tax settings before starting a sale.');
 }
 async function posLoad(){
  if(posBusy)return;
  try{
-  if(posLastUser!==user.name){posLastReceipt=null;posCategory='';posCurrent=null;posOverview=null;posPending=null;posLastUser=user.name;$('posReceipt').hidden=true;$('posPrint').hidden=true;$('posSales').hidden=true;for(const form of posPanel.querySelectorAll('form'))form.reset();}
+  if(posLastUser!==user.name){creditSelected=null;$('creditDialog').close();$('creditSummary').textContent='Select an account';$('creditHistory').replaceChildren();$('creditAdjust').hidden=true;$('creditPay').hidden=true;posLastReceipt=null;posCategory='';posCurrent=null;posOverview=null;posPending=null;posLastUser=user.name;$('posReceipt').hidden=true;$('posPrint').hidden=true;$('posSales').hidden=true;for(const form of posPanel.querySelectorAll('form'))form.reset();}
   posPending=JSON.parse(sessionStorage.getItem(posPendingKey())||'null');
   posOverview=await api('pos/overview');
   const selected=posCurrent?.id||sessionStorage.getItem('yfc-pos-selected:'+user.name);
@@ -160,13 +161,15 @@ async function posDo(action,data={},retry=false){
   for(const el of posPanel.querySelectorAll('button,input,select'))el.disabled=true;
   posMessage('Saving…');
   const result=await api('pos/'+posPending.action,posPending.data);
+  if(result.account){await creditSelect(result.account.id);if(posPending.action==='account-create')$('creditCreate').reset();if(posPending.action==='account-adjust')$('creditAdjust').reset();await creditList();}
+  if(result.sale&&result.sale.store_credit){$('creditPay').reset();$('creditDialog').close();}
   if(result.cart){posCurrent=result.cart;$('posReceipt').hidden=true;$('posPrint').hidden=true;if(posPending.action==='new'){$('posCash').reset();changedForms.delete($('posCash'));}}
   if(result.sale){$('posCashDetails').open=false;posReceipt(result.sale);posCurrent=null;$('posCash').reset();changedForms.delete($('posCash'));}
   if(posPending.action==='discard')posCurrent=null;
   sessionStorage.setItem('yfc-pos-selected:'+user.name,posCurrent?.id||'');
   const finished=posPending.action;sessionStorage.removeItem(posPendingKey());posPending=null;
   if(active&&['add','cash','product'].includes(finished)){active.reset();changedForms.delete(active);}
-  posMessage(result.sale?'Cash sale saved. Change: '+posMoney(result.sale.change):'Saved.');
+  posMessage(result.sale?'Sale saved. Change: '+posMoney(result.sale.change):'Saved.');
  }catch(error){
   if(error.status>=400&&error.status<500){sessionStorage.removeItem(posPendingKey());posPending=null;}
   posMessage(error.message+(posPending?' Your request is retained. Retry to check it safely.':''));
@@ -186,6 +189,40 @@ $('posDiscard').onclick=()=>{if(confirm('Discard this saved cart? Completed sale
 for(const [id,action]of [['posManual','add'],['posProduct','product'],['posSetup','settings'],['posCash','cash']])$(id).onsubmit=e=>{e.preventDefault();try{const f=e.target.elements;const data=action==='settings'?{store:f.store.value,tax_bps:posCents(f.tax.value),confirmed:f.confirmed.checked}:action==='cash'?{tender:posCents(f.tender.value)}:{name:f.name.value,category:f.category.value,price:posCents(f.price.value),taxable:f.taxable.checked,...(action==='add'?{quantity:Number(f.quantity.value)}:{})};if(['add','cash'].includes(action))posCartAction(action,data);else posDo(action,data);}catch(error){posMessage(error.message);}};
 $('posHistory').onclick=async()=>{try{const {sales}=await api('pos/sales');$('posSales').hidden=false;$('posSaleList').replaceChildren();for(const sale of sales){const b=document.createElement('button');b.textContent=`#${sale.id} · ${sale.at} · ${posMoney(sale.total)} · ${sale.cashier}`;b.onclick=()=>posReceipt(sale);$('posSaleList').append(b);}if(!sales.length)$('posSaleList').textContent='No completed sales.';}catch(error){posMessage(error.message);}};
 $('posPrint').onclick=()=>{document.body.classList.add('printingPos');window.print();};window.addEventListener('afterprint',()=>document.body.classList.remove('printingPos'));
+
+
+let creditSelected=null,creditAccounts=[];
+const creditOpen=document.createElement('button');creditOpen.id='creditOpen';creditOpen.textContent='Accounts';creditOpen.type='button';rail.append(creditOpen);
+const creditDialog=document.createElement('dialog');creditDialog.id='creditDialog';creditDialog.innerHTML=`
+<header class="creditHeader"><div><small>CUSTOMERS & EMPLOYEES</small><h2>Store-credit accounts</h2></div><button id="creditClose" type="button">Back to register</button></header>
+<button id="creditRetry" type="button" hidden>Retry / check last action</button><p id="creditStatus" role="status">Balances and account history are saved on the Operations server.</p>
+<div class="creditLayout"><aside><label>Search accounts<input id="creditSearch" type="search" placeholder="Name, account or contact"></label><label>Account type<select id="creditFilter"><option value="">All accounts</option><option value="customer">Customers</option><option value="employee">Employees</option></select></label><button id="creditRefresh" type="button">Refresh accounts</button><div id="creditList"></div>
+<details id="creditCreateDetails"><summary>Create account</summary><form id="creditCreate"><label>Type<select name="kind"><option value="customer">Customer</option><option value="employee">Employee</option></select></label><label>Name<input name="name" maxlength="120" required></label><label>Employee (for employee accounts)<select name="employee" id="creditEmployee"></select></label><label>Contact / reference<input name="contact" maxlength="200"></label><button>Create account</button><button type="reset">Clear</button></form></details></aside>
+<section><div id="creditSummary"><h3>Select an account</h3><p>View its balance, adjustments and payments.</p></div>
+<form id="creditAdjust" hidden><h3>Adjust balance</h3><div class="creditFields"><label>Action<select name="direction"><option value="add">Add credit</option><option value="subtract">Subtract credit</option></select></label><label>Amount ($)<input name="amount" type="number" min="0.01" max="100000" step="0.01" required></label></div><label>Reason / reference<input name="reason" maxlength="500" required></label><button>Save adjustment</button><button type="reset">Clear</button></form>
+<form id="creditPay" hidden><h3>Pay current sale</h3><p id="creditDue"></p><div class="creditFields"><label>Store credit ($)<input name="amount" type="number" min="0.01" step="0.01" required></label><label>Cash received for remainder ($)<input name="tender" type="number" min="0" step="0.01" value="0" required></label></div><p id="creditRemainder"></p><button>Complete store-credit payment</button><button type="reset">Clear</button></form>
+<h3>Account history</h3><div class="creditHistory"><table><thead><tr><th>Date / staff</th><th>Reason / reference</th><th>Change</th><th>Balance</th></tr></thead><tbody id="creditHistory"></tbody></table></div><button id="creditOlder" type="button" hidden>Load older entries</button></section></div>`;
+posPanel.append(creditDialog);
+const creditActions=document.createElement('div');creditActions.className='creditActions';$('creditAdjust').before(creditActions);creditActions.append($('creditAdjust'),$('creditPay'));
+let creditBefore=null;
+function creditError(e){posMessage(e.message);}
+function creditRenderList(){const q=$('creditSearch').value.toLowerCase(),kind=$('creditFilter').value;$('creditList').innerHTML=creditAccounts.filter(a=>(!kind||kind===a.kind)&&(a.name+' '+a.code+' '+a.contact).toLowerCase().includes(q)).map(a=>`<button type="button" data-credit="${a.id}" aria-pressed="${creditSelected?.id===a.id}"><span>${esc(a.name)}<small>${esc(a.code)} · ${a.kind}</small></span><strong>${posMoney(a.balance)}</strong></button>`).join('')||'<p>No matching accounts.</p>';}
+async function creditList(){const data=await api('pos/accounts');creditAccounts=data.accounts;const old=$('creditEmployee').value;$('creditEmployee').innerHTML='<option value="">Choose employee</option>'+data.employees.map(e=>`<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('');$('creditEmployee').value=old;creditRenderList();}
+function creditHistoryRows(rows){$('creditHistory').insertAdjacentHTML('beforeend',rows.map(r=>`<tr><td>${esc(r.at)}<br>${esc(r.actor)}</td><td>${esc(r.reason)}</td><td>${r.amount>0?'+':''}${posMoney(r.amount)}</td><td>${posMoney(r.balance)}</td></tr>`).join(''));creditBefore=rows.at(-1)?.id;}
+async function creditSelect(id,older=false){const data=await api('pos/account?id='+id+(older?'&before='+creditBefore:''));if(!older){creditSelected=data.account;const a=creditSelected;$('creditSummary').innerHTML=`<small>${esc(a.code)} · ${a.kind}</small><h2>${esc(a.name)}</h2><p>${esc(a.contact)}</p><div class="creditBalance">${posMoney(a.balance)}<small>Available store credit</small></div>`;$('creditHistory').replaceChildren();$('creditAdjust').hidden=!can('manage_store_credit');$('creditPay').hidden=!can('use_store_credit')||!posCurrent?.lines.length||a.balance<=0;$('creditDue').textContent='Current sale: '+posMoney(posCurrent?.total||0);if(!changedForms.has($('creditPay'))){$('creditPay').elements.amount.value=(Math.min(a.balance,posCurrent?.total||0)/100).toFixed(2);$('creditPay').elements.tender.value='0';}creditRemainder();}creditHistoryRows(data.history);$('creditOlder').hidden=!data.more;creditRenderList();}
+function creditRemainder(){try{const amount=posCents($('creditPay').elements.amount.value);$('creditRemainder').textContent='Cash balance due: '+posMoney(Math.max(0,(posCurrent?.total||0)-amount));}catch{$('creditRemainder').textContent='Enter the store-credit amount.';}}
+$('creditPay').oninput=creditRemainder;
+creditOpen.onclick=async()=>{if(!navigationAllowed())return;creditDialog.showModal();$('creditCreateDetails').hidden=!can('manage_store_credit');try{await creditList();if(creditSelected)await creditSelect(creditSelected.id);}catch(e){creditError(e);}};
+function creditClose(){if(posBusy||posPending){posMessage('Finish or retry the pending action first.');return;}creditDialog.close();}
+$('creditRetry').onclick=()=>posDo('',{},true);$('creditClose').onclick=creditClose;creditDialog.oncancel=e=>{e.preventDefault();creditClose();};
+$('creditSearch').oninput=creditRenderList;$('creditFilter').onchange=creditRenderList;
+$('creditRefresh').onclick=async()=>{try{await creditList();if(creditSelected)await creditSelect(creditSelected.id);}catch(e){creditError(e);}};
+$('creditList').onclick=async e=>{const b=e.target.closest('[data-credit]');if(!b)return;if(changedForms.has($('creditAdjust'))||changedForms.has($('creditPay'))){posMessage('Save or clear the adjustment/payment before selecting another account.');return;}try{await creditSelect(Number(b.dataset.credit));}catch(e){creditError(e);}};
+$('creditOlder').onclick=()=>creditSelect(creditSelected.id,true).catch(creditError);
+$('creditCreate').elements.kind.onchange=()=>{const f=$('creditCreate').elements;f.name.required=f.kind.value==='customer';f.employee.required=f.kind.value==='employee';};
+$('creditCreate').onsubmit=e=>{e.preventDefault();if(changedForms.has($('creditAdjust'))||changedForms.has($('creditPay'))){posMessage('Save or clear the adjustment/payment before creating another account.');return;}const f=e.target.elements;posDo('account-create',{kind:f.kind.value,name:f.name.value||f.employee.selectedOptions[0]?.textContent,employee:f.employee.value,contact:f.contact.value});};
+$('creditAdjust').onsubmit=e=>{e.preventDefault();try{const f=e.target.elements;posDo('account-adjust',{account:creditSelected.id,account_revision:creditSelected.revision,direction:f.direction.value,amount:posCents(f.amount.value),reason:f.reason.value});}catch(e){creditError(e);}};
+$('creditPay').onsubmit=e=>{e.preventDefault();try{const f=e.target.elements;posCartAction('credit',{account:creditSelected.id,account_revision:creditSelected.revision,amount:posCents(f.amount.value),tender:posCents(f.tender.value)});}catch(e){creditError(e);}};
 
 $('login').onsubmit=async e=>{e.preventDefault();try{await api('login',Object.fromEntries(new FormData(e.target)));e.target.reset();$('authError').textContent='';await boot();}catch(error){$('authError').textContent=error.message;}};
 $('signOut').onclick=async()=>{if(unfinished()){toast('Save or clear unfinished entries before signing out.');return;}try{await api('logout',{});await boot();}catch(e){toast(e.message);}};
