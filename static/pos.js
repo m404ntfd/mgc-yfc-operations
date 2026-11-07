@@ -6,8 +6,8 @@ const changedForms=new Map();
 const can=k=>!!(user&&(user.admin||user.grants?.[k]));
 const toast=text=>$('posStatus').textContent=text;
 function snapshot(f){return JSON.stringify([...new FormData(f)]);}
-document.addEventListener('input',e=>{if(e.target.form&&e.target.form.id!=='login')changedForms.set(e.target.form,snapshot(e.target.form));},true);
-document.addEventListener('change',e=>{if(e.target.form&&e.target.form.id!=='login')changedForms.set(e.target.form,snapshot(e.target.form));},true);
+document.addEventListener('input',e=>{if(e.target.form&&!['login','posExitForm','kioskPasscodeForm'].includes(e.target.form.id))changedForms.set(e.target.form,snapshot(e.target.form));},true);
+document.addEventListener('change',e=>{if(e.target.form&&!['login','posExitForm','kioskPasscodeForm'].includes(e.target.form.id))changedForms.set(e.target.form,snapshot(e.target.form));},true);
 document.addEventListener('reset',e=>changedForms.delete(e.target),true);
 document.addEventListener('submit',e=>{submittedForm=e.target;setTimeout(()=>submittedForm=null,0);},true);
 function unfinished(){return writeCount>0||posBusy||!!posPending||changedForms.size>0;}
@@ -166,4 +166,58 @@ setInterval(()=>{if(user)api('account/connection',{}).catch(()=>{});},15000);
 setInterval(pollFlow,3000);
 setInterval(async()=>{if(!user)return;try{const s=await api('session');if(s.user?.name!==user?.name){changedForms.clear();posPending=null;await boot();}}catch{}},15000);
 window.addEventListener('pagehide',()=>{if(user)fetch('/api/account/connection',{method:'POST',headers:{'Content-Type':'application/json','X-Dispatch':'1','X-Dispatch-Connection':connectionId},body:JSON.stringify({closing:true}),keepalive:true}).catch(()=>{});});
+
+// Installed POS: the native window owns exit protection; browsers do not.
+let kioskInfo=null,kioskBusy=false;
+const kioskRequested=new URLSearchParams(location.search).get('kiosk')==='1';
+if(kioskRequested)document.body.dataset.kiosk='pending';
+const kioskExitButton=document.createElement('button');kioskExitButton.id='posExitButton';kioskExitButton.textContent='Exit POS';kioskExitButton.hidden=true;document.querySelector('.headerRight').append(kioskExitButton);
+const kioskDialog=document.createElement('dialog');kioskDialog.id='kioskSetupDialog';kioskDialog.innerHTML=`<h2>Set this checkout computer's admin passcode</h2><p id="kioskSetupHelp">An Operations administrator must set an exit passcode before checkout can be used.</p><form id="kioskPasscodeForm"><label>New admin exit passcode<input name="code" type="password" inputmode="numeric" pattern="[0-9]{6,12}" minlength="6" maxlength="12" autocomplete="new-password" required></label><label>Confirm passcode<input name="confirm" type="password" inputmode="numeric" pattern="[0-9]{6,12}" maxlength="12" autocomplete="new-password" required></label><p>Use 6–12 digits. This passcode protects Exit POS on this computer.</p><p id="kioskSetupError" role="alert"></p><div class="actions"><button class="primary">Save admin passcode</button><button type="button" id="kioskSetupCancel">Cancel</button><button type="button" id="kioskSetupExit">Exit POS</button></div></form>`;document.body.append(kioskDialog);
+const kioskExitDialog=document.createElement('dialog');kioskExitDialog.id='posExitDialog';kioskExitDialog.innerHTML=`<h2>Exit Point of Sale</h2><p>Saved carts remain on the Operations server.</p><form id="posExitForm"><label id="posExitCodeLabel">Admin exit passcode<input name="code" type="password" inputmode="numeric" maxlength="12" autocomplete="off"></label><p id="posExitError" role="alert"></p><div class="actions"><button class="primary">Exit POS</button><button type="button" id="posExitCancel">Keep working</button></div></form>`;document.body.append(kioskExitDialog);
+const kioskSettings=document.createElement('section');kioskSettings.id='posKioskSettings';kioskSettings.hidden=true;kioskSettings.innerHTML='<h2>Checkout computer</h2><p>Full-screen POS with a protected Exit button.</p><button type="button" id="changeKioskPasscode">Change admin exit passcode</button><p id="kioskSettingsStatus" role="status"></p>';$('posAdmin').append(kioskSettings);
+window.posKioskCanLeave=()=>!unfinished()&&!kioskBusy;
+window.showPosKioskExit=()=>{if(!kioskInfo)return;if(kioskDialog.open)kioskDialog.close();$('posExitForm').reset();$('posExitError').textContent='';$('posExitCodeLabel').hidden=!kioskInfo.configured;if(!kioskExitDialog.open)kioskExitDialog.showModal();};
+async function refreshKiosk(){
+ if(!window.pywebview?.api)return;
+ const info=await window.pywebview.api.kiosk_info();if(info.error){$('authError').textContent=info.error;return;}
+ document.querySelector('.operationsLinks p').textContent='Open Operations here, then use Return to POS. Your cart stays saved.';
+ kioskInfo=info;document.body.dataset.kiosk=info.configured?'ready':'setup';kioskExitButton.hidden=false;
+ kioskSettings.hidden=!user?.admin;$('changeKioskPasscode').hidden=!info.configured;
+ if(!info.configured){
+  if(user?.admin){$('kioskSetupCancel').hidden=true;$('kioskSetupError').textContent='';if(!kioskDialog.open&&!kioskExitDialog.open)kioskDialog.showModal();}
+  else{$('auth').hidden=false;$('authError').textContent='First-time setup: an Operations administrator must sign in and set this computer’s exit passcode.';}
+ }
+}
+const bootBeforeKiosk=boot;boot=async function(){await bootBeforeKiosk();await refreshKiosk();};
+const posDoBeforeKiosk=posDo;posDo=async function(...args){if(kioskRequested&&!kioskInfo?.configured){toast('Complete administrator passcode setup before checkout.');return;}return posDoBeforeKiosk(...args);};
+kioskExitButton.onclick=window.showPosKioskExit;
+$('kioskSetupExit').onclick=window.showPosKioskExit;
+$('posExitCancel').onclick=()=>{kioskExitDialog.close();refreshKiosk();};
+$('posExitForm').onsubmit=async e=>{e.preventDefault();if(!window.posKioskCanLeave()){$('posExitError').textContent='Finish or save unfinished entries before exiting.';return;}const code=e.target.elements.code.value;e.target.reset();const result=await window.pywebview.api.request_exit(code);if(result?.error)$('posExitError').textContent=result.error;};
+$('changeKioskPasscode').onclick=()=>{if(!user?.admin)return;$('kioskSetupCancel').hidden=false;$('kioskPasscodeForm').reset();$('kioskSetupError').textContent='';kioskDialog.showModal();};
+$('kioskSetupCancel').onclick=()=>kioskDialog.close();
+kioskDialog.addEventListener('cancel',e=>{if(!kioskInfo?.configured)e.preventDefault();});
+$('kioskPasscodeForm').onsubmit=async e=>{
+ e.preventDefault();if(kioskBusy)return;
+ const code=e.target.elements.code.value,confirmation=e.target.elements.confirm.value;
+ if(code!==confirmation){$('kioskSetupError').textContent='The passcodes do not match.';return;}
+ kioskBusy=true;const button=e.target.querySelector('button');button.disabled=true;
+ try{
+  const approval=await api('pos/kiosk-approval',{device:kioskInfo.device,nonce:kioskInfo.nonce});
+  const result=await window.pywebview.api.configure_passcode(approval.token,code,confirmation);
+  if(result.error)throw Error(result.error);
+  e.target.reset();kioskDialog.close();$('kioskSettingsStatus').textContent='Admin exit passcode saved for this computer.';
+  await refreshKiosk();$('auth').hidden=!!user;$('posRoot').hidden=!user;
+ }catch(error){$('kioskSetupError').textContent=error.message;}
+ finally{kioskBusy=false;button.disabled=false;}
+};
+document.addEventListener('click',async e=>{
+ const link=e.target.closest('.operationsLinks a');if(!link||!window.pywebview?.api)return;
+ e.preventDefault();e.stopImmediatePropagation();
+ if(link.getAttribute('aria-disabled')==='true'||!navigationAllowed())return;
+ const tool={linkClock:'clock',linkReservations:'reservations',linkPaging:'paging'}[link.id];
+ const result=await window.pywebview.api.open_operations(tool);if(result.error)toast(result.error);
+},true);
+window.addEventListener('pywebviewready',refreshKiosk);
+
 boot();

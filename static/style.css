@@ -455,3 +455,5 @@ header #currentSection {flex-basis:auto;order:0;font-size:.85rem;margin-left:4px
 .updateFlowActions {margin:18px 0;padding:16px;border:1px solid #8885;border-radius:10px}
 .updateFlowActions p,#shiftSaveStatus {font-size:.9rem}
 
+
+.posNativeToolbar{position:fixed;bottom:0;left:0;right:0;z-index:10000;background:#15283d;color:white;display:flex;align-items:center;gap:15px;padding:12px 20px}.insideNativePos{padding-bottom:85px!important}.posNativeToolbar button{padding:9px 16px}#nativePosError{font-size:13px}

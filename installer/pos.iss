@@ -1,7 +1,7 @@
 [Setup]
 AppId={{8CDE3797-D37D-4200-BC84-03B9F5F136AA}
 AppName=MGC YFC Point of Sale
-AppVersion=1.0.0
+AppVersion=1.0.1
 AppPublisher=MGC YFC
 DefaultDirName={localappdata}\Programs\MGCYFCPOS
 DefaultGroupName=MGC YFC Point of Sale
@@ -9,7 +9,7 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\dist
-OutputBaseFilename=MGC-YFC-POS-Setup-v1.0.0
+OutputBaseFilename=MGC-YFC-POS-Setup-v1.0.1
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern

@@ -3143,3 +3143,19 @@ chooseLanding=async function(force=false){
  return chooseLandingBeforePos(force);
 };
 window.addEventListener('hashchange',()=>{if(user&&location.hash.startsWith('#pos-'))chooseLanding();});
+
+// Keep Operations inside the protected POS window when launched by its native shell.
+window.posKioskCanLeave=()=>!hasUnfinishedWork()&&guardUpdateNavigation();
+function installPosNativeToolbar(){
+ if(!window.pywebview?.api||document.querySelector('.posNativeToolbar'))return;
+ const bar=document.createElement('div');bar.className='posNativeToolbar';bar.innerHTML='<strong>POS · Operations</strong><button id="returnNativePos">Return to POS</button><button id="exitNativePos">Exit POS</button><span id="nativePosError" role="status"></span>';document.body.append(bar);document.body.classList.add('insideNativePos');
+ const dialog=document.createElement('dialog');dialog.innerHTML='<h2>Exit Point of Sale</h2><p>Save your Operations work before exiting.</p><form><label>Admin exit passcode<input type="password" inputmode="numeric" maxlength="12" required></label><p role="alert"></p><button>Exit POS</button><button type="button">Keep working</button></form>';document.body.append(dialog);
+ const form=dialog.querySelector('form');form.addEventListener('input',()=>changedForms.delete(form));
+ window.showPosKioskExit=()=>{form.reset();dialog.querySelector('[role=alert]').textContent='';if(!dialog.open)dialog.showModal();};
+ $('exitNativePos').onclick=window.showPosKioskExit;
+ form.querySelector('[type=button]').onclick=()=>dialog.close();
+ form.onsubmit=async e=>{e.preventDefault();changedForms.delete(form);const code=form.querySelector('input').value;form.reset();const result=await window.pywebview.api.request_exit(code);if(result?.error)dialog.querySelector('[role=alert]').textContent=result.error;};
+ $('returnNativePos').onclick=async()=>{const result=await window.pywebview.api.open_operations('pos');if(result.error)$('nativePosError').textContent=result.error;};
+}
+window.addEventListener('pywebviewready',installPosNativeToolbar);
+installPosNativeToolbar();

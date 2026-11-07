@@ -1,17 +1,21 @@
-# MGC YFC Point of Sale 1.0.0 + Operations 0.39.4
+# MGC YFC POS 1.0.1 + Operations 0.39.5
 
-Introduces a separate Point of Sale application and installer, backed by the existing Operations server. Operations remains version 0.39.4; POS is version 1.0.0.
+POS now opens in a full-screen Windows window without standard minimize or close buttons. Exit POS requires the checkout computer's administrator passcode and refuses to close while work is unfinished.
 
-- Separate POS sign-in and checkout window, with its own Windows shortcut.
-- Permission-controlled access to Time Clock, Reservations (pickup/delivery scheduling), and Paging in Operations. Saved carts remain in POS.
-- Catalog and manual items, saved carts, cash tender/change, printable receipts, immutable sales history, and manager setup.
-- Credit card areas display: **Credit cards will be added in future updates.** No card processor is enabled.
-- Duplicate-request protection, cart revision checks, and safe-update acknowledgement in POS.
-- Additive POS tables preserve existing timecards, reservations, attachments, and audit history.
+- First-use setup requires an Operations administrator to set a 6–12 digit exit passcode before checkout is available.
+- Administrators can change the passcode under POS setup / Checkout computer. Approval is verified by Operations; only a salted hash is stored locally.
+- Time Clock, Reservations, and Paging stay inside the protected window, with Return to POS and Exit POS controls.
+- Cash checkout, saved carts, sales history, and existing employee permissions are retained. Credit cards will be added in future updates.
+- No timecard or reservation migration is required. Existing records, attachments, open punches/breaks, and audit history are preserved.
 
-## Install
-Update the existing Operations server to 0.39.4 first. Back up, exit the server, and install the Operations setup over the existing folder; do not uninstall or delete data. The verified in-app server update is also supported. Then install **MGC-YFC-POS-Setup-v1.0.0.exe** on checkout computers and enter the Operations server address. Use existing accounts; grant staff Point of Sale permissions. Configure the receipt name and actual tax rate before checkout.
+## Install in this order
+1. Make a complete backup of the existing Operations server. Allow staff to finish and save their work.
+2. Update Operations to **0.39.5** using its in-app updater, or exit the server and run **MGC-YFC-Operations-Setup-v0.39.5.exe** over its existing installation folder. Do not uninstall the server or delete its data folder.
+3. Close the old POS and install **MGC-YFC-POS-Setup-v1.0.1.exe** on each checkout computer using the same Windows account. Existing server connection settings are retained.
+4. Open POS and sign in as an Operations administrator to set the exit passcode.
 
-This first release supports USD cash sales with one tax rate and per-line rounding. It does not yet include refunds/voids, discounts, inventory tracking, Clover catalog import, cash-drawer hardware integration, or offline checkout. Card payments are deferred. The latest 100 permitted sales are displayed; older records are retained.
+Microsoft Edge WebView2 Runtime is required on checkout computers. This release provides application-level full-screen protection; restricting Windows shortcuts and switching to other programs requires separate Windows kiosk configuration.
 
-Validated with browser checkout/retry tests, Operations navigation, update acknowledgement, permission checks, and populated upgrade/backup/rollback checks covering historical and open timecards, breaks, reservation attachments, and audit records. No production database is included in release assets.
+Passcode settings are stored under `%APPDATA%\MGCYFCPOS\settings.json`, separately from the Operations database. Preserve this file during future POS upgrades. Setup is per Windows account on each checkout computer.
+
+Validation includes native WebView2 setup/exit/navigation tests, browser checkout and retry tests, administrator authorization and lockout checks, installer checks, and populated upgrade/backup/rollback checks for historical/open timecards, breaks, reservations, attachments, and audits. Release packages contain no production data.

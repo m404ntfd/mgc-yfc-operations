@@ -1526,7 +1526,34 @@ def pos_get(handler,c,u,path,query):
         return handler.send({'sales':[dict(id=r['id'],**json.loads(r['body'])) for r in c.execute('SELECT * FROM pos_sales '+scope+' ORDER BY id DESC LIMIT 100',() if not scope else (owner,))]})
     raise Problem('Not found.',404)
 
+POS_KIOSK_APPROVALS={}
+
+def pos_kiosk_approval(c,u,d):
+    if not u.get('admin'):raise Problem('An Operations administrator must approve exit-passcode changes.',403)
+    device=d.get('device');nonce=d.get('nonce')
+    if not isinstance(device,str) or not re.fullmatch('[0-9a-f]{32}',device) or not isinstance(nonce,str) or not re.fullmatch('[0-9a-f]{64}',nonce):raise Problem('Invalid checkout-computer request.')
+    now=time.time()
+    for key in list(POS_KIOSK_APPROVALS):
+        if POS_KIOSK_APPROVALS[key]['expires']<now:POS_KIOSK_APPROVALS.pop(key,None)
+    if len(POS_KIOSK_APPROVALS)>=500:raise Problem('Too many pending approvals. Try again shortly.',429)
+    token=secrets.token_hex(32)
+    POS_KIOSK_APPROVALS[hashlib.sha256(token.encode()).hexdigest()]={'device':device,'nonce':nonce,'name':u['name'],'expires':now+60}
+    return {'token':token}
+
+def pos_kiosk_redeem(c,d):
+    token=d.get('token')
+    if not isinstance(token,str) or not re.fullmatch('[0-9a-f]{64}',token):raise Problem('Invalid administrator approval.',403)
+    key=hashlib.sha256(token.encode()).hexdigest();approval=POS_KIOSK_APPROVALS.get(key)
+    if not approval or approval['expires']<time.time() or approval['device']!=d.get('device') or approval['nonce']!=d.get('nonce'):raise Problem('Administrator approval expired or belongs to another checkout computer.',403)
+    POS_KIOSK_APPROVALS.pop(key,None)
+    row=c.execute('SELECT admin FROM users WHERE name=?',(approval['name'],)).fetchone()
+    if not row or not row['admin']:raise Problem('Administrator access is no longer available.',403)
+    c.execute('INSERT INTO audit VALUES(?,?,?,?)',(dt.datetime.now().isoformat(timespec='seconds'),approval['name'],'Authorized POS exit-passcode setup/change on device '+approval['device'],''))
+    c.commit()
+    return {'admin':True,'device':approval['device'],'nonce':approval['nonce']}
+
 def pos_post(handler,c,u,path,d):
+    if path=='kiosk-approval':return handler.send(pos_kiosk_approval(c,u,d))
     if not has_permission(u,'use_pos'):raise Problem('Point of Sale permission required.',403)
     owner=u.get('receipt_owner')
     if not owner:raise Problem('Employee account required.',403)
@@ -2402,6 +2429,7 @@ class Handler(BaseHTTPRequestHandler):
             with LOCK, connect() as c:
                 if RESTART or STOPPING: raise Problem('Update is restarting the server. Please wait and sign in again.',503)
                 flow_guard(self)
+                if self.path=='/api/pos/kiosk-redeem':return self.send(pos_kiosk_redeem(c,d))
                 if self.path=='/api/local/stop':
                     expected=os.environ.get('DISPATCH_CONTROL_TOKEN','')
                     if self.client_address[0] not in ('127.0.0.1','::1') or not expected or not hmac.compare_digest(str(d.get('token','')),expected): raise Problem('Local server controller required.',403)
