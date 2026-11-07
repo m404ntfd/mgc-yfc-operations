@@ -47,6 +47,9 @@ class DataIntegrityTests(unittest.TestCase):
             return {name:[tuple(row) for row in connection.execute('SELECT * FROM "'+name+'" ORDER BY rowid')]
                     for name in tables}
         before=snapshot()
+        server.init_pos(connection)
+        server.init_pos(connection)
+        self.assertEqual(snapshot(),before)
         hours=server.work_hours(connection,'employee-unchanged',(0,2000),1500)
         for _ in range(2):
             server.init_workforce(connection)

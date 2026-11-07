@@ -152,3 +152,8 @@ The server program's Administration tab shows active and inactive connections. I
 The native **Notify users & update when ready** button uses the same popup/acknowledgement workflow as browsers. The local-only **Override waiting users & install anyway** action bypasses activity and acknowledgement gates, but never bypasses checksum verification, backup, data preservation, or rollback. It requires the native local administrator session and the server controller's secret on loopback; a browser administrator or remote controller cannot invoke it. Inactive users and overrides may interrupt unsaved work, so coordinate with staff when practical.
 
 Use the full 0.39.3 Windows installer to replace both the server executable and its embedded controller. The in-app ZIP updates web/server code only. Exit the server through its tray menu, run the installer over the existing folder, and restart; do not uninstall or delete the data directory. The same installer also offers the standalone Remote Manager component.
+
+
+## Separate Point of Sale 1.0.0
+
+The separate Windows POS installer connects to Operations 0.39.4 or later at `/pos`. See [POS installation and features](POS-README.txt). It shares accounts and data with Operations, with links to Time Clock, Reservations and Paging. Credit cards will be added in future updates.

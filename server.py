@@ -1486,6 +1486,126 @@ def work_post(handler,c,u,path,d,clock_only=False):
 
 
 
+# POS foundation: isolated additive tables; integer cents; no card-processing path.
+POS_ASSETS={} # prepared POS application assets
+
+def init_pos(c):
+    c.executescript('''
+CREATE TABLE IF NOT EXISTS pos_settings(id INTEGER PRIMARY KEY CHECK(id=1),body TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS pos_products(id TEXT PRIMARY KEY,body TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS pos_carts(id TEXT PRIMARY KEY,owner TEXT NOT NULL,revision INTEGER NOT NULL,status TEXT NOT NULL,body TEXT NOT NULL,updated REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS pos_sales(id INTEGER PRIMARY KEY AUTOINCREMENT,cart TEXT UNIQUE NOT NULL,owner TEXT NOT NULL,body TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS pos_operations(id TEXT PRIMARY KEY,owner TEXT NOT NULL,payload TEXT NOT NULL,result TEXT NOT NULL);
+CREATE TRIGGER IF NOT EXISTS pos_sales_no_update BEFORE UPDATE ON pos_sales BEGIN SELECT RAISE(ABORT,'Sales history is immutable'); END;
+CREATE TRIGGER IF NOT EXISTS pos_sales_no_delete BEFORE DELETE ON pos_sales BEGIN SELECT RAISE(ABORT,'Sales history is immutable'); END;
+''')
+
+def pos_text(value,label,limit=120):
+    if not isinstance(value,str) or not value.strip() or len(value.strip())>limit:raise Problem('Enter '+label+'.')
+    return value.strip()
+
+def pos_int(value,label,low=0,high=10000000):
+    if type(value) is not int or not low<=value<=high:raise Problem('Invalid '+label+'.')
+    return value
+
+def pos_settings(c):
+    row=c.execute('SELECT body FROM pos_settings WHERE id=1').fetchone()
+    return json.loads(row[0]) if row else {'store':'','tax_bps':None,'currency':'USD'}
+
+def pos_cart(row):
+    return dict(id=row['id'],revision=row['revision'],status=row['status'],**json.loads(row['body']))
+
+def pos_get(handler,c,u,path,query):
+    if not has_permission(u,'use_pos'):raise Problem('Point of Sale permission required.',403)
+    owner=u.get('receipt_owner')
+    if path=='overview':
+        return handler.send({'settings':pos_settings(c),'products':[dict(id=r['id'],**json.loads(r['body'])) for r in c.execute('SELECT * FROM pos_products ORDER BY rowid')],
+            'carts':[pos_cart(r) for r in c.execute("SELECT * FROM pos_carts WHERE owner=? AND status='open' ORDER BY updated DESC LIMIT 100",(owner,))]})
+    if path=='sales':
+        scope='' if has_permission(u,'view_pos_sales') else 'WHERE owner=?'
+        return handler.send({'sales':[dict(id=r['id'],**json.loads(r['body'])) for r in c.execute('SELECT * FROM pos_sales '+scope+' ORDER BY id DESC LIMIT 100',() if not scope else (owner,))]})
+    raise Problem('Not found.',404)
+
+def pos_post(handler,c,u,path,d):
+    if not has_permission(u,'use_pos'):raise Problem('Point of Sale permission required.',403)
+    owner=u.get('receipt_owner')
+    if not owner:raise Problem('Employee account required.',403)
+    operation=d.get('request')
+    if not isinstance(operation,str) or not re.fullmatch('[0-9a-f]{32}',operation):raise Problem('A unique request is required.')
+    payload=json.dumps([path,d],sort_keys=True,separators=(',',':'))
+    previous=c.execute('SELECT * FROM pos_operations WHERE id=?',(operation,)).fetchone()
+    if previous:
+        if previous['owner']!=owner or previous['payload']!=payload:raise Problem('Request already used for another action.',409)
+        return handler.send(json.loads(previous['result']))
+    now=dt.datetime.now().astimezone().isoformat(timespec='seconds')
+    def finish(result,action):
+        c.execute('INSERT INTO pos_operations VALUES(?,?,?,?)',(operation,owner,payload,json.dumps(result)))
+        c.execute('INSERT INTO audit VALUES(?,?,?,?)',(now,u['name'],action,''))
+        c.commit()
+        return handler.send(result)
+    if path=='settings':
+        if not has_permission(u,'manage_pos'):raise Problem('Manage POS permission required.',403)
+        if d.get('confirmed') is not True:raise Problem('Confirm the store tax rate before enabling checkout.')
+        settings={'store':pos_text(d.get('store'),'a receipt store name'),'tax_bps':pos_int(d.get('tax_bps'),'tax rate',0,10000),'currency':'USD'}
+        c.execute('INSERT OR REPLACE INTO pos_settings VALUES(1,?)',(json.dumps(settings),))
+        return finish({'settings':settings},'POS settings saved')
+    if path=='product':
+        if not has_permission(u,'manage_pos'):raise Problem('Manage POS permission required.',403)
+        product={'name':pos_text(d.get('name'),'an item name'),'category':pos_text(d.get('category'),'a category',60),'price':pos_int(d.get('price'),'price',1),'taxable':d.get('taxable')}
+        if type(product['taxable']) is not bool:raise Problem('Choose taxable or non-taxable.')
+        ident=secrets.token_hex(16)
+        c.execute('INSERT INTO pos_products VALUES(?,?)',(ident,json.dumps(product)))
+        return finish({'product':dict(id=ident,**product)},'POS catalog item added')
+    if path=='new':
+        settings=pos_settings(c)
+        if settings['tax_bps'] is None:raise Problem('An administrator must configure POS tax and receipt settings first.',409)
+        ident=secrets.token_hex(16);body={'lines':[],'subtotal':0,'tax':0,'total':0,'settings':settings}
+        c.execute('INSERT INTO pos_carts VALUES(?,?,1,?,?,?)',(ident,owner,'open',json.dumps(body),time.time()))
+        return finish({'cart':dict(id=ident,revision=1,status='open',**body)},'POS cart started')
+    ident=pos_text(d.get('cart'),'a cart identifier',32)
+    row=c.execute('SELECT * FROM pos_carts WHERE id=? AND owner=?',(ident,owner)).fetchone()
+    if not row:raise Problem('Cart not found.',404)
+    cart=pos_cart(row)
+    if row['status']!='open':raise Problem('This cart is already completed or discarded. Check sales history.',409)
+    if d.get('revision')!=row['revision']:raise Problem('This cart changed in another tab. Reload it before continuing.',409)
+    if path in ('add','remove'):
+        lines=cart['lines']
+        if path=='add':
+            if len(lines)>=100:raise Problem('Maximum 100 lines per cart.')
+            if d.get('product'):
+                product=c.execute('SELECT body FROM pos_products WHERE id=?',(pos_text(d['product'],'an item identifier',32),)).fetchone()
+                if not product:raise Problem('Item not found.',404)
+                item=json.loads(product[0])
+            else:
+                item={'name':pos_text(d.get('name'),'an item name'),'category':pos_text(d.get('category'),'a category',60),'price':pos_int(d.get('price'),'price',1),'taxable':d.get('taxable')}
+            if type(item['taxable']) is not bool:raise Problem('Choose taxable or non-taxable.')
+            quantity=pos_int(d.get('quantity'),'quantity',1,999)
+            subtotal=item['price']*quantity
+            tax=(subtotal*cart['settings']['tax_bps']+5000)//10000 if item['taxable'] else 0
+            lines.append(dict(item,quantity=quantity,subtotal=subtotal,tax=tax))
+        else:
+            index=pos_int(d.get('index'),'line number',0,len(lines)-1)
+            lines.pop(index)
+        cart['subtotal']=sum(x['subtotal'] for x in lines);cart['tax']=sum(x['tax'] for x in lines);cart['total']=cart['subtotal']+cart['tax']
+        if cart['total']>10000000:raise Problem('Sale exceeds the $100,000 limit.')
+        cart['revision']+=1
+        body={k:v for k,v in cart.items() if k not in ('id','revision','status')}
+        c.execute('UPDATE pos_carts SET body=?,revision=?,updated=? WHERE id=?',(json.dumps(body),cart['revision'],time.time(),ident))
+        return finish({'cart':cart},'POS cart changed')
+    if path=='discard':
+        c.execute("UPDATE pos_carts SET status='discarded',revision=revision+1 WHERE id=?",(ident,))
+        return finish({'ok':True},'POS cart discarded')
+    if path=='cash':
+        if not cart['lines'] or cart['total']<=0:raise Problem('Add an item before checkout.')
+        tender=pos_int(d.get('tender'),'cash received',cart['total'],20000000)
+        sale={k:v for k,v in cart.items() if k not in ('id','revision','status')}
+        sale.update(at=now,cashier=u['name'],method='cash',tender=tender,change=tender-cart['total'])
+        sale_id=c.execute('INSERT INTO pos_sales(cart,owner,body) VALUES(?,?,?)',(ident,owner,json.dumps(sale))).lastrowid
+        c.execute("UPDATE pos_carts SET status='paid',revision=revision+1 WHERE id=?",(ident,))
+        return finish({'sale':dict(id=sale_id,**sale)},'POS cash sale completed #'+str(sale_id))
+    raise Problem('Payment method or action is not available.',400)
+
+
 def init():
     with connect() as c:
         c.executescript('''CREATE TABLE IF NOT EXISTS users(name TEXT PRIMARY KEY COLLATE NOCASE, salt TEXT, hash TEXT, admin INTEGER);
@@ -1505,6 +1625,7 @@ CREATE TABLE IF NOT EXISTS receipts(id TEXT PRIMARY KEY, at REAL, actor TEXT, ca
 CREATE TABLE IF NOT EXISTS audit(at TEXT, actor TEXT, action TEXT, job TEXT);''')
         init_comms(c)
         init_workforce(c)
+        init_pos(c)
         if 'chosen_on' not in {r[1] for r in c.execute('PRAGMA table_info(landing_preferences)')}:
             c.execute('ALTER TABLE landing_preferences ADD COLUMN chosen_on TEXT')
         c.execute('CREATE TABLE IF NOT EXISTS local_admin_sessions(token_hash TEXT PRIMARY KEY,name TEXT COLLATE NOCASE,version TEXT)')
@@ -1550,6 +1671,7 @@ PERMISSIONS={
  'submit_requests':'Submit pickup and delivery requests', 'review_requests':'Review and approve requests',
  'see_requests':'Show flashing Pending Requests button', 'call_contacts':'Show customer call button',
  'text_contacts':'Show On Our Way text button', 'navigate':'Show navigation button',
+ 'use_pos':'Use Point of Sale and view own sales', 'manage_pos':'Configure POS and add catalog items', 'view_pos_sales':'View all POS sales',
  'manage_roles':'Create and edit permission roles',
  'manage_comms_groups':'Create and manage groups',
  'manage_staff_schedule':'Create and edit staff shifts', 'edit_time_cards':'Edit time cards', 'add_time_cards':'Add time cards', 'export_payroll':'View and export payroll', 'manage_work_sites':'Manage time clock work sites and geofencing',
@@ -1578,7 +1700,8 @@ def permission_groups():
     dispatch={'view_reports','view_schedule','create_appointments','edit_appointments','delete_appointments','update_status','cancel_appointments','submit_requests','review_requests','see_requests','call_contacts','text_contacts','navigate','manage_vehicles','show_vehicle_filter','show_search'}
     paging={'send_pages','receive_pages'};receipts={'submit_receipts','view_all_receipts'}
     workforce={'manage_staff_schedule','manage_work_sites','edit_time_cards','add_time_cards','export_payroll'}
-    return {'Application Settings':[k for k in PERMISSIONS if k not in dispatch|paging|receipts|workforce],'Thrift Mart Dispatch':[k for k in PERMISSIONS if k in dispatch],'Store Associate Paging':[k for k in PERMISSIONS if k in paging],'Receipts & Accounting':[k for k in PERMISSIONS if k in receipts],'Print with a Purpose':[],'Scheduling & Time Clock':[k for k in PERMISSIONS if k in workforce]}
+    pos={'use_pos','manage_pos','view_pos_sales'}
+    return {'Point of Sale':[k for k in PERMISSIONS if k in pos],'Application Settings':[k for k in PERMISSIONS if k not in dispatch|paging|receipts|workforce|pos],'Thrift Mart Dispatch':[k for k in PERMISSIONS if k in dispatch],'Store Associate Paging':[k for k in PERMISSIONS if k in paging],'Receipts & Accounting':[k for k in PERMISSIONS if k in receipts],'Print with a Purpose':[],'Scheduling & Time Clock':[k for k in PERMISSIONS if k in workforce]}
 
 def has_permission(u,key): return bool(u['admin'] or u.get('grants',{}).get(key,False))
 def route_allowed(u,path): return has_permission(u,ROUTE_PERMISSIONS.get(path,''))
@@ -2106,6 +2229,11 @@ class Handler(BaseHTTPRequestHandler):
             if self.path=='/manifest.webmanifest':return self.send(json.dumps({'name':'MGC YFC Operations','short_name':'YFC Operations','start_url':'/','scope':'/','display':'standalone','background_color':'#101821','theme_color':'#073ea6','icons':[{'src':'/app-icon-'+str(size)+'.png','sizes':str(size)+'x'+str(size),'type':'image/png','purpose':'any'} for size in (192,512)]}).encode(),kind='application/manifest+json')
             if self.path in ('/favicon.svg','/favicon.ico'):
                 return self.send(FAVICON_SVG.encode(),kind='image/svg+xml')
+            if request.path in ('/pos','/pos/','/pos.js','/pos.css'):
+                filename={'/pos':'pos.html','/pos/':'pos.html','/pos.js':'pos.js','/pos.css':'pos.css'}[request.path]
+                source=ROOT/'static'/filename
+                body=POS_ASSETS[filename].encode('utf-8') if filename in POS_ASSETS else source.read_bytes()
+                return self.send(body,kind={'pos.html':'text/html; charset=utf-8','pos.js':'text/javascript; charset=utf-8','pos.css':'text/css; charset=utf-8'}[filename])
             if self.path in ('/','/mobile','/mobile/','/app.js','/style.css'):
                 filename={'/':'index.html','/mobile':'index.html','/mobile/':'index.html','/app.js':'app.js','/style.css':'style.css'}[self.path]
                 kind={'/':'text/html; charset=utf-8','/mobile':'text/html; charset=utf-8','/mobile/':'text/html; charset=utf-8','/app.js':'text/javascript','/style.css':'text/css'}[self.path]
@@ -2150,6 +2278,8 @@ class Handler(BaseHTTPRequestHandler):
                 if request.path=='/api/admin/user-identity':
                     target=identity_target(c,u,parse_qs(request.query).get('name',[''])[0])
                     return self.send(user_identity(c,target['profile_id'],target['name']))
+                if request.path.startswith('/api/pos/'):
+                    return pos_get(self,c,u,request.path[len('/api/pos/'):],parse_qs(request.query))
                 if request.path.startswith('/api/profile/'):
                     return profile_get(self,c,u,request.path[len('/api/profile/'):])
                 if request.path.startswith('/api/workforce/'):
@@ -2371,6 +2501,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send({'inactive_minutes':minutes})
                 if self.path.startswith('/api/update-flow/'):
                     return flow_post(self,c,u,self.path.rsplit('/',1)[-1],d)
+                if self.path.startswith('/api/pos/'):
+                    return pos_post(self,c,u,self.path[len('/api/pos/'):],d)
                 if self.path.startswith('/api/profile/'):
                     return profile_post(self,c,u,self.path[len('/api/profile/'):],d)
                 if self.path.startswith('/api/workforce/'):

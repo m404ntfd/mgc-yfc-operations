@@ -1,10 +1,17 @@
-# MGC YFC Operations 0.39.3
+# MGC YFC Point of Sale 1.0.0 + Operations 0.39.4
 
-- Adds live active/inactive connections to the native server Administration panel. Excludes the always-running local server controller from user counts.
-- Defines activity by user interaction, with a five-minute default timeout configurable in Application Settings → Connection Activity. Background polling does not keep a user active. Inactive connections no longer block updates.
-- Adds coordinated update notifications to both browser and native-controller entry points. Users can finish work, minimize the notice, and acknowledge when leaving their page. Completion is reported after restart.
-- Adds a trusted local-server administrator override for stuck updates, with a warning about unsaved work and an audit entry. Remote/browser callers cannot use it. Verification, backup, and rollback still apply.
-- Automatically saves valid shift edits and safely retries lost responses without duplicate shifts. Fixes saved forms incorrectly remaining marked unfinished.
-- Preserves existing timecards, reservations, attachments, audit history, accounts, and roles. Changes to storage are additive metadata/settings tables.
+Introduces a separate Point of Sale application and installer, backed by the existing Operations server. Operations remains version 0.39.4; POS is version 1.0.0.
 
-Use the full Windows installer for this release to update the server program and its embedded controller. Exit the server using its tray menu, run the installer over the existing installation, and restart. Do not uninstall or remove the data folder. Inactive sessions and forced updates may lose unsaved work; save or coordinate with users first when possible.
+- Separate POS sign-in and checkout window, with its own Windows shortcut.
+- Permission-controlled access to Time Clock, Reservations (pickup/delivery scheduling), and Paging in Operations. Saved carts remain in POS.
+- Catalog and manual items, saved carts, cash tender/change, printable receipts, immutable sales history, and manager setup.
+- Credit card areas display: **Credit cards will be added in future updates.** No card processor is enabled.
+- Duplicate-request protection, cart revision checks, and safe-update acknowledgement in POS.
+- Additive POS tables preserve existing timecards, reservations, attachments, and audit history.
+
+## Install
+Update the existing Operations server to 0.39.4 first. Back up, exit the server, and install the Operations setup over the existing folder; do not uninstall or delete data. The verified in-app server update is also supported. Then install **MGC-YFC-POS-Setup-v1.0.0.exe** on checkout computers and enter the Operations server address. Use existing accounts; grant staff Point of Sale permissions. Configure the receipt name and actual tax rate before checkout.
+
+This first release supports USD cash sales with one tax rate and per-line rounding. It does not yet include refunds/voids, discounts, inventory tracking, Clover catalog import, cash-drawer hardware integration, or offline checkout. Card payments are deferred. The latest 100 permitted sales are displayed; older records are retained.
+
+Validated with browser checkout/retry tests, Operations navigation, update acknowledgement, permission checks, and populated upgrade/backup/rollback checks covering historical and open timecards, breaks, reservation attachments, and audit records. No production database is included in release assets.

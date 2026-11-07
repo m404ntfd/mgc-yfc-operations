@@ -3126,3 +3126,20 @@ const settingsAllowedBeforeActivity=settingsAllowed;settingsAllowed=function(ind
 let activityLoadVersion=0;const settingsSectionBeforeActivity=settingsSection;settingsSection=function(index){const result=settingsSectionBeforeActivity(index);if(index===activityPanelIndex&&!activityPanel.hidden){const version=++activityLoadVersion,form=$('activitySettingsForm'),input=form.elements.inactive_minutes,button=form.querySelector('[type=submit]');input.disabled=button.disabled=true;$('activitySettingsStatus').textContent='Loading settings…';api('activity-settings').then(data=>{if(version!==activityLoadVersion)return;input.value=data.inactive_minutes;input.disabled=button.disabled=false;$('activitySettingsStatus').textContent='';}).catch(error=>{if(version===activityLoadVersion)$('activitySettingsStatus').textContent=error.message;});}return result;};
 $('activitySettingsBack').onclick=()=>settingsCategory(0);
 $('activitySettingsForm').onsubmit=async event=>{event.preventDefault();const button=event.submitter;button.disabled=true;try{const result=await api('activity-settings',{inactive_minutes:Number(event.target.elements.inactive_minutes.value)});$('activitySettingsStatus').textContent='Saved. Connections become inactive after '+result.inactive_minutes+' minutes without interaction.';}catch(error){$('activitySettingsStatus').textContent=error.message;}finally{button.disabled=false;}};
+
+
+// Open a permitted Operations tool from the separate POS application.
+const chooseLandingBeforePos=chooseLanding;
+chooseLanding=async function(force=false){
+ const target=location.hash;
+ if(!force&&['#pos-time-clock','#pos-reservations','#pos-paging'].includes(target)){
+  history.replaceState(null,'',location.pathname+location.search);
+  if(!guardUpdateNavigation())return;
+  if(target==='#pos-time-clock'){workOpen(false,'clock');return;}
+  if(target==='#pos-reservations'&&can('view_schedule')){storeSection('dispatch');return;}
+  if(target==='#pos-paging'&&can('send_pages')){storeSection('paging');return;}
+  toast('Your account does not have access to that Operations function.');
+ }
+ return chooseLandingBeforePos(force);
+};
+window.addEventListener('hashchange',()=>{if(user&&location.hash.startsWith('#pos-'))chooseLanding();});
