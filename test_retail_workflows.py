@@ -14,6 +14,39 @@ class WorkflowTests(unittest.TestCase):
   return next(p for p in self.f.call('pos/catalog-config')[1]['products'] if p['id']==ident)
  def cart(self,**data):return self.ok('new',**data)['cart']
  def add(self,cart,p,**data):return self.ok('add',cart=cart['id'],revision=cart['revision'],product=p['id'],quantity=1,**data)['cart']
+ def test_shared_retail_themes_permissions_and_conflicts(self):
+  code,settings=self.f.call('account/retail-theme');self.assertEqual(code,200);self.assertEqual(settings['default'],'harbor-blue')
+  code,result=self.f.call('account/retail-theme',dict(theme='midnight',revision=0));self.assertEqual(code,200,result)
+  self.assertEqual(self.f.call('account/retail-theme')[1]['theme'],'midnight')
+  self.assertEqual(self.f.call('account/retail-theme',dict(theme='classic-gray',revision=0))[0],409)
+  self.assertEqual(self.f.call('account/retail-theme',dict(theme='bad',revision=1))[0],400)
+  self.assertEqual(self.f.call('account/retail-theme',dict(scope='store',theme='coastal-teal',revision=0))[0],200)
+  self.f.call('admin/permissions',dict(name='Employee',grants={'use_pos':True},can_create=False,see_requests=False));e=self.f.client('theme-employee');self.f.call('login',dict(name='Employee',password='testpassword'),e)
+  result=self.f.call('account/retail-theme',client=e)[1];self.assertEqual((result['theme'],result['default']),('default','coastal-teal'))
+  self.assertEqual(self.f.call('account/retail-theme',dict(scope='store',theme='midnight',revision=1),e)[0],403)
+  self.assertEqual(self.f.call('account/retail-theme',dict(theme='coastyouth-red',revision=0),e)[0],200)
+  self.assertEqual(self.f.call('account/retail-theme')[1]['theme'],'midnight')
+ def test_open_priced_item_validation_snapshot_and_refund(self):
+  p=self.product(rules={'open_priced':True});cart=self.cart()
+  for invalid in [None,0,-1,True,12.34,'500',10000001]:
+   self.assertEqual(self.post('add',cart=cart['id'],revision=cart['revision'],product=p['id'],quantity=1,open_price=invalid)[0],400)
+  args=dict(cart=cart['id'],revision=cart['revision'],product=p['id'],quantity=2,open_price=1234,request=uuid.uuid4().hex)
+  first=self.f.call('pos/add',args);self.assertEqual(first[0],200,first);self.assertEqual(first,self.f.call('pos/add',args));cart=first[1]['cart']
+  self.assertEqual((cart['subtotal'],cart['tax'],len(cart['lines'])),(2468,247,1));self.assertEqual(cart['lines'][0]['entered_price'],1234)
+  cart=self.add(cart,p,open_price=500);self.assertEqual([x['price'] for x in cart['lines']],[1234,500])
+  cart=self.ok('hold',cart=cart['id'],revision=cart['revision'])['cart'];cart=self.ok('resume',cart=cart['id'],revision=cart['revision'])['cart']
+  p['rules']['open_priced']=False;p['price']=9999;self.ok('product-save',**p)
+  self.assertEqual(self.post('add',cart=cart['id'],revision=cart['revision'],product=p['id'],quantity=1,open_price=1)[0],400)
+  sale=self.ok('cash',cart=cart['id'],revision=cart['revision'],tender=5000)['sale'];self.assertEqual(sale['total'],3265)
+  refund=self.ok('refund',sale=sale['id'],lines=[{'index':0,'quantity':2},{'index':1,'quantity':1}],reason='Test return',refund_revision=0,policy_revision=self.f.call('pos/policies')[1]['policy']['revision'],confirmed=True)['refund'];self.assertEqual(refund['cash'],3265)
+  self.assertEqual(self.f.call('pos/sales')[1]['sales'][0]['lines'][0]['price'],1234)
+ def test_open_priced_choices_and_bundle_guards(self):
+  p=self.product(rules={'open_priced':True,'modifiers':[{'id':'size','name':'Size','required':True,'options':[{'id':'large','name':'Large','price':200}]}]})
+  cart=self.add(self.cart(),p,open_price=700,choices={'size':'large'});self.assertEqual(cart['total'],990)
+  plain=self.product();bundle=self.product(rules={'components':[{'product':plain['id'],'quantity':1}]})
+  plain['rules']['open_priced']=True;self.assertEqual(self.post('product-save',**plain)[0],400)
+  bundle['rules']['open_priced']=True;self.assertEqual(self.post('product-save',**bundle)[0],400)
+  self.assertEqual(self.post('product-save',name='Bad',category='Retail',price=100,taxable=True,rules={'open_priced':'true'})[0],400)
  def test_choices_promotion_availability_and_snapshot(self):
   p=self.product(rules={'modifiers':[{'id':'size','name':'Size','required':True,'options':[{'id':'large','name':'Large','price':200}]}]});cart=self.cart()
   self.assertEqual(self.post('add',cart=cart['id'],revision=cart['revision'],product=p['id'],quantity=1)[0],400)

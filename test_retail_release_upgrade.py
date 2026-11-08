@@ -1,4 +1,4 @@
-"""Exercise the release updater against synthetic v0.39.7 operational data."""
+"""Exercise the release updater against synthetic v0.41.0 operational data."""
 from pathlib import Path
 import hashlib,json,os,sqlite3,subprocess,sys,urllib.request,tempfile
 
@@ -40,7 +40,7 @@ before=snapshot(database)
 pending=target/'data/pending-update';pending.mkdir()
 raw=(release_root/'dist/Store-Dispatch-Update.zip').read_bytes()
 (pending/'release.zip').write_bytes(raw)
-(pending/'manifest.json').write_text(json.dumps(dict(version='0.41.0',sha256=hashlib.sha256(raw).hexdigest())))
+(pending/'manifest.json').write_text(json.dumps(dict(version='0.42.0',sha256=hashlib.sha256(raw).hexdigest())))
 subprocess.run([sys.executable,'-c',"import updater; backup=updater.apply(); print(backup)"],cwd=target,env=environment,check=True)
 assert snapshot(database)==before,'Updater changed database records before migration'
 subprocess.run([sys.executable,'-c','import server; server.init()'],cwd=target,env=environment,check=True)
@@ -48,10 +48,10 @@ after=snapshot(database)
 assert {name:after[name] for name in before}==before,'Migration changed existing operational data'
 backup=Path(json.loads((target/'data/last-update.json').read_text())['backup'])
 assert snapshot(backup/'schedule.db')==before,'Backup did not preserve original records'
-assert (target/'VERSION').read_text().strip()=='0.41.0'
+assert (target/'VERSION').read_text().strip()=='0.42.0'
 subprocess.run([sys.executable,'-c',"import server; server.init()\nwith server.connect() as c:\n assert server.work_hours(c,'stable-employee-id',(0,2000),1500)==(1200,900)\nprint('Timecard totals and open break retained')"],cwd=target,env=environment,check=True)
 assert {name:snapshot(database)[name] for name in before}==before,'Repeated startup changed records'
-subprocess.run([sys.executable,'-c',"import updater,json; from pathlib import Path; updater.rollback_code(Path(json.loads((updater.DATA/'last-update.json').read_text())['backup'])); assert updater.current()=='0.40.0'"],cwd=target,env=environment,check=True)
+subprocess.run([sys.executable,'-c',"import updater,json; from pathlib import Path; updater.rollback_code(Path(json.loads((updater.DATA/'last-update.json').read_text())['backup'])); assert updater.current()=='0.41.0'"],cwd=target,env=environment,check=True)
 subprocess.run([sys.executable,'-c','import server; server.init()'],cwd=target,env=environment,check=True)
 assert {name:snapshot(database)[name] for name in before}==before,'Rollback changed original records'
-print('PASS populated 0.40.0 to 0.41.0 preview upgrade, backup, repeated startup and rollback; all existing rows and attachments preserved.')
+print('PASS populated 0.41.0 to 0.42.0 preview upgrade, backup, repeated startup and rollback; all existing rows and attachments preserved.')

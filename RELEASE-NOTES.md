@@ -1,17 +1,11 @@
-# CoastYouth Retail 0.41.0 release
+# CoastYouth Retail 0.42.0
 
-DESK 1.4.0 and OFFICE 1.1.0 add shared terminal layouts and the retail workflows reviewed with the owner. Computer Setup offers Server, OFFICE, POS and Custom installation choices while retaining existing component installation IDs and paths.
+DESK 1.5.0 and OFFICE 1.2.0 add Open Priced Items and five shared color themes.
 
-- OFFICE layout editor, shared terminal registration and server terminal-administration shortcut.
-- Required item choices, priced add-ons, fixed-price bundles with component tax allocation, scheduled availability and promotions.
-- Held-sale search and permission-controlled transfer; manager-approved fixed/percentage adjustments and cancellation reasons.
-- Receipt-based full/partial refunds with a configurable 30-day default window, original cash/store-credit allocation and duplicate-return protection.
-- Optional nearest-five-cent rounding of cash change; OFF by default. Prices, tax and store-credit amounts remain exact. Receipts and reports show rounding separately.
-- Catalog CSV preview/import/export, common product changes, printing categories and sales/refund reports. Printing uses the staff-selected destination in the print dialog.
-- Separate permissions for adjustment approval, held-sale transfer and refunds. Initial discount/surcharge limits are 20%/10%, editable in OFFICE; promotional stacking is excluded by default.
+- OFFICE product Properties includes Open Priced Item. DESK asks for a positive unit price each time it is selected; existing tax and selected add-ons apply. Canceling adds nothing. Saved sales and refunds retain original prices. Fixed-price bundles and scheduled promotion prices cannot use open-priced products.
+- Appearance offers Classic Gray, Harbor Blue, Coastal Teal, Midnight, and CoastYouth Red. Personal preferences are shared between DESK and OFFICE through the existing server. Users with Manage POS permission can change the store default. Personal changes apply immediately; other sessions pick up changes at their next sign-in. Product button colors and white receipt paper remain distinct.
+- All previously released terminal, layout, cash-rounding, discount, refund, and installer functions remain included.
 
-Existing timecards, open punches/breaks, reservations, identifiers, attachments, credit balances and original receipts are retained. Migrations are additive. Isolated populated upgrade, backup, repeated-startup and rollback checks are included in release validation.
+The theme preference table is additive. Existing timecards, open punches/breaks, reservations, attachments, accounts and sales are not reset or replaced. Populated upgrade, backup and rollback checks are required before publication.
 
-Update the existing server first, then DESK and OFFICE. Keep the current server folder/data location and use the same server address in each client. Make and verify a current backup before updating the live server. Publishing this release does not install it automatically on store computers.
-
-Credit-card processing remains a future update. Optional Windows computer renaming requires administrator approval and a later restart; it is never performed automatically. Renaming a server may require updating saved client addresses.
+Verify a current backup and update the existing server first, retaining its current folder/data location. Then update DESK and OFFICE using their existing server address. Publishing does not install the update on store computers. Credit-card processing remains a future update.

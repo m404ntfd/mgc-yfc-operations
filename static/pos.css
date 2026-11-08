@@ -39,3 +39,26 @@ body[data-kiosk=pending] #posRoot,body[data-kiosk=setup] #posRoot{display:none!i
 #financeRules{max-width:1000px;background:white;padding:22px;border:1px solid #d7e1e9;border-radius:12px}#financeRules textarea{font:inherit;display:block;width:100%;border:1px solid #cbd5e0;padding:10px;border-radius:7px}.financeRoundingExamples{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.financeRoundingExamples span{padding:12px;background:#edf5f5;border-radius:8px;text-align:center}#financeRules h3{margin:16px 0 0}#financeRefundForm input[type=number]{max-width:110px}#financeRefundPreview .flowStats{grid-template-columns:1fr 1fr}#financeCashPreview{font-size:13px;color:#205859}.flowRefundButton{margin:8px}@media print{.flowRefundButton{display:none!important}}
 #flowOffice button.primary{background:#b51f2b!important;color:white!important;border-color:#b51f2b!important}#flowOffice button.primary:disabled{opacity:.55}
 #flowOffice .flowTabs [aria-pressed=true]{background:#245c69!important;color:white!important}.flowToolbar>input{flex:1;width:auto;min-width:130px}.flowToolbar>label{margin:0}.flowTabs button{min-width:110px}#flowModifierGroups .flowToolbar{flex-wrap:nowrap}#flowModifierGroups .flowToolbar>input{flex:2}#flowModifierGroups .flowToolbar>label{flex:1}#financeRules section{padding:8px 0}#financeRules section h3{margin-top:0}
+
+#flowChoices button.primary{background:#b51f2b;color:white;border-color:#b51f2b}#flowChoices button.primary:disabled{opacity:.55}
+
+body[data-retail-theme=harbor-blue]{--rt-bg:#e6edf4;--rt-head:#173451;--rt-surface:#ffffff;--rt-text:#21384e;--rt-muted:#4b6278;--rt-border:#bdcddd;--rt-action:#456c90;--rt-accent:#245c8e;}
+body[data-retail-theme=classic-gray]{--rt-bg:#d7dbdf;--rt-head:#68737e;--rt-surface:#f5f6f7;--rt-text:#26333f;--rt-muted:#475867;--rt-border:#b5bec7;--rt-action:#65727e;--rt-accent:#9f2534;}
+body[data-retail-theme=coastal-teal]{--rt-bg:#e5eeec;--rt-head:#193e3e;--rt-surface:#ffffff;--rt-text:#243e3a;--rt-muted:#48665e;--rt-border:#b5cbc5;--rt-action:#366b64;--rt-accent:#176d61;}
+body[data-retail-theme=midnight]{--rt-bg:#111923;--rt-head:#182534;--rt-surface:#223143;--rt-text:#f1f5fa;--rt-muted:#c2cfdd;--rt-border:#40546a;--rt-action:#344b64;--rt-accent:#a92e40;}
+body[data-retail-theme=coastyouth-red]{--rt-bg:#f1eeed;--rt-head:#511b25;--rt-surface:#ffffff;--rt-text:#382b30;--rt-muted:#70555d;--rt-border:#d6c3c8;--rt-action:#7b3846;--rt-accent:#b51f2b;}
+body[data-retail-theme] {--accent:var(--rt-accent);--border:var(--rt-border);background:var(--rt-bg);color:var(--rt-text)}
+body[data-retail-theme] .sidebar{background:var(--rt-head);color:white}
+body[data-retail-theme] .workspace,body[data-retail-theme] #officeHub,body[data-retail-theme] .itemsPane{background:var(--rt-bg);color:var(--rt-text)}
+body[data-retail-theme] header,body[data-retail-theme] dialog,body[data-retail-theme] .authCard,body[data-retail-theme] .officeTile,body[data-retail-theme] #officeCatalog,body[data-retail-theme] .officeUserTable,body[data-retail-theme] .officeUserColumns form,body[data-retail-theme] #officeForms form,body[data-retail-theme] #financeRules,body[data-retail-theme] #flowProductForm section,body[data-retail-theme] .flowStats>div,body[data-retail-theme] .flowBulkProducts,body[data-retail-theme] .retailPanes section{background:var(--rt-surface);color:var(--rt-text);border-color:var(--rt-border)}
+body[data-retail-theme] input,body[data-retail-theme] select,body[data-retail-theme] textarea,body[data-retail-theme] button:not([data-pos-product]):not([data-pos-category]){background:var(--rt-surface);color:var(--rt-text);border-color:var(--rt-border)}
+body[data-retail-theme] .registerRail button,body[data-retail-theme] .sidebar button,body[data-retail-theme] #officeNav [aria-current=page]{background:var(--rt-action);color:white}
+body[data-retail-theme] button.primary,body[data-retail-theme] #flowOffice button.primary,body[data-retail-theme] #flowChoices button.primary,body[data-retail-theme] #posPayNow{background:var(--rt-accent)!important;color:white!important;border-color:var(--rt-accent)!important}
+body[data-retail-theme] #officeHub h1,body[data-retail-theme] .officeTile strong,body[data-retail-theme] .officeTile small{color:var(--rt-text)}
+body[data-retail-theme] p,body[data-retail-theme] .eyebrow{color:var(--rt-muted)}
+body[data-retail-theme] .receiptPane,body[data-retail-theme] #posReceipt,body[data-retail-theme] .flowTicketPreview{background:white;color:#213142}
+body[data-retail-theme] .receiptPane p,body[data-retail-theme] #posReceipt p,body[data-retail-theme] .flowTicketPreview p{color:#43566a}
+body[data-retail-theme] .receiptPane input,body[data-retail-theme] .receiptPane select,body[data-retail-theme] .receiptPane button:not(.primary){background:white;color:#213142}
+body[data-retail-theme=midnight] #connection{color:#8dd9b7}body[data-retail-theme] .flowError{color:#ad273d}body[data-retail-theme=midnight] .flowError{color:#ffb5bd}#retailAppearance{white-space:nowrap}@media print{body[data-retail-theme]{background:white;color:#213142}}
+
+body[data-retail-theme] .cardNotice,body[data-retail-theme] .cardNotice p{color:#76531e}body[data-retail-theme] .receiptHeading{background:var(--rt-head);color:white}
