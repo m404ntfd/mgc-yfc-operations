@@ -9,8 +9,10 @@ def prepare(root=None):
  path=root/'server.py';source=path.read_text(encoding='utf-8')
  source,count=re.subn(r'^WEB_ASSETS=.* # prepared by prepare_web_assets.py$',lambda _: 'WEB_ASSETS='+repr(assets)+' # prepared by prepare_web_assets.py',source,flags=re.M)
  if count!=1:raise ValueError('Web asset marker missing')
- pos={name:(root/'static'/name).read_text(encoding='utf-8') for name in ('pos.html','pos.js','pos.css')}
+ js=root/'static/pos.js';text=js.read_text(encoding='utf-8');text=re.sub(r'// BEGIN CUSTOMER OFFICE.*?// END CUSTOMER OFFICE',lambda _: '// BEGIN CUSTOMER OFFICE\n'+(root/'static/customer-office.js').read_text(encoding='utf-8')+'\n// END CUSTOMER OFFICE',text,flags=re.S);js.write_text(text,encoding='utf-8')
+ pos={name:(root/'static'/name).read_text(encoding='utf-8') for name in ('pos.html','pos.js','pos.css','customer-display.html','customer-display.js','customer-display.css')}
  source,count=re.subn(r'^POS_ASSETS=.* # prepared POS application assets$',lambda _: 'POS_ASSETS='+repr(pos)+' # prepared POS application assets',source,flags=re.M)
  if count!=1:raise ValueError('POS asset marker missing')
+ source=re.sub(r'# BEGIN CUSTOMER SERVICES.*?# END CUSTOMER SERVICES',lambda _: '# BEGIN CUSTOMER SERVICES\n'+(root/'customer_services.py').read_text(encoding='utf-8')+'\n# END CUSTOMER SERVICES',source,flags=re.S)
  path.write_text(source,encoding='utf-8')
 if __name__=='__main__':prepare()

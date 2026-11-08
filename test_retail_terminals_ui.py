@@ -11,7 +11,7 @@ try:
  for name,category,price in [('Adult shirt','Clothing',599),('Jeans','Clothing',899),('Jacket','Clothing',1499),('Kids shirt','Clothing',399),('Table lamp','Home',1299),('Picture frame','Home',499),('Paperback','Books',199),('Side table','Furniture',2499)]:products.append(post('product',name=name,category=category,price=price,taxable=True)['product'])
  with sync_playwright() as pw:
   b=pw.chromium.launch(**({'executable_path':os.environ['TEST_CHROMIUM']} if os.environ.get('TEST_CHROMIUM') else {}));ctx=b.new_context(viewport={'width':1440,'height':1000});p=ctx.new_page();errors=[];p.on('pageerror',lambda e:errors.append(str(e)));origin=f'http://127.0.0.1:{f.port}';out=Path(os.environ.get('TEST_ARTIFACTS','test-artifacts'));out.mkdir(parents=True,exist_ok=True);
-  p.goto(origin+'/office');p.locator('#login [name=name]').fill('Admin');p.locator('#login [name=password]').fill('testpassword');p.locator('#login button').click();expect(p.locator('#officeTiles .officeTile')).to_have_count(22)
+  p.goto(origin+'/office');p.locator('#login [name=name]').fill('Admin');p.locator('#login [name=password]').fill('testpassword');p.locator('#login button').click();expect(p.locator('#officeTiles .officeTile')).to_have_count(25)
   p.screenshot(path=str(out/'Retail-OFFICE-Home-Preview.png'))
   p.locator('[data-office-action=layouts]').click();p.locator('#layoutForm [name=name]').fill('Front counter');p.locator('#groupName').fill('Clothing');p.locator('#groupColor').fill('#9b477e')
   for product in products[:4]:p.locator('[data-product-add="'+product['id']+'"]').click()

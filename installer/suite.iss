@@ -1,5 +1,5 @@
 #ifndef AppVersion
-#define AppVersion "0.42.0"
+#define AppVersion "0.43.0"
 #endif
 [Setup]
 AppId={{2F34FB97-834C-4672-B7F2-E5463D1A3A0A}
@@ -25,8 +25,8 @@ Name: "office"; Description: "CoastYouth Retail OFFICE"; Types: office
 Name: "pos"; Description: "CoastYouth Retail DESK"; Types: pos
 [Files]
 Source: "..\dist\MGC-YFC-Operations-Setup-v{#AppVersion}.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
-Source: "..\dist\CoastYouth-Retail-OFFICE-Setup-v1.2.0.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
-Source: "..\dist\MGC-YFC-POS-Setup-v1.5.0.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
+Source: "..\dist\CoastYouth-Retail-OFFICE-Setup-v1.3.0.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
+Source: "..\dist\MGC-YFC-POS-Setup-v1.6.0.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 [Code]
 var NamePage: TInputQueryWizardPage;
 procedure InitializeWizard;
@@ -68,8 +68,8 @@ var Code: Integer; Params: String;
 begin
  if CurStep <> ssPostInstall then Exit;
  if WizardIsComponentSelected('server') then RunInstaller('MGC-YFC-Operations-Setup-v{#AppVersion}.exe', '/NORESTART /TYPE=both', 'SERVERDIR');
- if WizardIsComponentSelected('office') then RunInstaller('CoastYouth-Retail-OFFICE-Setup-v1.2.0.exe', '/NORESTART', 'OFFICEDIR');
- if WizardIsComponentSelected('pos') then RunInstaller('MGC-YFC-POS-Setup-v1.5.0.exe', '/NORESTART', 'POSDIR');
+ if WizardIsComponentSelected('office') then RunInstaller('CoastYouth-Retail-OFFICE-Setup-v1.3.0.exe', '/NORESTART', 'OFFICEDIR');
+ if WizardIsComponentSelected('pos') then RunInstaller('MGC-YFC-POS-Setup-v1.6.0.exe', '/NORESTART', 'POSDIR');
  if NamePage.Values[0] <> '' then begin
   Params := '-NoProfile -Command "try { Rename-Computer -NewName ''' + NamePage.Values[0] + ''' -Force -ErrorAction Stop; exit 0 } catch { exit 1 }"';
   if not ShellExec('runas', ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'), Params, '', SW_HIDE, ewWaitUntilTerminated, Code) then
