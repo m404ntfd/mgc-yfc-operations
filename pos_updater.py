@@ -2,7 +2,7 @@
 import hashlib,json,os,re,shutil,subprocess,sys,threading,time
 from pathlib import Path
 from urllib.request import Request,urlopen
-VERSION='1.8.0'
+VERSION='1.9.0'
 REPO='m404ntfd/mgc-yfc-operations'
 def version(value):
  if not isinstance(value,str) or not re.fullmatch(r'\d+\.\d+\.\d+',value):raise ValueError('Invalid POS version.')
@@ -35,7 +35,7 @@ class PosUpdater:
    if not ident:self.job=None;self.state='idle';return {'state':'idle','version':self.version}
    try:
     job=self.ticket(ident)
-    if job.get('target') not in ('all',self.bridge._store.data['device']):return {'state':'idle','version':self.version}
+    if job.get('target') not in ('all',self.bridge._store.data['device']) and self.bridge._store.data['device'] not in job.get('targets',[]):return {'state':'idle','version':self.version}
     if version(job['version'])<=version(self.version):return {'state':'complete','version':self.version}
     if not self.job or self.job['id']!=ident:
      seconds=job.get('seconds')

@@ -1,12 +1,12 @@
-# CoastYouth Retail STORE OPS 0.46.0 / DESK 1.8.0 / OFFICE 1.5.0
+# CoastYouth Retail STORE OPS 0.47.0 / DESK 1.9.0 / OFFICE 1.6.0
 
-- STORE OPS branding with the approved green cart and wave icon, transparent tile corners, browser/favicon and mobile home-screen artwork.
-- Reordered view menu, Time Functions naming, and aligned mobile shortcut buttons.
-- OFFICE Timekeeping area for authorized management and reports using the shared server records.
-- OFFICE staff communications review with a separate permission: administrators by default, manually assigned for other roles. Retained private/group messages, saved-message information and attachments remain reviewable after users hide messages or leave groups.
-- Private-message deletion confirmation explains that only the requesting user's view is removed. Message preferences include a device notification test.
-- Updated DESK and OFFICE icon corners and Windows installed-program icon registration.
+- OFFICE computer registration groups DESK and OFFICE installations by persistent Windows computer identity. IP address changes do not create another computer. MAC addresses are reference information, not credentials.
+- Administrators can name and register discovered computers, view application versions and connection status, and request coordinated updates across selected computers.
+- OFFICE home screen shows available and pending application updates. Updates warn staff, wait for unfinished transactions/forms, and install automatically when safe. Offline or closed applications remain pending until reopened and signed in.
+- Cancellation, verified downloads, per-application targets, completed-version reporting and an administrator audit trail are included.
 
-Existing installation identities and data locations are retained. The only new database table records departed conversation members; existing business records are not rewritten. Release checks cover populated upgrades, backup, repeated startup, rollback and installer data preservation.
+Install this desktop update once on each computer to enable discovery and registration. Update the existing server first, then DESK and OFFICE; open and sign in to each application, then register computers in OFFICE. Server upgrades continue through the server's existing backup and active-user safeguards. This release does not install a background agent to update closed applications.
 
-Before installing, create and verify a current backup. Update the existing server first, retaining its installation and data folders, then update DESK and OFFICE. Publishing does not install updates on store computers. Existing home-screen shortcuts may need to be recreated to refresh cached artwork.
+Existing installation IDs, data locations, users and business records are retained. New inventory/update tables are additive. Release gates test populated timecard, reservation, sales and store-credit preservation, attachments, backup, repeated startup, rollback, and actual Windows installer upgrades.
+
+Create and verify a current backup before installation. Keep the existing installation and data folders. Publishing does not install updates on store computers.

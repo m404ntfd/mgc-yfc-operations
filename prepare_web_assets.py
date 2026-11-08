@@ -20,5 +20,6 @@ def prepare(root=None):
  if count!=1:raise ValueError('POS asset marker missing')
  source=re.sub(r'# BEGIN CUSTOMER SERVICES.*?# END CUSTOMER SERVICES',lambda _: '# BEGIN CUSTOMER SERVICES\n'+(root/'customer_services.py').read_text(encoding='utf-8')+'\n# END CUSTOMER SERVICES',source,flags=re.S)
  source=re.sub(r'# BEGIN RETAIL REPORTS.*?# END RETAIL REPORTS',lambda _: '# BEGIN RETAIL REPORTS\n'+(root/'retail_reports.py').read_text(encoding='utf-8')+'\n# END RETAIL REPORTS',source,flags=re.S)
+ source=re.sub(r'# BEGIN COMPUTER REGISTRY.*?# END COMPUTER REGISTRY',lambda _: '# BEGIN COMPUTER REGISTRY\n'+(root/'computer_registry.py').read_text(encoding='utf-8-sig')+'\n# END COMPUTER REGISTRY',source,flags=re.S)
  path.write_text(source,encoding='utf-8')
 if __name__=='__main__':prepare()

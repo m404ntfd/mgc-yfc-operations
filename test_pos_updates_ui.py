@@ -15,7 +15,7 @@ def run():
    origin=f'http://127.0.0.1:{f.port}';p.goto(origin+'/pos?kiosk=1');password_login_page(p).locator('#login [name=name]').fill('Admin');p.locator('#login [name=password]').fill('testpassword');p.locator('#login button').click()
    p.locator('#posNew').click();expect(p.locator('#posCart')).to_contain_text('Saved on server');p.locator('#posManualShortcut').click()
    form=p.locator('#posManual');form.locator('[name=name]').fill('Test sale');form.locator('[name=category]').fill('General');form.locator('[name=price]').fill('5');form.locator('button').click();expect(p.locator('#posCart')).to_contain_text('$5.00')
-   office=p.context.new_page();office.goto(origin+'/office');office.locator('[data-office-action=updates]').click();expect(office.locator('#posReleaseStatus')).to_contain_text('9.0.0')
+   office=p.context.new_page();office.goto(origin+'/office#pos-updates');expect(office.locator('#posReleaseStatus')).to_contain_text('9.0.0')
    office.locator('#posUpdateSettings [name=seconds]').fill('30');office.locator('#posUpdateSettings button').click();office.locator('#startPosRelease').click();expect(office.locator('#posReleaseStatus')).to_contain_text('requested');office.locator('#closePosUpdates').click()
    expect(p.locator('#posInstallBanner')).to_be_visible(timeout=10000);expect(p.locator('#posInstallReady')).to_be_disabled();expect(p.locator('#posCart')).to_contain_text('$5.00')
    out=Path(os.environ.get('TEST_ARTIFACTS','test-artifacts'));out.mkdir(parents=True,exist_ok=True);p.screenshot(path=str(out/'POS-Update-Warning-Preview.png'))
