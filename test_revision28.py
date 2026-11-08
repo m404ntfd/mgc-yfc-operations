@@ -16,7 +16,7 @@ def run():
     page.on('pageerror',lambda e:errors.append(str(e)))
     page.goto(f'http://127.0.0.1:{F.port}')
     favicon=page.request.get(f'http://127.0.0.1:{F.port}/favicon.svg');assert favicon.ok and 'image/svg+xml' in favicon.headers['content-type']
-    assert '<svg' in favicon.text() and '#ea4520' in favicon.text()
+    assert '<svg' in favicon.text() and 'data:image/png;base64,' in favicon.text()
     assert page.locator('link[rel=icon]').get_attribute('href')=='/favicon.svg'
     page.locator('#login [name=name]').fill('Admin');page.locator('#login [name=password]').fill('wrongpassword');page.locator('#login button').click()
     expect(page.locator('#loginAttempts')).to_have_text('Attempts Remaining Until Account Lock: 2')

@@ -19,6 +19,8 @@ class WebAssetTests(unittest.TestCase):
    assets=ast.literal_eval(assignment.value)
    self.assertEqual(assets['gif'],''.join(part.read_text() for part in sorted((source/'assets').glob('plug-*.b64'))))
    for size in ('180','192','512'):self.assertTrue(base64.b64decode(assets[size]).startswith(b'\x89PNG'))
+   self.assertTrue(base64.b64decode(assets['ico']).startswith(b'\x00\x00\x01\x00'))
+   self.assertEqual({k:assets[k] for k in ('180','192','512','ico')},__import__('json').loads((source/'assets/home-icons.json').read_text()))
    pos=next(node for node in module.body if isinstance(node,ast.Assign) and any(isinstance(target,ast.Name) and target.id=='POS_ASSETS' for target in node.targets))
    self.assertEqual(set(ast.literal_eval(pos.value)),{'pos.html','pos.js','pos.css','customer-display.html','customer-display.js','customer-display.css'})
    output=io.BytesIO()
