@@ -26,7 +26,7 @@ try:
   p.evaluate("document.querySelector('.officeUserWizard').close()");p.locator('#officeBack').click();p.locator('[data-office-action=labor-reports]').click();expect(p.locator('.rrTable')).to_contain_text('Employee');p.screenshot(path=str(out/'Next-OFFICE-Labor.png'))
   p.goto(url);p.wait_for_timeout(300);
   if p.locator('#sectionChooserForm').is_visible():p.locator('#sectionChooserForm [name=section][value=print]').check();p.locator('#sectionChooserForm button').click()
-  
+
   if p.get_by_role('button',name='Skip for now',exact=True).is_visible():p.get_by_role('button',name='Skip for now',exact=True).click()
   p.evaluate("storeSection('print')");expect(p.locator('#printPurpose .rrMetrics')).to_be_visible();p.screenshot(path=str(out/'Next-Dashboard-Desktop.png'))
   p.set_viewport_size({'width':390,'height':844});p.locator('#printPurpose').scroll_into_view_if_needed();p.screenshot(path=str(out/'Next-Dashboard-Mobile.png'));assert p.evaluate('document.documentElement.scrollWidth<=innerWidth')
