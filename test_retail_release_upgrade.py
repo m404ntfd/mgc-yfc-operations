@@ -28,6 +28,11 @@ with sqlite3.connect(database) as c:
     for kind in ('Pickup','Delivery'):
         c.execute('INSERT INTO jobs VALUES(?,?,?)',(kind,8,json.dumps(dict(type=kind,start='2026-11-15T09:00',end='2026-11-15T10:00',customer='Fixture reservation',status='Scheduled',notes='Original reservation'))))
         c.execute('INSERT INTO photos VALUES(?,?,?)',(kind,0,b'original-fixture-attachment'))
+    c.execute("INSERT INTO pos_products VALUES(?,?)",('fixture-product',json.dumps(dict(name='Fixture shirt',price=1200,category='Retail',taxable=True,active=True))))
+    c.execute("INSERT INTO pos_carts VALUES(?,?,?,?,?,?)",('fixture-cart','stable-employee-id',3,'paid',json.dumps(dict(lines=[dict(product='fixture-product',quantity=1,price=1200)],total=1284)),1700000000))
+    c.execute("INSERT INTO pos_sales VALUES(?,?,?,?)",(801,'fixture-cart','stable-employee-id',json.dumps(dict(total=1284,subtotal=1200,tax=84,tender=2000,change=716,lines=[dict(product='fixture-product',quantity=1,price=1200)]))))
+    c.execute("INSERT INTO pos_credit_accounts VALUES(?,?,?,?,?,?)",(901,'Fixture customer','customer',None,'fixture contact',1))
+    c.execute("INSERT INTO pos_credit_ledger VALUES(?,?,?,?,?,?,?,?)",(902,901,2500,2500,'2026-11-01','Manager','Fixture credit',None))
 c.close()
 def snapshot(path):
     with sqlite3.connect(path) as c:
