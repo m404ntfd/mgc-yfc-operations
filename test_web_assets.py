@@ -10,8 +10,9 @@ class WebAssetTests(unittest.TestCase):
    for name in updater.FILES:
     target=root/name;target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(source/name,target)
    for path in [source/'assets/home-icons.json',*sorted((source/'assets').glob('plug-*.b64'))]:shutil.copyfile(path,root/'assets'/path.name)
-   for name in ('pos.html','pos.js','pos.css','customer-office.js','customer-display.html','customer-display.js','customer-display.css'):shutil.copyfile(source/'static'/name,root/'static'/name)
+   for name in ('pos.html','pos.js','pos.css','customer-office.js','customer-display.html','customer-display.js','customer-display.css','report-center.js','office-expansion.js'):shutil.copyfile(source/'static'/name,root/'static'/name)
    shutil.copyfile(source/'customer_services.py',root/'customer_services.py')
+   shutil.copyfile(source/'retail_reports.py',root/'retail_reports.py')
    prepare(root)
    module=ast.parse((root/'server.py').read_text(encoding='utf-8'))
    assignment=next(node for node in module.body if isinstance(node,ast.Assign) and any(isinstance(target,ast.Name) and target.id=='WEB_ASSETS' for target in node.targets))

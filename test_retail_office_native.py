@@ -20,7 +20,7 @@ def run():
   try:
    wait("document.querySelector('#login') && typeof officeAction==='function'")
    w.evaluate_js("document.querySelector('#login [name=name]').value='Admin';document.querySelector('#login [name=password]').value='testpassword';document.querySelector('#login').requestSubmit()")
-   wait("document.querySelectorAll('#officeTiles button').length===25")
+   wait("document.querySelectorAll('#officeTiles button').length===29")
    w.evaluate_js("officeAction('users')")
    wait("document.querySelector('#officeUserRows').textContent.includes('Employee')")
    w.evaluate_js("let field=document.querySelector('#officeAddUser [name=name]');field.value='Unsaved sample';field.dispatchEvent(new Event('input',{bubbles:true}))")

@@ -1,14 +1,17 @@
-# CoastYouth Retail 0.43.0
+# CoastYouth Retail 0.44.0
 
-DESK 1.6.0 and OFFICE 1.3.0 add receipt customization, reservation messages and a customer checkout display.
+DESK 1.7.0 and OFFICE 1.4.0 add reporting, shared user administration and coordinated updates. Publishing does not install updates on store computers.
 
-- OFFICE receipt design supports a PNG/JPEG logo, contact details, return policy and footer with a live preview. New completed sales retain a receipt-design snapshot for reprints; historical sales remain unchanged.
-- OFFICE reservation emails supports Google Workspace/Gmail confirmation and reminder templates, per-reservation enrollment, configurable reminder timing, previews and delivery history. Delivery is disabled by default and requires a server-side Gmail app password. No customers are automatically enrolled. Canceled and past reservations suppress pending messages. Uncertain delivery requires review before retrying.
-- DESK can pair a customer-facing browser display showing current items, totals and a thank-you screen. Pairing is scoped to the cashier connection, and disconnected screens clear transaction details.
-- Existing open pricing, themes, store credit, refunds, cash rounding, terminal setup and layout editing remain included. Credit-card processing remains a future update.
+- Operations Dashboard replaces Print with a Purpose with sales metrics, prior-period comparisons, item/category/employee breakdowns and permission-controlled clocked-in staff information.
+- OFFICE adds sales, cash, product, account, tax and labor reports with printing and CSV export. Unsupported bowling, competition, gratuity, ingredient and payment-card reports are omitted. Labor cost percentage remains unavailable until wage history is recorded.
+- OFFICE user editing adds Properties, Role, Personal and User View tabs, shared contact details, staff PIN and password controls. Login security and account unlocking move from the server to OFFICE.
+- DESK logs out to a six-digit staff PIN screen. Protected Exit POS remains available. PIN sign-in requires HTTPS or localhost; password sign-in remains available.
+- Server Updates has separate server, DESK and OFFICE sections. Native server/controller replacement uses the installer download option. Administration removes the old schedule/settings and user-management shortcuts.
+- Backup shows progress and verified destination confirmation with an Okay button. Local verification does not confirm OneDrive cloud upload.
+- Connections idle over 15 minutes are hidden. Server settings show the PC name and available client connection addresses.
+- Combo server setup offers recognized legacy Remote Manager program-file cleanup on first launch. Shared data and uninstallers are retained.
+- Web pickup/delivery, receipts, time clock and scheduling remain available. Managers can print employee schedules.
 
-All database changes are additive. Existing timecards, punches, breaks, audit history, reservations, identifiers and attachments are preserved. Release gates exercise populated upgrade, backup and rollback behavior, plus installer preservation checks.
+Additive changes preserve existing records and identifiers. Release checks cover populated upgrade from 0.43.0, backup, repeat startup and rollback, including timecards, punches, breaks, reservations, attachments, sales, catalog prices and store credit. Testing uses isolated sample data; live store data has not been changed.
 
-Before installing, verify a current backup and have staff finish their work. Update the existing Operations server first using its current data location, then DESK and OFFICE with the same server address. Do not create a replacement server or restore an older database. Publishing does not install the update on store computers.
-
-Gmail delivery remains off until configured. Set COASTYOUTH_GMAIL_APP_PASSWORD for the Windows account running the server, restart that server process, and configure the matching sender in OFFICE > Sales > Reservation emails. Review enrolled reservations before enabling delivery. Live email delivery depends on your Google account policy and has not been tested with customer credentials.
+Gmail delivery remains disabled until separately configured. Before installing, verify a current backup and let staff finish their work. Update the existing server first, then DESK and OFFICE using the same server address and data location. Do not create a replacement database.

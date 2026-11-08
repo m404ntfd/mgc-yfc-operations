@@ -1,3 +1,4 @@
+from test_ui_helpers import password_login_page
 import os
 from pathlib import Path
 from playwright.sync_api import sync_playwright,expect
@@ -16,7 +17,7 @@ def run():
   f.call('roles',dict(name='Retail staff',grants={'use_pos':True,'use_store_credit':True}))
   with sync_playwright() as pw:
    b=pw.chromium.launch(**({'executable_path':os.environ['TEST_CHROMIUM']} if os.environ.get('TEST_CHROMIUM') else {}));context=b.new_context(viewport={'width':1366,'height':900});p=context.new_page();errors=[];p.on('pageerror',lambda e:errors.append(str(e)));origin=f'http://127.0.0.1:{f.port}'
-   p.goto(origin+'/office');p.locator('#login [name=name]').fill('Admin');p.locator('#login [name=password]').fill('testpassword');p.locator('#login button').click();expect(p.locator('#officeTiles .officeTile')).to_have_count(25)
+   p.goto(origin+'/office');password_login_page(p).locator('#login [name=name]').fill('Admin');p.locator('#login [name=password]').fill('testpassword');p.locator('#login button').click();expect(p.locator('#officeTiles .officeTile')).to_have_count(29)
    out=Path(os.environ.get('TEST_ARTIFACTS','test-artifacts'));out.mkdir(parents=True,exist_ok=True);p.screenshot(path=str(out/'CoastYouth-Retail-OFFICE-Preview.png'))
    p.locator('[data-office-action=users]').click();form=p.locator('#officeAddUser');form.locator('[name=name]').fill('Office sample staff');form.locator('[name=password]').fill('testpassword');form.locator('[name=confirm]').fill('testpassword');assert p.evaluate('unfinished()')
    form.locator('button').first.click();expect(p.locator('#officeUserRows')).to_contain_text('Office sample staff');assert not p.evaluate('changedForms.has(document.querySelector("#officeAddUser"))')
@@ -34,9 +35,9 @@ def run():
    p.locator('#officeBack').click();p.locator('[data-office-action=history]').click();p.locator('#posSaleList button').first.click();expect(p.locator('#officeReceipt')).to_be_visible();expect(p.locator('#posReceipt')).to_contain_text('Change: $4.69');p.emulate_media(media='print');expect(p.locator('#posReceipt')).to_be_visible();p.emulate_media(media='screen');p.locator('.receiptBack').click();p.locator('[data-office-action=roles]').click()
    # A user-management role can open OFFICE without checkout permission.
    f.call('admin/permissions',dict(name='Employee',grants={'manage_users':True},can_create=False,see_requests=False))
-   restricted=b.new_page();restricted.goto(origin+'/office');restricted.locator('#login [name=name]').fill('Employee');restricted.locator('#login [name=password]').fill('testpassword');restricted.locator('#login button').click();expect(restricted.locator('[data-office-action=users]')).to_be_visible();expect(restricted.locator('[data-office-action=catalog]')).to_have_count(0)
+   restricted=b.new_page();restricted.goto(origin+'/office');password_login_page(restricted).locator('#login [name=name]').fill('Employee');restricted.locator('#login [name=password]').fill('testpassword');restricted.locator('#login button').click();expect(restricted.locator('[data-office-action=users]')).to_be_visible();expect(restricted.locator('[data-office-action=catalog]')).to_have_count(0)
    restricted.locator('[data-office-action=users]').click();expect(restricted.locator('#officeUserRows')).to_contain_text('Office sample staff')
-   noaccess=b.new_page();noaccess.goto(origin+'/office');noaccess.locator('#login [name=name]').fill('Office sample staff');noaccess.locator('#login [name=password]').fill('testpassword');noaccess.locator('#login button').click();expect(noaccess.locator('#authError')).to_contain_text('OFFICE requires');expect(noaccess.locator('#posRoot')).to_be_hidden()
+   noaccess=b.new_page();noaccess.goto(origin+'/office');password_login_page(noaccess).locator('#login [name=name]').fill('Office sample staff');noaccess.locator('#login [name=password]').fill('testpassword');noaccess.locator('#login button').click();expect(noaccess.locator('#authError')).to_contain_text('OFFICE requires');expect(noaccess.locator('#posRoot')).to_be_hidden()
    for width,height in [(1366,768),(1024,768)]:
     p.set_viewport_size({'width':width,'height':height});assert p.evaluate('document.documentElement.scrollWidth<=innerWidth')
    assert not errors,errors;b.close()

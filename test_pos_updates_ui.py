@@ -1,3 +1,4 @@
+from test_ui_helpers import password_login_page
 import os,time
 from pathlib import Path
 from playwright.sync_api import sync_playwright,expect
@@ -11,7 +12,7 @@ def run():
   with sync_playwright() as pw:
    b=pw.chromium.launch(**({'executable_path':os.environ['TEST_CHROMIUM']} if os.environ.get('TEST_CHROMIUM') else {}));context=b.new_context(viewport={'width':1366,'height':900});p=context.new_page();errors=[];p.on('pageerror',lambda e:errors.append(str(e)))
    p.add_init_script("""window.testSeconds=30;window.pywebview={api:{kiosk_info:async()=>({device:'a'.repeat(32),nonce:'b'.repeat(64),configured:true,version:'1.1.0',updater:true}),update_status:async id=>id?({state:'ready',seconds:window.testSeconds,version:'1.1.0',target:'9.0.0'}):({state:'idle'}),install_update:async()=>window.posUpdateFreeze()?{ok:true}:{error:'Finish or cancel your current sale.'}}};""")
-   origin=f'http://127.0.0.1:{f.port}';p.goto(origin+'/pos?kiosk=1');p.locator('#login [name=name]').fill('Admin');p.locator('#login [name=password]').fill('testpassword');p.locator('#login button').click()
+   origin=f'http://127.0.0.1:{f.port}';p.goto(origin+'/pos?kiosk=1');password_login_page(p).locator('#login [name=name]').fill('Admin');p.locator('#login [name=password]').fill('testpassword');p.locator('#login button').click()
    p.locator('#posNew').click();expect(p.locator('#posCart')).to_contain_text('Saved on server');p.locator('#posManualShortcut').click()
    form=p.locator('#posManual');form.locator('[name=name]').fill('Test sale');form.locator('[name=category]').fill('General');form.locator('[name=price]').fill('5');form.locator('button').click();expect(p.locator('#posCart')).to_contain_text('$5.00')
    office=p.context.new_page();office.goto(origin+'/office');office.locator('[data-office-action=updates]').click();expect(office.locator('#posReleaseStatus')).to_contain_text('9.0.0')
@@ -22,7 +23,7 @@ def run():
    p.locator('#posNew').click();expect(p.locator('#posStatus')).to_contain_text('update before starting another')
    p.locator('#posDiscard').click();p.locator('dialog[open] [name=reason]').fill('Customer left before update');p.locator('dialog[open] form button').click();expect(p.locator('#posDiscard')).to_be_hidden();p.locator('#posInstallReady').click();assert p.evaluate('!!window.posUpdateInstalling')
    # Operations entry point also opens the administrator controls after login.
-   q=b.new_page();q.goto(origin+'/#pos-updates');q.locator('#login [name=name]').fill('Admin');q.locator('#login [name=password]').fill('testpassword');q.locator('#login button').click();expect(q.locator('#posUpdatesDialog')).to_be_visible(timeout=10000)
+   q=b.new_page();q.goto(origin+'/#pos-updates');password_login_page(q).locator('#login [name=name]').fill('Admin');q.locator('#login [name=password]').fill('testpassword');q.locator('#login button').click();expect(q.locator('#posUpdatesDialog')).to_be_visible(timeout=10000)
    assert not errors,errors;b.close()
  finally:f.close()
  print('PASS POS/Operations update controls, warning seconds, unfinished-sale block and safe acknowledgement')

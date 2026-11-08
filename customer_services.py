@@ -14,6 +14,7 @@ CUSTOMER_DEFAULTS={
 
 def customer_init(c):
     c.executescript('''
+CREATE TABLE IF NOT EXISTS office_user_details(account TEXT PRIMARY KEY,revision INTEGER NOT NULL,body TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS customer_settings(kind TEXT PRIMARY KEY,revision INTEGER NOT NULL,body TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS reservation_contacts(job TEXT PRIMARY KEY,email TEXT NOT NULL,confirmations INTEGER NOT NULL,reminders INTEGER NOT NULL,revision INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS customer_delivery(id INTEGER PRIMARY KEY,job TEXT NOT NULL,kind TEXT NOT NULL,fingerprint TEXT NOT NULL,recipient TEXT NOT NULL,due REAL NOT NULL,status TEXT NOT NULL,body TEXT NOT NULL,error TEXT NOT NULL DEFAULT '',updated REAL NOT NULL,UNIQUE(job,kind,fingerprint));

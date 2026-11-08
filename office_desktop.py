@@ -5,6 +5,24 @@ from pos_desktop import server_url
 
 class OfficeBridge:
  def __init__(self,address=None):self._window=None;self._exiting=False;self._checking=False;self._address=address;self._kiosk=None
+ def _trusted(self):
+  from urllib.parse import urlsplit
+  if not self._window:return False
+  actual=urlsplit(self._window.get_current_url());expected=urlsplit(self._address)
+  return (actual.scheme,actual.netloc)==(expected.scheme,expected.netloc) and actual.path in ('/office','/office/')
+ def office_update_info(self):
+  from pos_kiosk import KioskStore
+  from pos_updater import PosUpdater
+  if not self._trusted():return {'error':'Open the configured OFFICE server.'}
+  if not hasattr(self,'_updates'):
+   self._store=KioskStore(Path(os.environ.get('APPDATA',str(Path.home())))/'CoastYouthRetailOffice'/'settings.json')
+   self._updates=PosUpdater(self,app='office',current='1.4.0')
+  return {'device':self._store.data['device'],'version':self._updates.version,'updater':True}
+ def office_update_status(self,ident=None):
+  self.office_update_info();return self._updates.observe(ident)
+ def office_install_update(self):
+  try:return self._updates.install()
+  except Exception as e:return {'error':str(e)}
  def office_kiosk_info(self):
   # Only expose settings for DESK installed on this Windows login and server.
   from pos_kiosk import KioskStore,KioskBridge
@@ -42,6 +60,9 @@ def office_window(address,storage,hidden=False):
  return window
 
 def main():
+ if '--apply-pos-update' in sys.argv:
+  from pos_updater import apply_update
+  apply_update(sys.argv[sys.argv.index('--apply-pos-update')+1]);return
  import tkinter as tk
  from tkinter import ttk,messagebox
  import webview

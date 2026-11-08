@@ -24,10 +24,10 @@ DisableProgramGroupPage=yes
 [Types]
 Name: "server"; Description: "MGC YFC Operations Server (store computer)"
 Name: "remote"; Description: "MGC YFC Operations Remote Manager (another computer)"
-Name: "both"; Description: "Combined Server plus optional standalone Remote Manager"
+Name: "both"; Description: "Combined Server with built-in administration"
 [Components]
 Name: "server"; Description: "MGC YFC Operations Server"; Types: server both
-Name: "remote"; Description: "MGC YFC Operations Remote Manager"; Types: remote both
+Name: "remote"; Description: "MGC YFC Operations Remote Manager"; Types: remote
 [Tasks]
 Name: "desktop"; Description: "Create desktop shortcuts"; Flags: unchecked
 Name: "startup"; Description: "Start the server when I sign in to Windows"; Components: server; Flags: unchecked
@@ -52,9 +52,6 @@ Source: "..\static\*"; DestDir: "{app}\static"; Components: server; Flags: ignor
 Source: "..\runtime\*"; DestDir: "{app}\runtime"; Components: server; Flags: ignoreversion recursesubdirs
 Source: "..\dist\MGC YFC Operations Remote Manager.exe"; DestDir: "{app}"; Components: remote; Flags: ignoreversion
 Source: "..\remote\README.txt"; DestDir: "{app}"; DestName: "Remote-Manager-README.txt"; Components: remote; Flags: ignoreversion
-Source: "..\dist\MGC YFC Operations Server.exe"; DestDir: "{app}"; DestName: "Thrift Mart Dispatch Server.exe"; Components: server; Flags: ignoreversion
-Source: "..\dist\MGC YFC Operations Server Console.exe"; DestDir: "{app}"; DestName: "Thrift Mart Dispatch Server Console.exe"; Components: server; Flags: ignoreversion
-Source: "..\dist\MGC YFC Operations Remote Manager.exe"; DestDir: "{app}"; DestName: "Thrift Mart Dispatch Remote Manager.exe"; Components: remote; Flags: ignoreversion
 [Icons]
 Name: "{group}\MGC YFC Operations Server Console"; Filename: "{sys}\conhost.exe"; Parameters: """{app}\MGC YFC Operations Server Console.exe"" --console"; WorkingDir: "{app}"; IconFilename: "{app}\assets\dispatch.ico"; Components: server
 Name: "{group}\Manage or Update MGC YFC Operations Server"; Filename: "http://127.0.0.1:8080/#settings"; IconFilename: "{app}\assets\dispatch.ico"; Components: server
@@ -87,7 +84,7 @@ procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then begin
     if WizardIsComponentSelected('server') then begin
-      if HadStandaloneManager then SaveStringToFile(ExpandConstant('{app}\remove-standalone-manager.pending'), 'Remove standalone manager after the combined server starts.', False);
+      SaveStringToFile(ExpandConstant('{app}\remove-standalone-manager.pending'), 'Remove standalone manager after the combined server starts.', False);
       MigrateShortcut(ExpandConstant('{userstartup}\Thrift Mart Dispatch Server.lnk'), ExpandConstant('{userstartup}\MGC YFC Operations Server.lnk'));
       MigrateShortcut(ExpandConstant('{userdesktop}\Thrift Mart Dispatch Server.lnk'), ExpandConstant('{userdesktop}\MGC YFC Operations Server.lnk'));
     end;

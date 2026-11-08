@@ -31,8 +31,8 @@ class ServerWindow:
         style=ttk.Style();style.theme_use('clam');style.configure('TButton',padding=10);style.configure('TLabel',font=('Segoe UI',10))
         self.admin_panel=None;self.cleanup_checked=False
         self.tabs=ttk.Notebook(root);self.tabs.pack(fill='both',expand=True)
-        self.server_tab=ttk.Frame(self.tabs);self.admin_tab=ttk.Frame(self.tabs)
-        self.tabs.add(self.server_tab,text='Server');self.tabs.add(self.admin_tab,text='Administration')
+        self.server_tab=ttk.Frame(self.tabs);self.admin_tab=ttk.Frame(self.tabs);self.updates_tab=ttk.Frame(self.tabs);self.settings_tab=ttk.Frame(self.tabs)
+        self.tabs.add(self.server_tab,text='Server');self.tabs.add(self.admin_tab,text='Administration');self.tabs.add(self.updates_tab,text='Updates');self.tabs.add(self.settings_tab,text='Server settings')
         self.tabs.bind('<<NotebookTabChanged>>',self.on_tab_changed)
         f=ttk.Frame(self.server_tab,padding=24);f.pack(fill='both',expand=True)
         self.picture=ImageTk.PhotoImage(Image.open(ASSETS/'dispatch.png').resize((72,72)))
@@ -46,13 +46,15 @@ class ServerWindow:
         ttk.Button(row,text='Login to Operations',command=self.open_login).pack(side='left')
         ttk.Button(row,text='Retail OFFICE',command=lambda:self.open_page('office')).pack(side='left',padx=4)
         ttk.Button(row,text='Terminals',command=lambda:self.open_page('office#terminals')).pack(side='left',padx=4)
-        ttk.Button(row,text='Manage / update server',command=self.manage).pack(side='left',padx=8)
-        updates=ttk.LabelFrame(f,text='Software updates',padding=10);updates.pack(fill='x',pady=(0,12))
-        ttk.Button(updates,text='Operations / server update',command=self.manage).pack(side='left')
-        ttk.Button(updates,text='Update POS applications',command=lambda:self.open_page('#pos-updates')).pack(side='left',padx=8)
-        ttk.Button(updates,text='Server / controller installer',command=self.installer_downloads).pack(side='left')
+        ttk.Button(row,text='Administration',command=self.manage).pack(side='left',padx=8)
         ttk.Button(row,text='Minimize to tray',command=self.hide).pack(side='left')
         ttk.Label(f,text='Minimize or close this window to keep the server running in the tray.\nDouble-click the three red rings and computer icon to reopen. Use Exit server to stop it.',wraplength=600).pack(anchor='w')
+        settings=ttk.Frame(self.settings_tab,padding=24);settings.pack(fill='both',expand=True)
+        ttk.Label(settings,text='Server connection settings',font=('Segoe UI',18,'bold')).pack(anchor='w')
+        ttk.Label(settings,text='Use one of these addresses when connecting DESK and OFFICE. Keep the same server and data folder.',wraplength=700).pack(anchor='w',pady=12)
+        for label,value in [('Computer name',socket.gethostname()),('Computer address',f'http://{socket.gethostname()}:{PORT}'),('Network IP addresses',', '.join(f'http://{a}:{PORT}' for a in addresses))]:
+            ttk.Label(settings,text=label).pack(anchor='w');entry=ttk.Entry(settings);entry.insert(0,value);entry.configure(state='readonly');entry.pack(fill='x',pady=(0,12))
+        ttk.Label(settings,text='Set a fixed address or DHCP reservation through your network administrator if this address changes. Web access to dispatch, receipts, time clock and scheduling stays available.',wraplength=700).pack(anchor='w')
         bottom=ttk.Frame(f);bottom.pack(fill='x',pady=14)
         ttk.Button(bottom,text='Open server log',command=self.open_log).pack(side='left')
         self.exit_button=ttk.Button(bottom,text='Exit server',command=self.ask_exit);self.exit_button.pack(side='right')
@@ -106,11 +108,12 @@ class ServerWindow:
         webbrowser.open('https://github.com/m404ntfd/mgc-yfc-operations/releases/latest',new=2)
     def open_login(self):self.open_page('#login')
     def on_tab_changed(self,event=None):
-        if self.tabs.select()==str(self.admin_tab):self.manage()
+        if self.tabs.select() in (str(self.admin_tab),str(self.updates_tab)) and self.admin_panel is None:
+            selected=self.tabs.select();self.manage();self.tabs.select(selected)
     def manage(self):
         if self.admin_panel is None:
             from remote.remote_manager import App
-            self.admin_panel=App(self.root,local=True,container=self.admin_tab,address=URL,local_control=self.token,session_path=DATA/'native-admin-session.bin')
+            self.admin_panel=App(self.root,local=True,container=self.admin_tab,address=URL,local_control=self.token,session_path=DATA/'native-admin-session.bin',updates_container=self.updates_tab)
         self.root.geometry('820x900');self.tabs.select(self.admin_tab);self.root.deiconify();self.root.lift()
     def offer_remote_cleanup(self):
         marker=ROOT/'remove-standalone-manager.pending'
@@ -119,11 +122,14 @@ class ServerWindow:
             if request('session').get('application')!='thrift-mart-dispatch':return
         except Exception:return
         self.cleanup_checked=True
+        from manager_cleanup import legacy_manager_locations
+        locations=legacy_manager_locations(ROOT)
+        if not locations:marker.unlink(missing_ok=True);return
         if not messagebox.askyesno(NAME,'The combined server application is installed and running. Administration is now included here. Remove the old standalone Remote Manager and its shortcuts from this computer? Your server, settings and data will be kept.'):
             marker.unlink(missing_ok=True);return
         from manager_cleanup import remove_standalone_manager
         try:
-            remove_standalone_manager(ROOT);marker.unlink(missing_ok=True)
+            [remove_standalone_manager(folder) for folder in locations];marker.unlink(missing_ok=True)
             messagebox.showinfo(NAME,'The standalone Remote Manager was removed. Use the Administration tab in this server application.')
         except OSError:
             self.cleanup_checked=False

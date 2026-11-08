@@ -1,3 +1,4 @@
+from test_ui_helpers import password_login_page
 import os
 from pathlib import Path
 from playwright.sync_api import sync_playwright,expect
@@ -18,7 +19,7 @@ def run():
   cart=post('new')['cart'];cart=post('add',cart=cart['id'],revision=1,name='Table lamp',category='Home',price=2993,quantity=1,taxable=False)['cart']
   with sync_playwright() as pw:
    b=pw.chromium.launch(**({'executable_path':os.environ['TEST_CHROMIUM']} if os.environ.get('TEST_CHROMIUM') else {}));p=b.new_page(viewport={'width':1366,'height':900});errors=[];p.on('pageerror',lambda e:errors.append(str(e)))
-   p.goto(f'http://127.0.0.1:{f.port}/office');p.locator('#login [name=name]').fill('Admin');p.locator('#login [name=password]').fill('testpassword');p.locator('#login button').click()
+   p.goto(f'http://127.0.0.1:{f.port}/office');password_login_page(p).locator('#login [name=name]').fill('Admin');p.locator('#login [name=password]').fill('testpassword');p.locator('#login button').click()
    expect(p.locator('#officeHub')).to_be_visible();p.locator('[data-office-action=accounts]').click();p.locator('[data-credit="1"]').click();expect(p.locator('.creditBalance')).to_contain_text('$50.00')
    p.locator('#creditAdjust [name=amount]').fill('5');p.locator('#creditAdjust [name=reason]').fill('Customer service adjustment — example')
    assert p.evaluate('unfinished()')

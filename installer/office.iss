@@ -1,7 +1,7 @@
 [Setup]
 AppId={{CF27FBAA-F830-4BF3-A509-417F1D4A3B99}
 AppName=CoastYouth Retail OFFICE
-AppVersion=1.3.0
+AppVersion=1.4.0
 AppPublisher=CoastYouth Retail
 DefaultDirName={localappdata}\Programs\CoastYouthRetailOffice
 DefaultGroupName=CoastYouth Retail
@@ -9,7 +9,7 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\dist
-OutputBaseFilename=CoastYouth-Retail-OFFICE-Setup-v1.3.0
+OutputBaseFilename=CoastYouth-Retail-OFFICE-Setup-v1.4.0
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern

@@ -31,7 +31,7 @@ class Client:
         if self.session_token:headers['Cookie']='session='+self.session_token
         req=urllib.request.Request(self.address+'/api/'+path,data=None if data is None else json.dumps(data).encode(),headers=headers)
         try:
-            with self.opener.open(req,timeout=60 if path=='update-install' else 30) as r:return json.loads(r.read(1024*1024))
+            with self.opener.open(req,timeout=300 if path=='admin/backup-now' else 60 if path=='update-install' else 30) as r:return json.loads(r.read(1024*1024))
         except urllib.error.HTTPError as e:
             try:
                 error=json.loads(e.read());message=error.get('error','Request failed.')

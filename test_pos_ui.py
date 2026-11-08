@@ -1,3 +1,4 @@
+from test_ui_helpers import password_login_page
 import os
 from pathlib import Path
 from playwright.sync_api import sync_playwright,expect
@@ -10,7 +11,7 @@ def run():
    b=pw.chromium.launch(**({'executable_path':os.environ['TEST_CHROMIUM']} if os.environ.get('TEST_CHROMIUM') else {}))
    p=b.new_page(viewport={'width':1440,'height':1100},reduced_motion='reduce');errors=[];p.on('pageerror',lambda e:errors.append(str(e)))
    origin=f'http://127.0.0.1:{f.port}';p.goto(origin+'/office')
-   p.locator('#login [name=name]').fill('Admin');p.locator('#login [name=password]').fill('testpassword');p.locator('#login button').click()
+   password_login_page(p).locator('#login [name=name]').fill('Admin');p.locator('#login [name=password]').fill('testpassword');p.locator('#login button').click()
    expect(p.locator('#officeHub')).to_be_visible();p.locator('[data-office-action=receipt]').click();form=p.locator('#posSetup')
    form.locator('[name=store]').fill('MGC Test Store');form.locator('[name=tax]').fill('7.25');form.locator('[name=confirmed]').check();form.locator('button').first.click()
    expect(p.locator('#posStatus')).to_have_text('Saved.');p.locator('#officeBack').click();p.locator('[data-office-action=catalog]').click()

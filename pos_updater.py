@@ -2,7 +2,7 @@
 import hashlib,json,os,re,shutil,subprocess,sys,threading,time
 from pathlib import Path
 from urllib.request import Request,urlopen
-VERSION='1.6.0'
+VERSION='1.7.0'
 REPO='m404ntfd/mgc-yfc-operations'
 def version(value):
  if not isinstance(value,str) or not re.fullmatch(r'\d+\.\d+\.\d+',value):raise ValueError('Invalid POS version.')
@@ -11,10 +11,10 @@ def fetch(url,limit=1000000):
  with urlopen(Request(url,headers={'User-Agent':'MGC-YFC-POS-Updater'}),timeout=30) as response:data=response.read(limit+1)
  if len(data)>limit:raise ValueError('POS download exceeds its size limit.')
  return data
-def verified_installer(expected):
+def verified_installer(expected,app='pos'):
  release=json.loads(fetch('https://api.github.com/repos/'+REPO+'/releases/latest'))
  if release.get('draft') or release.get('prerelease'):raise ValueError('Stable POS release required.')
- name='MGC-YFC-POS-Setup-v'+expected+'.exe'
+ name=('CoastYouth-Retail-OFFICE-Setup-v' if app=='office' else 'MGC-YFC-POS-Setup-v')+expected+'.exe'
  asset=next((a for a in release.get('assets',[]) if a.get('name')==name),None)
  if not asset:raise ValueError('The POS release changed. Ask an administrator to check again.')
  digest=asset.get('digest','');url=asset.get('browser_download_url','')
@@ -23,29 +23,30 @@ def verified_installer(expected):
  if 'sha256:'+hashlib.sha256(raw).hexdigest()!=digest:raise ValueError('POS download checksum mismatch. Nothing was installed.')
  return raw,digest[7:]
 class PosUpdater:
- def __init__(self,bridge):
+ def __init__(self,bridge,app='pos',current=None):
+  self.app=app;self.version=current or VERSION
   self.bridge=bridge;self.job=None;self.deadline=0;self.state='idle';self.error='';self.path=None;self.digest=None;self.lock=threading.RLock()
  def ticket(self,ident):
   if not isinstance(ident,str) or not re.fullmatch('[0-9a-f]{64}',ident):raise ValueError('Invalid update request.')
-  return json.loads(fetch(self.bridge._address+'/api/pos-update/ticket?id='+ident))
+  return json.loads(fetch(self.bridge._address+'/api/'+self.app+'-update/ticket?id='+ident))
  def observe(self,ident):
   if not self.bridge._trusted():return {'error':'Open the configured server.'}
   with self.lock:
-   if not ident:self.job=None;self.state='idle';return {'state':'idle','version':VERSION}
+   if not ident:self.job=None;self.state='idle';return {'state':'idle','version':self.version}
    try:
     job=self.ticket(ident)
-    if job.get('target') not in ('all',self.bridge._store.data['device']):return {'state':'idle','version':VERSION}
-    if version(job['version'])<=version(VERSION):return {'state':'complete','version':VERSION}
+    if job.get('target') not in ('all',self.bridge._store.data['device']):return {'state':'idle','version':self.version}
+    if version(job['version'])<=version(self.version):return {'state':'complete','version':self.version}
     if not self.job or self.job['id']!=ident:
      seconds=job.get('seconds')
-     if type(seconds) is not int or not 30<=seconds<=3600:raise ValueError('Invalid warning period.')
+     if type(seconds) is not int or not (30<=seconds<=3600 or seconds==0 and job.get('mode') in ('force','install')):raise ValueError('Invalid warning period.')
      self.job=job;self.deadline=time.monotonic()+seconds;self.state='downloading';self.error='';self.path=None
      threading.Thread(target=self.download,args=(dict(job),),daemon=True).start()
-    return {'state':self.state,'seconds':max(0,int(self.deadline-time.monotonic()+.999)),'version':VERSION,'target':job['version'],'error':self.error}
-   except Exception as e:return {'state':'error','error':str(e),'version':VERSION}
+    return {'state':self.state,'seconds':max(0,int(self.deadline-time.monotonic()+.999)),'version':self.version,'target':job['version'],'error':self.error}
+   except Exception as e:return {'state':'error','error':str(e),'version':self.version}
  def download(self,job):
   try:
-   raw,digest=verified_installer(job['version']);folder=self.bridge._store.path.parent/'updates'/job['id'];folder.mkdir(parents=True,exist_ok=True)
+   raw,digest=verified_installer(job['version'],self.app);folder=self.bridge._store.path.parent/'updates'/job['id'];folder.mkdir(parents=True,exist_ok=True)
    path=folder/'installer.exe';path.write_bytes(raw)
    with self.lock:
     if self.job and self.job['id']==job['id']:self.path=path;self.digest=digest;self.state='ready'
@@ -62,7 +63,7 @@ class PosUpdater:
    if not getattr(sys,'frozen',False):raise ValueError('Automatic installation is available in the installed Windows POS application.')
    if hashlib.sha256(self.path.read_bytes()).hexdigest()!=self.digest:raise ValueError('Installer verification failed.')
    # Freeze only if the current sale is finished and no draft/write/retry is pending.
-   if b._window.evaluate_js('window.posUpdateFreeze ? window.posUpdateFreeze() : false') is not True:raise ValueError('Return to POS and finish or cancel the current sale; save all unfinished entries.')
+   if b._window.evaluate_js('window.posUpdateFreeze ? window.posUpdateFreeze('+('true' if self.job.get('mode')=='force' else 'false')+') : false') is not True:raise ValueError('Return to POS and finish or cancel the current sale; save all unfinished entries.')
    try:
     exe=Path(sys.executable).resolve();helper=self.path.parent/'pos-update-helper.exe';shutil.copy2(exe,helper)
     manifest=self.path.parent/'install.json';manifest.write_text(json.dumps({'installer':str(self.path),'sha256':self.digest,'exe':str(exe),'pid':os.getpid(),'version':self.job['version'],'settings':str(b._store.path)}),encoding='utf-8')

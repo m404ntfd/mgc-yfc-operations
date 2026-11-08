@@ -1,3 +1,4 @@
+from test_ui_helpers import password_login_page
 import os
 from pathlib import Path
 from playwright.sync_api import sync_playwright,expect
@@ -18,7 +19,7 @@ def run():
   with sync_playwright() as pw:
    b=pw.chromium.launch(**({'executable_path':os.environ['TEST_CHROMIUM']} if os.environ.get('TEST_CHROMIUM') else {}));p=b.new_page(viewport={'width':1366,'height':900});errors=[];p.on('pageerror',lambda e:errors.append(str(e)))
    p.add_init_script("window.pywebview={api:{kiosk_info:async()=>({configured:true,device:'a'.repeat(32),nonce:'b'.repeat(64)}),request_exit:async()=>({error:'Preview only'})}}")
-   p.goto(f'http://127.0.0.1:{f.port}/pos?kiosk=1');p.locator('#login [name=name]').fill('Admin');p.locator('#login [name=password]').fill('testpassword');p.locator('#login button').click()
+   p.goto(f'http://127.0.0.1:{f.port}/pos?kiosk=1');password_login_page(p).locator('#login [name=name]').fill('Admin');p.locator('#login [name=password]').fill('testpassword');p.locator('#login button').click()
    expect(p.locator('#posCategories button')).to_have_count(7);p.locator('#posCarts').select_option(cart['id']);expect(p.locator('#posCart')).to_contain_text('$29.93')
    p.locator('[data-category=Clothing]').click();expect(p.locator('#posCatalog button')).to_have_count(4)
    p.locator('#posSearch').fill('jeans');expect(p.locator('#posCatalog button')).to_have_count(1);p.locator('#posSearch').fill('');p.locator('[data-category=""]').click()

@@ -5,12 +5,12 @@ from unittest.mock import patch,Mock
 import pos_updater
 
 def run():
- root=Path(__file__).parent;setup=root/'dist/MGC-YFC-POS-Setup-v1.6.0.exe'
+ root=Path(__file__).parent;setup=root/'dist/MGC-YFC-POS-Setup-v1.7.0.exe'
  with tempfile.TemporaryDirectory() as tmp:
   target=Path(tmp)/'installed';target.mkdir();exe=target/'MGC YFC Point of Sale.exe';shutil.copy2(root/'dist/MGC YFC Point of Sale.exe',exe)
   settings=Path(tmp)/'settings.json';settings.write_text('{"device":"retain","passcode":{"hash":"retain-existing-hash"},"server":"http://unchanged"}')
   data=target/'data';data.mkdir();(data/'schedule.db').write_bytes(b'preserve-operational-data');before=settings.read_bytes()
-  manifest=Path(tmp)/'install.json';manifest.write_text(json.dumps({'installer':str(setup),'sha256':hashlib.sha256(setup.read_bytes()).hexdigest(),'exe':str(exe),'pid':0,'version':'1.6.0','settings':str(settings)}))
+  manifest=Path(tmp)/'install.json';manifest.write_text(json.dumps({'installer':str(setup),'sha256':hashlib.sha256(setup.read_bytes()).hexdigest(),'exe':str(exe),'pid':0,'version':'1.7.0','settings':str(settings)}))
   kernel=Mock();kernel.OpenProcess.return_value=None
   original_popen=subprocess.Popen;restarted=[]
   def launch(command,*args,**kwargs):

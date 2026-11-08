@@ -8,11 +8,11 @@ try:
 except ImportError:
     from client import Client
 NAME='MGC YFC Operations Remote Manager'
-VERSION='0.39.4'
+VERSION='0.44.0'
 CONFIG=Path(os.environ.get('APPDATA',Path.home()))/'ThriftMartDispatchRemoteManager'/'config.json'
 
 class App:
-    def __init__(self,root,local=False,container=None,address=None,local_control=None,session_path=None):
+    def __init__(self,root,local=False,container=None,address=None,local_control=None,session_path=None,updates_container=None):
         self.root=root;self.client=None;self.release=None;self.busy=False;self.results=queue.Queue()
         self.local=local;self.local_control=local_control;self.session_path=session_path;self.update_receipt=None;self.flow=None;self.notice_id=None;self.monitor_client=None
         if container is None:
@@ -41,14 +41,9 @@ class App:
         self.details=tk.StringVar(value='Not connected')
         ttk.Label(frame,textvariable=self.details,wraplength=690).pack(fill='x',pady=(0,12))
         actions=ttk.Frame(frame);actions.pack(fill='x')
-        ttk.Button(actions,text='Open schedule / settings',command=self.open_browser).pack(side='left')
         ttk.Button(actions,text='Refresh status',command=self.refresh).pack(side='left',padx=6)
         ttk.Button(actions,text='OneDrive backup',command=self.backup).pack(side='left')
         ttk.Button(actions,text='Restart server',command=self.restart).pack(side='left',padx=6)
-        account_actions=ttk.Frame(frame);account_actions.pack(fill='x',pady=(8,0))
-        ttk.Button(account_actions,text='Manage employees',command=self.employees).pack(side='left')
-        ttk.Button(account_actions,text='Change a user’s password',command=self.passwords).pack(side='left',padx=8)
-        ttk.Button(account_actions,text='Login security / unlock',command=self.login_security).pack(side='left')
         connections=ttk.LabelFrame(frame,text='Active connections',padding=10);connections.pack(fill='x',pady=(12,0))
         self.connection_summary=tk.StringVar(value='Sign in to view active and inactive users. The server itself is excluded.')
         ttk.Label(connections,textvariable=self.connection_summary,wraplength=690).pack(anchor='w')
@@ -56,17 +51,26 @@ class App:
         for key,title,width in [('name','User / connection',260),('state','Status',130),('activity','Last interaction',170)]:self.connection_list.heading(key,text=title);self.connection_list.column(key,width=width)
         self.connection_list.pack(fill='x',pady=6)
         ttk.Button(connections,text='Refresh connections',command=self.refresh_connections).pack(anchor='w')
-        updates=ttk.LabelFrame(frame,text='Server updates from GitHub',padding=12);updates.pack(fill='both',expand=True,pady=16)
+        updates=ttk.LabelFrame(updates_container if updates_container is not None else frame,text='Operations server updates',padding=12);updates.pack(fill='x',pady=16)
         row=ttk.Frame(updates);row.pack(fill='x');ttk.Button(row,text='Check for server updates',command=self.check).pack(side='left');self.install=ttk.Button(row,text='Install update & restart',command=self.install_update,state='disabled');self.install.pack(side='left',padx=8)
         flow_buttons=ttk.Frame(updates);flow_buttons.pack(fill='x',pady=8)
         self.notify=ttk.Button(flow_buttons,text='Notify users & update when ready',command=self.notify_update);self.notify.pack(side='left')
         self.cancel_pending=ttk.Button(flow_buttons,text='Cancel pending update',command=self.cancel_update);self.cancel_pending.pack(side='left',padx=6)
         if self.local_control:
-            self.override=ttk.Button(updates,text='Override waiting users & install anyway',command=self.force_update);self.override.pack(anchor='w',pady=4)
+            self.override=ttk.Button(updates,text='Force Update',command=self.force_update);self.override.pack(anchor='w',pady=4)
         if not self.local_control:ttk.Button(updates,text='Ready for pending update',command=self.acknowledge_update).pack(anchor='w',pady=4)
-        self.notes=tk.Text(updates,height=5,wrap='word',font=('Segoe UI',10),state='disabled');self.notes.pack(fill='both',expand=True,pady=8)
-        ttk.Label(frame,text='Manage employee accounts here; open the browser for schedules and vehicles.\nThe browser requires its own sign-in. Closing this app does not stop the server.',wraplength=690).pack(anchor='w')
-        ttk.Button(frame,text='Server / controller installer downloads',command=lambda:webbrowser.open('https://github.com/m404ntfd/mgc-yfc-operations/releases/latest')).pack(anchor='w',pady=(8,0))
+        self.notes=tk.Text(updates,height=5,wrap='word',font=('Segoe UI',10),state='disabled');self.notes.pack(fill='x',pady=8)
+        ttk.Label(frame,text='Manage employees and login security in OFFICE. Closing this panel does not stop the server.',wraplength=690).pack(anchor='w')
+        ttk.Button(updates_container if updates_container is not None else frame,text='Server / controller installer downloads',command=lambda:webbrowser.open('https://github.com/m404ntfd/mgc-yfc-operations/releases/latest')).pack(anchor='w',pady=(8,0))
+        self.client_update_notes={}
+        for kind,label in [('pos','DESK'),('office','OFFICE')]:
+            section=ttk.LabelFrame(updates_container if updates_container is not None else frame,text=label+' application updates',padding=12);section.pack(fill='x',pady=8)
+            line=ttk.Frame(section);line.pack(fill='x')
+            for text,action in [('Check for updates','check'),('Install and restart','install'),('Notify Users & Update when ready','notify')]:ttk.Button(line,text=text,command=lambda k=kind,a=action:self.client_update(k,a)).pack(side='left',padx=2)
+            line=ttk.Frame(section);line.pack(fill='x')
+            if self.local_control:ttk.Button(line,text='Force Update',command=lambda k=kind:self.client_update(k,'force')).pack(side='left')
+            ttk.Button(line,text='Cancel pending update',command=lambda k=kind:self.client_update(k,'cancel')).pack(side='left',padx=4)
+            value=tk.StringVar(value='Check for the latest release. Targets connected '+label+' applications.');self.client_update_notes[kind]=value;ttk.Label(section,textvariable=value,wraplength=700).pack(anchor='w',pady=6)
         root.after(100,self.deliver)
         root.after(2000,self.poll_connections)
         if local_control and session_path:
@@ -130,7 +134,24 @@ class App:
         try:c=self.client or self.new_client();webbrowser.open(c.address)
         except ValueError as e:self.status.set(str(e))
     def backup(self):
-        if self.require():self.run(lambda:self.client.request('admin/backup-now',{}),lambda r:self.status.set('Saved to server OneDrive folder (check sync): '+r['backup']))
+        if not self.require():return
+        dialog=tk.Toplevel(self.root);dialog.title('OneDrive backup');dialog.transient(self.root);dialog.grab_set();dialog.geometry('560x280');dialog.protocol('WM_DELETE_WINDOW',lambda:None)
+        frame=ttk.Frame(dialog,padding=24);frame.pack(fill='both',expand=True)
+        message=tk.StringVar(value='Creating the backup and verifying the saved archive…');dialog.backup_message=message
+        ttk.Label(frame,textvariable=message,wraplength=500).pack(fill='x',pady=10)
+        progress=ttk.Progressbar(frame,mode='indeterminate',length=440);progress.pack(fill='x');progress.start(15)
+        okay=ttk.Button(frame,text='Okay',command=dialog.destroy,state='disabled');okay.pack(pady=15)
+        client=self.client
+        def work():
+            try:return client.request('admin/backup-now',{})
+            except Exception as e:return {'error':str(e)}
+        def done(r):
+            progress.stop();progress.configure(mode='determinate',value=0 if r.get('error') else 100)
+            if r.get('error'):message.set('Backup failed. '+r['error'])
+            elif r.get('verified'):message.set('Backup completed and verified in the configured folder:\n'+r['backup']+'\n\nCheck OneDrive separately to confirm cloud synchronization.');self.status.set('Verified backup completed.')
+            else:message.set('The server did not confirm verification. Check backup status before installing updates.')
+            okay.configure(state='normal');dialog.protocol('WM_DELETE_WINDOW',dialog.destroy)
+        self.run(work,done)
     def employees(self):
         if not self.require():return
         client=self.client
@@ -298,6 +319,24 @@ class App:
             if not flow.get('active'):raise ValueError('There is no pending update.')
             return client.request('update-flow/cancel',{'id':flow['id']})
         self.run(work,lambda r:self.status.set('Update request canceled.'))
+    def client_update(self,kind,action):
+        if not self.require():return
+        if action in ('install','notify','force'):
+            text='Force installation on connected applications? Saved sales remain on the server; in-progress writes must finish.' if action=='force' else 'Update connected applications after their work is saved?'
+            if not messagebox.askyesno(NAME,text,parent=self.root):return
+        route='start' if action in ('install','notify','force') else action
+        payload={'target':'all','mode':action} if route=='start' else {}
+        def done(data):
+            release=data.get('release',{});campaign=data.get('campaign')
+            self.client_update_notes[kind].set(release.get('error') or ('Checking…' if release.get('checking') else 'Latest: '+release.get('version','Not checked'))+(' · Update pending' if campaign else ''))
+            if release.get('checking'):self.root.after(2000,lambda:self.client_update_status(kind))
+        self.run(lambda:self.client.request(kind+'-update/'+route,payload),done)
+    def client_update_status(self,kind):
+        if not self.require():return
+        def done(data):
+            r=data.get('release',{});self.client_update_notes[kind].set(r.get('error') or ('Checking…' if r.get('checking') else 'Latest: '+r.get('version','Not checked'))+' · '+str(len(data.get('devices',[])))+' connected devices')
+            if r.get('checking'):self.root.after(2000,lambda:self.client_update_status(kind))
+        self.run(lambda:self.client.request(kind+'-update/state',activity=False),done,quiet=True)
     def restart(self):
         if not self.require():return
         if not messagebox.askyesno(NAME,'Restart the server? Ask employees to save their appointments first. Everyone will be signed out.'):return

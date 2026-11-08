@@ -1,3 +1,4 @@
+from test_ui_helpers import password_login_page
 """Browser layout and first-run gating checks; native integration tested separately."""
 import os
 from pathlib import Path
@@ -12,7 +13,7 @@ def run():
    p.add_init_script("""let configured=false;window.pywebview={api:{kiosk_info:async()=>({device:'a'.repeat(32),nonce:'b'.repeat(64),configured}),configure_passcode:async()=>{configured=true;return {ok:true}},request_exit:async()=>({error:'Incorrect admin passcode.'})}};""")
    p.goto(f'http://127.0.0.1:{f.port}/pos?kiosk=1')
    expect(p.locator('#posExitButton')).to_be_visible();expect(p.locator('#posRoot')).to_be_hidden()
-   p.locator('#login [name=name]').fill('Admin');p.locator('#login [name=password]').fill('testpassword');p.locator('#login button').click()
+   password_login_page(p).locator('#login [name=name]').fill('Admin');p.locator('#login [name=password]').fill('testpassword');p.locator('#login button').click()
    expect(p.locator('#kioskSetupDialog')).to_be_visible();expect(p.locator('#posRoot')).to_be_hidden()
    out=Path(os.environ.get('TEST_ARTIFACTS','test-artifacts'));out.mkdir(parents=True,exist_ok=True)
    p.screenshot(path=str(out/'POS-Admin-Passcode-Setup.png'))
