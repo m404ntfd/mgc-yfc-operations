@@ -30,7 +30,7 @@ def run():
    page.emulate_media(reduced_motion='reduce');page.goto(f'http://127.0.0.1:{Fixture.port}')
    page.locator('#login [name=name]').fill('Admin');page.locator('#login [name=password]').fill('testpassword');page.locator('#login button').click()
    page.locator('[name=section][value=receipts]').check();page.locator('#sectionChooserForm button').click()
-   expect(page.locator('#receipts')).to_be_visible();expect(page.locator('.operationsTitle')).to_contain_text('MGC YFC Operations');expect(page.locator('#currentSection')).to_have_text('Receipts & Accounting')
+   expect(page.locator('#receipts')).to_be_visible();expect(page.locator('.operationsTitle')).to_contain_text('CoastYouth Retail STORE OPS');expect(page.locator('#currentSection')).to_have_text('Receipts & Accounting')
    assert page.locator('body>header').evaluate('(e)=>getComputedStyle(e).backgroundColor')=='rgb(6, 122, 6)'
    page.reload();expect(page.locator('#receipts')).to_be_visible()
    page.locator('#storeMenuButton').click();page.locator('#pagingSection').click();expect(page.locator('#currentSection')).to_have_text('Store Associate Paging');expect(page.locator('#receipts')).to_be_hidden()
