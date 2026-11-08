@@ -20,7 +20,7 @@ def run():
    out=Path(os.environ.get('TEST_ARTIFACTS','test-artifacts'));out.mkdir(parents=True,exist_ok=True);p.screenshot(path=str(out/'POS-Update-Warning-Preview.png'))
    p.evaluate('window.testSeconds=0');expect(p.locator('#posInstallReady')).to_be_enabled(timeout=10000);p.locator('#posInstallReady').click();expect(p.locator('#posInstallMessage')).to_contain_text('Finish or cancel');assert not p.evaluate('!!window.posUpdateInstalling')
    p.locator('#posNew').click();expect(p.locator('#posStatus')).to_contain_text('update before starting another')
-   p.once('dialog',lambda d:d.accept());p.locator('#posDiscard').click();expect(p.locator('#posDiscard')).to_be_hidden();p.locator('#posInstallReady').click();assert p.evaluate('!!window.posUpdateInstalling')
+   p.locator('#posDiscard').click();p.locator('dialog[open] [name=reason]').fill('Customer left before update');p.locator('dialog[open] form button').click();expect(p.locator('#posDiscard')).to_be_hidden();p.locator('#posInstallReady').click();assert p.evaluate('!!window.posUpdateInstalling')
    # Operations entry point also opens the administrator controls after login.
    q=b.new_page();q.goto(origin+'/#pos-updates');q.locator('#login [name=name]').fill('Admin');q.locator('#login [name=password]').fill('testpassword');q.locator('#login button').click();expect(q.locator('#posUpdatesDialog')).to_be_visible(timeout=10000)
    assert not errors,errors;b.close()

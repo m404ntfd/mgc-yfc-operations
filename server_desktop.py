@@ -45,6 +45,7 @@ class ServerWindow:
         row=ttk.Frame(f);row.pack(fill='x',pady=18)
         ttk.Button(row,text='Login to Operations',command=self.open_login).pack(side='left')
         ttk.Button(row,text='Retail OFFICE',command=lambda:self.open_page('office')).pack(side='left',padx=4)
+        ttk.Button(row,text='Terminals',command=lambda:self.open_page('office#terminals')).pack(side='left',padx=4)
         ttk.Button(row,text='Manage / update server',command=self.manage).pack(side='left',padx=8)
         updates=ttk.LabelFrame(f,text='Software updates',padding=10);updates.pack(fill='x',pady=(0,12))
         ttk.Button(updates,text='Operations / server update',command=self.manage).pack(side='left')
