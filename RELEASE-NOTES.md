@@ -1,13 +1,12 @@
-# CoastYouth Retail / Operations 0.45.0
+# CoastYouth Retail STORE OPS 0.46.0 / DESK 1.8.0 / OFFICE 1.5.0
 
-Approved icon update for Operations Server, standalone Server Admin (Remote Manager), and the Operations web app.
+- STORE OPS branding with the approved green cart and wave icon, transparent tile corners, browser/favicon and mobile home-screen artwork.
+- Reordered view menu, Time Functions naming, and aligned mobile shortcut buttons.
+- OFFICE Timekeeping area for authorized management and reports using the shared server records.
+- OFFICE staff communications review with a separate permission: administrators by default, manually assigned for other roles. Retained private/group messages, saved-message information and attachments remain reviewable after users hide messages or leave groups.
+- Private-message deletion confirmation explains that only the requesting user's view is removed. Message preferences include a device notification test.
+- Updated DESK and OFFICE icon corners and Windows installed-program icon registration.
 
-- Server: three red rings with a server tower and green status light.
-- Standalone administration: three red rings with a monitor and gear.
-- Operations web: three red rings with a globe and dashboard, used for browser and home-screen icons.
-- Windows installers, shortcuts, window icons and system-tray icons use the approved artwork.
-- DESK remains 1.7.0 and OFFICE remains 1.4.0; their application icons and behavior are unchanged. Their installers remain included for complete computer setup.
+Existing installation identities and data locations are retained. The only new database table records departed conversation members; existing business records are not rewritten. Release checks cover populated upgrades, backup, repeated startup, rollback and installer data preservation.
 
-This release changes branding assets and version information only. No database migrations or business-record changes are introduced. Release gates verify populated upgrade from 0.44.0, backup and rollback, as well as installer preservation of existing server data and client settings.
-
-Verify a current backup before installing. Update the existing Operations installation using the same folder and data location. Use the full Operations installer to update native server/admin icons; the in-app server ZIP updates the web icon. Publishing does not install updates on store computers.
+Before installing, create and verify a current backup. Update the existing server first, retaining its installation and data folders, then update DESK and OFFICE. Publishing does not install updates on store computers. Existing home-screen shortcuts may need to be recreated to refresh cached artwork.

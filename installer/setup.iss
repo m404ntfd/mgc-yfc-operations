@@ -2,6 +2,7 @@
 #define AppVersion "0.7.0"
 #endif
 [Setup]
+UninstallDisplayIcon={code:InstalledAppIcon}
 AppId={{7412358D-0556-4978-AEA4-8297976D4992}
 AppName=MGC YFC Operations
 AppVersion={#AppVersion}
@@ -91,4 +92,10 @@ begin
     if WizardIsComponentSelected('remote') then
       MigrateShortcut(ExpandConstant('{userdesktop}\Thrift Mart Dispatch Remote Manager.lnk'), ExpandConstant('{userdesktop}\MGC YFC Operations Remote Manager.lnk'));
   end;
+end;
+
+function InstalledAppIcon(Param: String): String;
+begin
+  if WizardIsComponentSelected('server') then Result := ExpandConstant('{app}\MGC YFC Operations Server.exe')
+  else Result := ExpandConstant('{app}\MGC YFC Operations Remote Manager.exe');
 end;

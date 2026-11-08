@@ -17,7 +17,7 @@ let state={jobs:[],vehicles:[],users:[]},user,setup=false,mode='day',editing=nul
 const connectionId=Array.from(crypto.getRandomValues(new Uint8Array(16)),value=>value.toString(16).padStart(2,'0')).join('');
 $('login').elements.name.labels[0].firstChild.textContent='Username';
 const loginAttempts=document.createElement('p');loginAttempts.id='loginAttempts';loginAttempts.setAttribute('role','status');$('authError').after(loginAttempts);
-const operationsTitle=document.createElement('div');operationsTitle.className='operationsTitle';operationsTitle.textContent='MGC YFC Operations';$('storeMenuButton').before(operationsTitle);const pageLabel=$('currentSection');$('storeMenuButton').replaceChildren(pageLabel,document.createTextNode(' ▾'));
+const operationsTitle=document.createElement('div');operationsTitle.className='operationsTitle';operationsTitle.innerHTML='<img src="/app-icon-192.png" alt="" width="40" height="40"> <span>CoastYouth Retail <strong class="storeOpsWordmark">STORE OPS</strong></span>';$('storeMenuButton').before(operationsTitle);const pageLabel=$('currentSection');$('storeMenuButton').replaceChildren(pageLabel,document.createTextNode(' ▾'));
 const menuDivider=document.createElement('hr');menuDivider.className='menuDivider';$('chooseStartSection').before(menuDivider);
 const journalLabel=$('journalEnabled').parentElement;for(const node of [...journalLabel.childNodes])if(node.nodeType===Node.TEXT_NODE)node.textContent=' Automatically archive old pickups and deliveries';
 const journalDaysLabel=document.createElement('label');journalDaysLabel.innerHTML='Keep dispatch entries on the server for (days)<input id="journalDays" type="number" min="1" max="3650" value="30" required>';journalLabel.after(journalDaysLabel);
@@ -880,7 +880,7 @@ async function commOpenThread(id) {
  if(thread.kind==='group'){
   const controls=document.createElement('span');
   controls.className='commGroupControls';
-  controls.innerHTML=`<button type="button" data-comm-hide-group="${id}">Hide group</button>${commInbox.manage_groups?'<button type="button" id="commManageGroup">Manage group</button>':''}`;
+  controls.innerHTML=`<button type="button" data-comm-hide-group="${id}">Hide group</button><button type="button" data-comm-leave-group="${id}">Leave group</button>${commInbox.manage_groups?'<button type="button" id="commManageGroup">Manage group</button>':''}`;
   $('commMembers').append(controls);
  }
  $('commTitle').tabIndex = -1; $('commTitle').focus({preventScroll:true});
@@ -973,9 +973,10 @@ commPanel.addEventListener('click', async e => {
    if(group)commTeam('group',group);
    return;
   }
+  if(button.dataset.commLeaveGroup){if(!confirm('Leave this group? Its conversation and files remain on the server for authorized reviewers.'))return;await commApi('leave-group',{thread:Number(button.dataset.commLeaveGroup)});commScreen('home','Communications Hub');await commLoadInbox();return;}
   const {commDelete,commHideGroup,commRestoreGroup}=button.dataset;
   if(commDelete){
-   if(!confirm('Delete this direct message from your view?'))return;
+   if(!confirm('Delete this private message from your account and devices? This does not delete it for the other person. A retained copy remains available to authorized staff reviewers.'))return;
    button.disabled=true;
    const id=Number(commDelete);
    await commApi('delete-message',{id});
@@ -1291,7 +1292,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) comm
 const workMenu = document.createElement('button');
 workMenu.type = 'button';
 workMenu.id = 'workforceSection';
-workMenu.textContent = 'Scheduling & Time Clock';
+workMenu.textContent = 'Time Functions';
 $('commsSection').after(workMenu);
 const workPanel = document.createElement('section');
 workPanel.id = 'workforce';
@@ -1598,10 +1599,10 @@ function workOpen(quick=false,view='clock'){
  else storeSection('dispatch');
  $('app').hidden=true;
  workPanel.hidden=false;
- workPanel.querySelector('.workHead h2').textContent=quick?'Time Clock':'Scheduling & Time Clock';
+ workPanel.querySelector('.workHead h2').textContent=quick?'Time Clock':'Time Functions';
  workPanel.querySelector('.workTabs').hidden=quick;
  $('workQuickBack').hidden=!quick;
- setSectionHeader(quick?'Time Clock':'Scheduling & Time Clock','workforce');
+ setSectionHeader(quick?'Time Clock':'Time Functions','workforce');
  workWeek='';
  workPayrollReset();
  workData=null;
@@ -2629,7 +2630,7 @@ function workPayrollCsv(start,end,rows){
 }
 function workPayrollPrint({start,end,breaks},rows){
  workPayrollPrintReport.innerHTML=`<h1>Payroll Hours Report</h1>
-  <p>MGC YFC Operations · ${esc(dateLabel(start))} through ${esc(dateLabel(end))}</p>
+  <p>CoastYouth Retail STORE OPS · ${esc(dateLabel(start))} through ${esc(dateLabel(end))}</p>
   <p>Hours are shown in decimal format. Recorded breaks ${breaks==='include'?'included':'excluded'}.</p>
   <table>
    <thead><tr><th scope="col">Employee</th><th scope="col">Regular Hours</th><th scope="col">Overtime Hours</th><th scope="col">Total Hours</th></tr></thead>
@@ -3133,6 +3134,7 @@ const chooseLandingBeforePos=chooseLanding;
 chooseLanding=async function(force=false){
  const target=location.hash;
  if(!force&&['#retail-users','#retail-roles'].includes(target)){history.replaceState(null,'',location.pathname+location.search);if(!guardUpdateNavigation())return;if(!can(target==='#retail-roles'?'manage_roles':'manage_users')){toast('Your role does not have access to this setting.');return;}tab('settings');settingsSection(4);selectUserSettings(target==='#retail-roles'?'roles':'users');return;}
+ if(!force&&location.hash==='#office-timekeeping'){history.replaceState(null,'',location.pathname);workOpen(false,'time-cards');return;}
  if(!force&&['#pos-time-clock','#pos-reservations','#pos-paging'].includes(target)){
   history.replaceState(null,'',location.pathname+location.search);
   if(!guardUpdateNavigation())return;
@@ -3264,3 +3266,22 @@ function retailReportCenter(root,mode='sales'){
 const storeSectionBeforeDashboard=storeSection;storeSection=function(section){storeSectionBeforeDashboard(section);if(section==='print'&&!printPage.hidden)retailReportCenter(printPage,'dashboard');};
 const printStaffSchedule=document.createElement('button');printStaffSchedule.type='button';printStaffSchedule.textContent='Print employee schedule';printStaffSchedule.onclick=()=>{const d=document.createElement('dialog');d.className='schedulePrintDialog';d.innerHTML='<button type="button">Close</button><div></div>';d.querySelector('button').onclick=()=>{d.close();d.remove();};document.body.append(d);d.showModal();retailReportCenter(d.querySelector('div'),'schedule');};
 setInterval(()=>{const nav=document.querySelector('#workManagerMenu>div');if(nav&&!printStaffSchedule.isConnected)nav.append(printStaffSchedule);printStaffSchedule.hidden=!can('manage_staff_schedule');},2000);
+
+// Keep business panels together, followed by communication and time tools.
+const viewPanelDivider=document.createElement('hr');
+viewPanelDivider.setAttribute('role','separator');
+const panelMenu=$('storeMenu');
+panelMenu.prepend($('printSection'),$('dispatchSection'),$('pagingSection'),$('receiptsSection'),viewPanelDivider,$('commsSection'),$('workforceSection'));
+
+const commTestNotification=document.createElement('button');commTestNotification.type='button';commTestNotification.textContent='Send test notification';$('commDeviceStatus').before(commTestNotification);
+commTestNotification.onclick=async()=>{try{
+ if(!('Notification' in window))throw Error('This browser does not support notifications.');
+ const permission=Notification.permission==='default'?await Notification.requestPermission():Notification.permission;
+ if(permission!=='granted')throw Error('Allow notifications for this site in your browser or device settings first.');
+ const registration=await navigator.serviceWorker?.getRegistration();
+ if(registration)await registration.showNotification('CoastYouth Retail STORE OPS',{body:'Test notification: notifications are working on this device.',icon:'/app-icon-192.png',tag:'store-ops-test'});
+ else new Notification('CoastYouth Retail STORE OPS',{body:'Test notification: notifications are working on this device.',icon:'/app-icon-192.png'});
+ $('commDeviceStatus').textContent='Test sent to this device. This checks local notification display, not background server delivery.';
+ }catch(e){$('commDeviceStatus').textContent=e.message;}};
+
+if(location.pathname==='/office-timekeeping')document.body.classList.add('officeTimeEmbed');

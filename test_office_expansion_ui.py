@@ -18,7 +18,7 @@ try:
   c.execute('INSERT INTO work_periods VALUES(?,?,?,?,?,?)',(123,account,time.time()-7200,None,'Store',None))
  with sync_playwright() as pw:
   b=pw.chromium.launch(**({'executable_path':os.environ['TEST_CHROMIUM']} if os.environ.get('TEST_CHROMIUM') else {}));ctx=b.new_context(viewport={'width':1440,'height':1000});p=ctx.new_page();errors=[];p.on('pageerror',lambda e:errors.append(str(e)));url=f'http://127.0.0.1:{f.port}'
-  p.goto(url+'/office');p.locator('#login [name=name]').fill('Admin');p.locator('#login [name=password]').fill('testpassword');p.locator('#login button').click();expect(p.locator('#officeTiles .officeTile')).to_have_count(29)
+  p.goto(url+'/office');p.locator('#login [name=name]').fill('Admin');p.locator('#login [name=password]').fill('testpassword');p.locator('#login button').click();expect(p.locator('#officeTiles .officeTile')).to_have_count(31)
   p.locator('[data-office-action=report-center]').click();expect(p.locator('.rrStatus')).to_contain_text('Net sales exclude');p.screenshot(path=str(out/'Next-OFFICE-Analysis.png'))
   p.locator('.rrFilters [name=kind]').select_option('cash');p.locator('.rrFilters button').first.click();expect(p.locator('.rrTable')).to_contain_text('100.54')
   p.locator('#officeBack').click();p.locator('[data-office-action=users]').click();p.locator('#officeUserRows tr').filter(has_text='Employee').get_by_role('button',name='Edit user').click();expect(p.locator('.officeUserWizard')).to_be_visible();p.screenshot(path=str(out/'Next-OFFICE-User.png'))

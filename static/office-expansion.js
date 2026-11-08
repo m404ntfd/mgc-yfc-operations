@@ -8,8 +8,8 @@ if(!officeMode){
 }
 officeCards.push({section:'sales',title:'Sales analysis',description:'Sales, cash, products, taxes and transaction reports.',icon:'▥',action:'report-center',permission:'view_pos_sales'},
  {section:'security',title:'Login security / unlock',description:'Review locked users and configure login attempt limits.',icon:'♙',action:'login-security',permission:'unlock_users'},
- {section:'security',title:'Labor & time reports',description:'Worked hours, breaks and time entries.',icon:'◷',action:'labor-reports',permission:'edit_time_cards'},
- {section:'security',title:'Print employee schedule',description:'Print staff shifts for a selected date range.',icon:'▦',action:'schedule-report',permission:'manage_staff_schedule'});
+ {section:'timekeeping',title:'Labor & time reports',description:'Worked hours, breaks and time entries.',icon:'◷',action:'labor-reports',permission:'edit_time_cards'},
+ {section:'timekeeping',title:'Print employee schedule',description:'Print staff shifts for a selected date range.',icon:'▦',action:'schedule-report',permission:'manage_staff_schedule'});
 const originalOfficeAction=officeAction;
 officeAction=async function(action){
  if(!['report-center','labor-reports','schedule-report','login-security'].includes(action))return originalOfficeAction(action);
@@ -49,3 +49,29 @@ if(officeMode){
  banner.querySelector('button').onclick=async()=>{const r=await window.pywebview.api.office_install_update();if(r?.error)banner.querySelector('p').textContent=r.error;};
  setInterval(async()=>{const native=window.pywebview?.api;if(busy||!user||!native?.office_update_info||window.posUpdateInstalling)return;busy=true;try{const info=await native.office_update_info();if(info.error)throw Error(info.error);const state=await api('office-update/heartbeat',{device:info.device,version:info.version,updater:true,status:ready?'Ready':'Connected'});const job=state.campaign;if(!job){banner.hidden=true;await native.office_update_status(null);return;}const update=await native.office_update_status(job.id);banner.hidden=['idle','complete'].includes(update.state);ready=update.state==='ready'&&!update.seconds;banner.querySelector('button').disabled=!ready;banner.querySelector('p').textContent=update.error||(update.seconds?'Update in '+update.seconds+' seconds. Finish and save your current work.':'Save your current work, then acknowledge to install the update.');if(ready&&job.mode==='force'&&!unfinished()){const r=await native.office_install_update();if(r?.error)banner.querySelector('p').textContent=r.error;}}catch(e){banner.querySelector('p').textContent=e.message;}finally{busy=false;}},4000);
 }
+
+officeCards.push({section:'communications',title:'Review staff communications',description:'Review retained conversations, files and saved messages.',icon:'✉',action:'review-communications',permission:'review_staff_communications'});
+const beforeCommunicationReview=officeAction;
+officeAction=async function(action){
+ if(action!=='review-communications')return beforeCommunicationReview(action);
+ if(!navigationAllowed()||unfinished())return;
+ const dialog=document.createElement('dialog');dialog.innerHTML='<h2>Staff communications</h2><p>Restricted staff review. Messages hidden by participants remain retained.</p><button type="button" data-close>Close</button><div data-content></div>';document.body.append(dialog);dialog.querySelector('[data-close]').onclick=()=>{dialog.close();dialog.remove();};dialog.showModal();const content=dialog.querySelector('[data-content]');
+ try{const data=await api('comms/review');content.innerHTML=data.threads.map(t=>`<p><button data-thread="${t.id}">${esc(t.title||'Private conversation')} #${t.id} · ${t.messages} messages</button></p>`).join('')||'<p>No conversations.</p>';
+ content.onclick=async e=>{const b=e.target.closest('[data-thread]');if(!b)return;try{const r=await api('comms/review-messages?thread='+b.dataset.thread+(b.dataset.before?'&before='+b.dataset.before:''));content.innerHTML=r.messages.map(m=>`<article><strong>${esc(m.author_name)}</strong><p>${esc(m.text)}</p>${m.filename?`<a href="/api/comms/review-file/${m.id}" download="${esc(m.filename)}">${esc(m.filename)}</a>`:''}<p>Saved by: ${esc(m.saved_by.join(', ')||'None')} · Hidden by: ${esc(m.hidden_by.join(', ')||'None')}</p></article>`).join('')||'<p>No messages.</p>';if(r.older)content.insertAdjacentHTML('beforeend',`<button data-thread="${b.dataset.thread}" data-before="${r.messages[r.messages.length-1].id}">Older messages</button>`);}catch(err){content.textContent=err.message;}};
+ }catch(err){content.textContent=err.message;}
+};
+
+officeCards.push({section:'timekeeping',title:'Timekeeping management',description:'Time cards, audit history, scheduling, requests, payroll and work sites.',icon:'◷',action:'timekeeping-manage',permission:'edit_time_cards'});
+let officeTimeFrame=null;
+const unfinishedBeforeTimekeeping=unfinished;
+unfinished=function(){return unfinishedBeforeTimekeeping()||!!(officeTimeFrame?.contentWindow?.hasUnfinishedWork?.());};
+const actionBeforeTimekeeping=officeAction;
+officeAction=async function(action){
+ if(action!=='timekeeping-manage'){if(officeTimeFrame&&!unfinished())officeTimeFrame.hidden=true;return actionBeforeTimekeeping(action);}
+ if(!navigationAllowed()||unfinished())return;
+ $('officeTiles').hidden=true;$('officeWork').hidden=false;
+ for(const id of ['officeForms','officeCatalog','officeUsers','retailEditor','flowOffice','officeExpansion'])if($(id))$(id).hidden=true;
+ $('officeWorkTitle').textContent='Timekeeping management';
+ if(!officeTimeFrame){officeTimeFrame=document.createElement('iframe');officeTimeFrame.title='Timekeeping management';officeTimeFrame.src='/office-timekeeping#office-timekeeping';officeTimeFrame.style='width:100%;height:75vh;border:0';$('officeWork').append(officeTimeFrame);}
+ officeTimeFrame.hidden=false;
+};

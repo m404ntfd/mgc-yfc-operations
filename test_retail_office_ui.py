@@ -17,7 +17,7 @@ def run():
   f.call('roles',dict(name='Retail staff',grants={'use_pos':True,'use_store_credit':True}))
   with sync_playwright() as pw:
    b=pw.chromium.launch(**({'executable_path':os.environ['TEST_CHROMIUM']} if os.environ.get('TEST_CHROMIUM') else {}));context=b.new_context(viewport={'width':1366,'height':900});p=context.new_page();errors=[];p.on('pageerror',lambda e:errors.append(str(e)));origin=f'http://127.0.0.1:{f.port}'
-   p.goto(origin+'/office');password_login_page(p).locator('#login [name=name]').fill('Admin');p.locator('#login [name=password]').fill('testpassword');p.locator('#login button').click();expect(p.locator('#officeTiles .officeTile')).to_have_count(29)
+   p.goto(origin+'/office');password_login_page(p).locator('#login [name=name]').fill('Admin');p.locator('#login [name=password]').fill('testpassword');p.locator('#login button').click();expect(p.locator('#officeTiles .officeTile')).to_have_count(31)
    out=Path(os.environ.get('TEST_ARTIFACTS','test-artifacts'));out.mkdir(parents=True,exist_ok=True);p.screenshot(path=str(out/'CoastYouth-Retail-OFFICE-Preview.png'))
    p.locator('[data-office-action=users]').click();form=p.locator('#officeAddUser');form.locator('[name=name]').fill('Office sample staff');form.locator('[name=password]').fill('testpassword');form.locator('[name=confirm]').fill('testpassword');assert p.evaluate('unfinished()')
    form.locator('button').first.click();expect(p.locator('#officeUserRows')).to_contain_text('Office sample staff');assert not p.evaluate('changedForms.has(document.querySelector("#officeAddUser"))')

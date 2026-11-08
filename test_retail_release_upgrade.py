@@ -1,4 +1,4 @@
-"""Exercise the release updater against synthetic v0.42.0 operational data."""
+"""Exercise the release updater against synthetic operational data from the previous release."""
 from pathlib import Path
 import hashlib,json,os,sqlite3,subprocess,sys,urllib.request,tempfile
 

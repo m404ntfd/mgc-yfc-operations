@@ -13,11 +13,4 @@ for source,target in [('server.png','dispatch'),('admin.png','remote')]:
     icon=square(source).resize((512,512),Image.Resampling.LANCZOS)
     icon.save(root/(target+'.png'))
     icon.save(root/(target+'.ico'),sizes=sizes)
-web=square('operations.png')
-assets={}
-for n in (180,192,512):
-    out=io.BytesIO();web.resize((n,n),Image.Resampling.LANCZOS).save(out,format='PNG')
-    assets[str(n)]=base64.b64encode(out.getvalue()).decode('ascii')
-out=io.BytesIO();web.resize((512,512),Image.Resampling.LANCZOS).save(out,format='ICO',sizes=sizes)
-assets['ico']=base64.b64encode(out.getvalue()).decode('ascii')
-(root/'home-icons.json').write_text(json.dumps(assets,separators=(',',':')),encoding='ascii')
+# Web branding assets are prepared from assets/store-ops.svg and committed.
