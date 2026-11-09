@@ -9,9 +9,16 @@ class Tests(unittest.TestCase):
   # Test servers must never inherit a real user's cloud backup destination.
   cls.p=subprocess.Popen([sys.executable,str(Path(__file__).with_name('server.py'))],env={**os.environ,'OneDrive':'','OneDriveConsumer':'','OneDriveCommercial':'','DISPATCH_DATA':cls.tmp.name,'DISPATCH_PORT':str(cls.port)},stdout=subprocess.DEVNULL)
   cls.client=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
-  for i in range(100):
+  deadline=time.monotonic()+30
+  while time.monotonic()<deadline:
+   if cls.p.poll() is not None:
+    cls.tmp.cleanup()
+    raise RuntimeError(f'Test server exited during startup: {cls.p.returncode}')
    try: cls.call('session');break
    except OSError: time.sleep(.05)
+  else:
+   cls.p.terminate();cls.p.wait();cls.tmp.cleanup()
+   raise RuntimeError('Test server did not become ready within 30 seconds')
  @classmethod
  def tearDownClass(cls):cls.p.terminate();cls.p.wait();cls.tmp.cleanup()
  @classmethod
