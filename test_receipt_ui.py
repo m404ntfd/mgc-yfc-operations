@@ -29,7 +29,7 @@ def run():
     if page.locator('#sectionChooser').is_visible():
      page.locator('[name=section][value=receipts]').check();page.locator('#sectionChooserForm button').click()
     expect(page.locator('#receipts')).to_be_visible();page.locator('#openReceiptUpload').click();page.locator('#receiptReturn').click();expect(page.locator('#receipts')).to_be_visible()
-    context.clear_cookies();page.locator('#openReceiptUpload').click();page.locator('#receiptReturn').click();expect(page.locator('#auth')).to_be_visible();expect(page.locator('#app')).to_be_hidden()
+    page.locator('#openReceiptUpload').click();expect(page.locator('#receiptUpload')).to_be_visible();context.clear_cookies();page.locator('#receiptReturn').click();expect(page.locator('#auth')).to_be_visible();expect(page.locator('#app')).to_be_hidden()
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
     context.close()
    assert not errors,errors;browser.close()
