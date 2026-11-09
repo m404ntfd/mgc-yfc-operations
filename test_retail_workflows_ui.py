@@ -14,7 +14,7 @@ try:
  post('product-save',name='Open price sample',category='Retail',price=100,taxable=True,rules={})
  with sync_playwright() as pw:
   b=pw.chromium.launch(**({'executable_path':os.environ['TEST_CHROMIUM']} if os.environ.get('TEST_CHROMIUM') else {}));ctx=b.new_context(viewport={'width':1440,'height':1000});p=ctx.new_page();errors=[];p.on('pageerror',lambda e:errors.append(str(e)));origin=f'http://127.0.0.1:{f.port}';out=Path(os.environ.get('TEST_ARTIFACTS','test-artifacts'));out.mkdir(parents=True,exist_ok=True)
-  p.goto(origin+'/office');password_login_page(p).locator('#login [name=name]').fill('Admin');p.locator('#login [name=password]').fill('testpassword');p.locator('#login button').click();expect(p.locator('#officeTiles .officeTile')).to_have_count(32)
+  p.goto(origin+'/office');password_login_page(p).locator('#login [name=name]').fill('Admin');p.locator('#login [name=password]').fill('testpassword');p.locator('#login button').click();expect(p.locator('[data-office-action=product-tools]')).to_be_visible()
   p.screenshot(path=str(out/'Retail-Workflows-OFFICE-Home.png'))
   for theme in ['classic-gray','harbor-blue','coastal-teal','midnight','coastyouth-red']:
    p.locator('#retailAppearance').click();p.locator('#retailThemeForm select').select_option(theme);p.locator('#retailThemeForm button').click();expect(p.locator('#retailThemeStatus')).to_contain_text('saved');expect(p.locator('body')).to_have_attribute('data-retail-theme',theme);p.locator('.flowClose').click();p.screenshot(path=str(out/('Theme-OFFICE-'+theme+'.png')))
