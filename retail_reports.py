@@ -27,23 +27,25 @@ def retail_reports(c,u,q):
     def money(n):return f'{n/100:.2f}'
     def stamp(v):return dt.datetime.fromtimestamp(retail_epoch(v,'date'))
     def table(title,columns,rows,note=''):return dict(title=title,columns=columns,rows=rows,note=note)
+    def merchandise(s):return sum(l['subtotal'] for l in s['lines'] if not l.get('donation'))
     if kind=='dashboard':
         items={};categories={};employees={};buckets={}
         def add(group,key,value):group[key]=group.get(key,0)+value
         for s in sales:
-            add(employees,s['cashier'],s['subtotal']);add(buckets,stamp(s['at']).strftime('%Y-%m-%d' if end-start>172800 else '%Y-%m-%d %H:00'),s['subtotal'])
-            for l in s['lines']:add(items,l['name'],l['subtotal']);add(categories,l['category'],l['subtotal'])
+            add(employees,s['cashier'],merchandise(s));add(buckets,stamp(s['at']).strftime('%Y-%m-%d' if end-start>172800 else '%Y-%m-%d %H:00'),merchandise(s))
+            for l in s['lines']:
+                if not l.get('donation'):add(items,l['name'],l['subtotal']);add(categories,l['category'],l['subtotal'])
         for r in refunds:
             original=c.execute('SELECT body FROM pos_sales WHERE id=?',(r['sale'],)).fetchone();name=json.loads(original[0])['cashier'] if original else 'Unknown'
             add(employees,name,-r['subtotal']);add(buckets,stamp(r['at']).strftime('%Y-%m-%d' if end-start>172800 else '%Y-%m-%d %H:00'),-r['subtotal'])
             for l in r['lines']:add(items,l['name'],-l['subtotal']);add(categories,l['category'],-l['subtotal'])
-        gross=sum(l['subtotal'] for s in sales for l in (s.get('original_lines') or s['lines']))
-        net=sum(s['subtotal'] for s in sales)-sum(r['subtotal'] for r in refunds)
+        gross=sum(l.get('tag_original',l)['subtotal'] for s in sales for l in (s.get('reward_original') or s.get('original_lines') or s['lines']) if not l.get('donation'))
+        net=sum(merchandise(s) for s in sales)-sum(r['subtotal'] for r in refunds)
         working=[r[0] for r in c.execute('SELECT p.name FROM work_periods w LEFT JOIN receipt_profiles p ON p.profile_id=w.account WHERE w.end IS NULL')] if labor else None
         previous=dict(q,start=[dt.datetime.fromtimestamp(start-(end-start)).astimezone().isoformat()],end=[dt.datetime.fromtimestamp(start).astimezone().isoformat()])
         prev=retail_workflow_get(c,u,'sale-report',previous)
-        prior_net=sum(s['subtotal'] for s in prev['sales'])-sum(r['subtotal'] for r in prev['refunds'])
-        return dict(store=pos_settings(c)['store'],gross=gross,net=net,transactions=len(sales),average=round(net/len(sales)) if sales else None,prior_net=prior_net,items=items,categories=categories,employees=employees,buckets=buckets,working=working,labor_percent=None,note='Net sales exclude tax and deduct refunds posted in this period. Comparison is the preceding equal-length period. Employee returns are attributed to the original cashier.')
+        prior_net=sum(merchandise(s) for s in prev['sales'])-sum(r['subtotal'] for r in prev['refunds'])
+        return dict(store=pos_settings(c)['store'],gross=gross,net=net,transactions=len(sales),average=round(net/len(sales)) if sales else None,prior_net=prior_net,items=items,categories=categories,employees=employees,buckets=buckets,working=working,labor_percent=None,note='Net sales exclude tax and voluntary donations and deduct refunds posted in this period. Comparison is the preceding equal-length period. Employee returns are attributed to the original cashier.')
     if kind=='pricing' or kind=='tax-assignment' or kind=='hierarchy':
         rows=[retail_product(c,r) for r in c.execute('SELECT * FROM pos_products ORDER BY rowid')]
         return table({'pricing':'Pricing','tax-assignment':'Tax assignment','hierarchy':'Reporting hierarchy'}[kind],['Product','Category','Price','Taxable','Active'],[[r['name'],r['category'],'Open price' if r.get('rules',{}).get('open_priced') else money(r['price']),r['taxable'],r.get('rules',{}).get('active',True)] for r in rows],'Current catalog configuration; not a reconstruction of historical prices.')
@@ -83,6 +85,7 @@ def retail_reports(c,u,q):
                 key=(original.get('terminal') or 'Not recorded',s['cashier']);v=groups.setdefault(key,[0,0]);v[0]+=sign*(s['tender']-s['change'] if sign==1 else s['cash']);v[1]+=sign*s.get('store_credit',0)
             else:
                 for l in s['lines']:
+                    if l.get('donation'):continue
                     key=(s['cashier'],stamp(s['at']).strftime('%Y-%m-%d' if end-start>172800 else '%Y-%m-%d %H:00')) if kind=='employee-time' else (l['name'],stamp(s['at']).strftime('%H:00')) if kind=='products-hour' else (stamp(s['at']).strftime('%Y-%m-%d'),stamp(s['at']).strftime('%H:00')) if kind=='seven-day' else (l['name'],l['category'])
                     v=groups.setdefault(key,[0,0]);v[0]+=sign*l['quantity'];v[1]+=sign*l['subtotal']
     if kind in ('cash','drawer','shift'):return table({'cash':'Cash summary','drawer':'Drawer summary','shift':'Shift summary'}[kind],['Terminal','Employee','Net cash','Net store credit'],[[*k,money(v[0]),money(v[1])] for k,v in sorted(groups.items())],'Calculated from recorded payments and refunds. No physical drawer counts or cash-session reconciliation are recorded.')

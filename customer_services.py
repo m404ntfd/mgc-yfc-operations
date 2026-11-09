@@ -215,5 +215,6 @@ def customer_display(c,token):
         data=pos_cart(cart)
         if not data.get('held'):
             result.update(state='sale',lines=[dict(name=l['name'],quantity=l['quantity'],subtotal=l['subtotal']) for l in data['lines']],subtotal=data['subtotal'],tax=data['tax'],total=data['total'])
+            result['donation_prompt']='Would you like to round up or add a donation? Please tell your cashier.' if thrift_settings(c)['donations'] and not any(l.get('donation') for l in data['lines']) else ''
             if data.get('adjustment'):result['adjustment']={k:data['adjustment'][k] for k in ('mode','amount')}
     return result

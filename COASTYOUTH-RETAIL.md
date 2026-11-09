@@ -45,3 +45,52 @@ Saved the approved DESK/OFFICE and OPERATIONS original artwork from POS Name Ide
 ## Separate DESK / OFFICE build
 DESK no longer exposes setup, catalog editing, receipt/tax settings, register settings, or update administration. Retail configuration belongs to OFFICE. DESK retains checkout, manual amounts, sales lookup, store-credit payment, Operations shortcuts, update warnings, and protected Exit. Mandatory initial exit-passcode setup remains in DESK; later changes are in OFFICE on the same checkout computer/Windows login/server, using server administrator approval. DESK rereads local protection before exit so OFFICE passcode changes take effect. Separate desk.ico and office.ico are exported from the approved original presentation sheet and wired to each executable and installer; embedded app branding uses those same separate marks. Existing installer IDs and database paths remain unchanged.
 Validation: shared users/catalog browser test, native OFFICE unsaved-work close guard, native full-screen DESK and protected exit test, OFFICE-to-running-DESK passcode regression, data-integrity and embedded-asset tests passed. Separate Windows executable builds succeeded. Not published.
+# Thrift workflows — unpublished preview
+
+DESK's **Thrift store tools** button offers donated-item barcode entry, color-tag
+assignment, voluntary donations, customer selection and loyalty redemption.
+OFFICE's Sales section holds color/donation/loyalty rules, donation intake and
+price tags, fulfillment and thrift reports. Its Accounts section holds customer
+profiles and assistance-voucher issuance. Existing role permissions govern these
+tools; voucher issuance requires Manage store credit and reporting/fulfillment
+requires View POS sales.
+
+- New programs are off until configured. Tag dates use the server's local date;
+  weekday selection uses Monday–Sunday. Discounts are calculated on assignment
+  and saved with the cart. Tag names remain visible on receipts. Promotional
+  prices and bundles are excluded from tag discounts. Manual discounts/rewards
+  on tag-discounted merchandise require the stacking setting.
+- Optional round-ups/custom donations are separate receipt lines and excluded
+  from merchandise dashboard metrics and loyalty earnings. The customer display
+  invites the customer to tell the cashier. Donations cannot be reversed using
+  merchandise returns; they need a separately reviewed accounting adjustment.
+- Vouchers reuse the immutable store-credit ledger. Issue with recipient,
+  funding reference, expiration and eligible categories; redeem by AC code using
+  DESK Store credit. Ineligible items/donations require a separate transaction.
+  Returns restore the original voucher account. Ordinary credit adjustments
+  cannot bypass voucher issuance rules.
+- Customer rewards earn on cash merchandise spend, excluding tax/donations.
+  Credit/voucher purchases do not earn points. One reward per sale, capped at
+  eligible merchandise value, with no manual-discount combination. Partial
+  returns adjust earned/redeemed points cumulatively. Previously spent points
+  can leave a negative balance recoverable through future earnings. Marketing
+  consent is independent of membership and editable; no campaigns are sent.
+- Sold slips reference completed receipts and record storage location, due
+  date, contact and fulfillment status. Dispatch scheduling remains in STORE
+  OPS; its appointment reference is entered on the slip. Slip edits never alter
+  reservations. Print the saved slip from its editor.
+- Intake creates a one-of-a-kind catalog item and Code 39 price label. Scan in
+  DESK or select the item from the catalog. Quantity is one; checkout prevents
+  duplicate sales across tills. Returns require explicit inspected restocking.
+  Inventory age is shown in the latest-200-item intake list. Test actual scanner
+  and printer/label stock before production use.
+- Thrift reports provide net tag sales/markdowns, donations, net voucher
+  redemptions, issued reward discounts, current voucher balances and current
+  outstanding pickups. Print / Save PDF uses the system print dialog.
+
+All new tables are additive. Existing sales remain immutable; no production
+records were accessed during development. Tests cover request retries, stale
+revisions, permissions, voucher restrictions, partial returns, duplicate intake
+sales, reward balance conflicts and isolated browser workflows. A populated
+v0.47.0 upgrade rehearsal preserved every existing row and attachment through
+upgrade, backup, repeated startup and code rollback. This release does not enable credit-card processing.

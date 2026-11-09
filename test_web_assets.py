@@ -10,10 +10,11 @@ class WebAssetTests(unittest.TestCase):
    for name in updater.FILES:
     target=root/name;target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(source/name,target)
    for path in [source/'assets/home-icons.json',*sorted((source/'assets').glob('plug-*.b64'))]:shutil.copyfile(path,root/'assets'/path.name)
-   for name in ('pos.html','pos.js','pos.css','customer-office.js','customer-display.html','customer-display.js','customer-display.css','report-center.js','office-expansion.js'):shutil.copyfile(source/'static'/name,root/'static'/name)
+   for name in ('pos.html','pos.js','pos.css','customer-office.js','customer-display.html','customer-display.js','customer-display.css','report-center.js','office-expansion.js','thrift-retail.js'):shutil.copyfile(source/'static'/name,root/'static'/name)
    shutil.copyfile(source/'customer_services.py',root/'customer_services.py')
    shutil.copyfile(source/'retail_reports.py',root/'retail_reports.py')
    shutil.copyfile(source/'computer_registry.py',root/'computer_registry.py')
+   shutil.copyfile(source/'thrift_retail.py',root/'thrift_retail.py')
    prepare(root)
    module=ast.parse((root/'server.py').read_text(encoding='utf-8'))
    assignment=next(node for node in module.body if isinstance(node,ast.Assign) and any(isinstance(target,ast.Name) and target.id=='WEB_ASSETS' for target in node.targets))
@@ -24,6 +25,8 @@ class WebAssetTests(unittest.TestCase):
    self.assertEqual({k:assets[k] for k in ('180','192','512','ico')},__import__('json').loads((source/'assets/home-icons.json').read_text()))
    pos=next(node for node in module.body if isinstance(node,ast.Assign) and any(isinstance(target,ast.Name) and target.id=='POS_ASSETS' for target in node.targets))
    self.assertEqual(set(ast.literal_eval(pos.value)),{'pos.html','pos.js','pos.css','customer-display.html','customer-display.js','customer-display.css'})
+   self.assertIn('function thriftDesk()',ast.literal_eval(pos.value)['pos.js'])
+   self.assertTrue(any(isinstance(node,ast.FunctionDef) and node.name=='thrift_init' for node in module.body))
    output=io.BytesIO()
    with zipfile.ZipFile(output,'w',zipfile.ZIP_DEFLATED) as archive:
     for name in updater.FILES:archive.write(root/name,name)

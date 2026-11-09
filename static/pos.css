@@ -76,3 +76,19 @@ body[data-retail-theme] .cardNotice,body[data-retail-theme] .cardNotice p{color:
 .computerDialog{width:min(1100px,94vw);max-width:94vw}.computerIntro p{max-width:900px;line-height:1.5}.computerVersions{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:18px 0}.computerVersions article{background:var(--panel,#223b54);padding:18px;border-radius:10px;display:grid;gap:7px}.computerVersions strong{font-size:24px}.computerCard{border:1px solid #7890a455;border-radius:12px;padding:18px;margin:14px 0}.computerCard header{display:flex;justify-content:space-between;gap:14px;align-items:center}.computerCard h3{margin:0}.computerCard form,#computerRollout{display:flex;align-items:end;gap:12px;flex-wrap:wrap;margin:16px 0}.computerApps>div{display:grid;grid-template-columns:180px 140px 1fr;gap:12px;padding:12px 0;border-top:1px solid #7890a433}.computerApps small{grid-column:1/-1;opacity:.75}.computerBadge{border-radius:30px;background:#7890a433;padding:4px 10px;justify-self:start}.computerBadge.online{background:#35a66f33}.computerEmpty{padding:30px;text-align:center}.computerCard .muted{font-size:13px;overflow-wrap:anywhere}@media(max-width:700px){.computerApps>div{grid-template-columns:1fr}.computerCard header{align-items:start}.computerVersions{grid-template-columns:1fr}}
 .computerVersions article{background:#223b54;color:#fff}.computerVersions article span,.computerVersions article strong,.computerVersions article small{color:#fff}
 .computerUpdateSummary{display:flex;justify-content:space-between;align-items:center;gap:20px;border:1px solid #7890a466;border-left:5px solid #35a66f;border-radius:10px;padding:14px 20px;margin:16px 0}.computerUpdateSummary p{margin:5px 0 0}.computerUpdateSummary.hasUpdates{border-left-color:#e4a000}
+
+/* Thrift tools inherit the selected application theme. */
+.thriftDialog{width:min(1100px,94vw);max-width:1100px;padding:24px;max-height:92vh}
+.thriftDialog .flowDialogHeading{position:sticky;top:-24px;background:var(--panel,#fff);z-index:2;padding:10px 0}
+.thriftTagGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin:16px 0}
+.thriftTagGrid fieldset{min-width:0;border:1px solid #a8b9c9;border-radius:10px;padding:16px}
+.thriftDialog .thriftWeekdays{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.thriftDialog .thriftWeekdays label{display:flex!important;align-items:center;gap:4px;margin:0!important}
+.thriftDialog input[type=checkbox]{width:auto!important;min-height:0}
+.thriftDialog input[type=color]{height:42px;min-height:42px;padding:4px}
+.thriftDialog article{padding:14px;border:1px solid #b8c8d6;border-radius:9px;margin:12px 0}
+.thriftDialog table{width:100%;border-collapse:collapse;margin:12px 0}
+.thriftDialog td,.thriftDialog th{padding:10px;text-align:left;border-bottom:1px solid #b8c8d6}
+.thriftDialog #thriftTagForm,.thriftDialog #thriftDonation{display:inline-block;vertical-align:top;width:calc(50% - 18px);margin-right:16px;padding:16px;border:1px solid #b8c8d6;border-radius:10px}
+.thriftDialog #thriftSettings>button.primary{margin-top:18px}
+@media(max-width:700px){.thriftDialog #thriftTagForm,.thriftDialog #thriftDonation{display:block;width:100%;margin:12px 0}.thriftTagGrid{grid-template-columns:1fr}}

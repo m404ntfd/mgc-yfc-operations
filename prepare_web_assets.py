@@ -13,11 +13,13 @@ def prepare(root=None):
  for filename in ('app.js','pos.js'):
   file=root/'static'/filename;content=file.read_text(encoding='utf-8')
   content=re.sub(r'// BEGIN REPORT CENTER.*?// END REPORT CENTER',lambda _: '// BEGIN REPORT CENTER\n'+(root/'static/report-center.js').read_text(encoding='utf-8')+'\n// END REPORT CENTER',content,flags=re.S)
+  if filename=='pos.js':content=re.sub(r'// BEGIN THRIFT UI.*?// END THRIFT UI',lambda _: '// BEGIN THRIFT UI\n'+(root/'static/thrift-retail.js').read_text(encoding='utf-8')+'\n// END THRIFT UI',content,flags=re.S)
   if filename=='pos.js':content=re.sub(r'// BEGIN OFFICE EXPANSION.*?// END OFFICE EXPANSION',lambda _: '// BEGIN OFFICE EXPANSION\n'+(root/'static/office-expansion.js').read_text(encoding='utf-8')+'\n// END OFFICE EXPANSION',content,flags=re.S)
   file.write_text(content,encoding='utf-8')
  pos={name:(root/'static'/name).read_text(encoding='utf-8') for name in ('pos.html','pos.js','pos.css','customer-display.html','customer-display.js','customer-display.css')}
  source,count=re.subn(r'^POS_ASSETS=.* # prepared POS application assets$',lambda _: 'POS_ASSETS='+repr(pos)+' # prepared POS application assets',source,flags=re.M)
  if count!=1:raise ValueError('POS asset marker missing')
+ source=re.sub(r'# BEGIN THRIFT RETAIL.*?# END THRIFT RETAIL',lambda _: '# BEGIN THRIFT RETAIL\n'+(root/'thrift_retail.py').read_text(encoding='utf-8')+'\n# END THRIFT RETAIL',source,flags=re.S)
  source=re.sub(r'# BEGIN CUSTOMER SERVICES.*?# END CUSTOMER SERVICES',lambda _: '# BEGIN CUSTOMER SERVICES\n'+(root/'customer_services.py').read_text(encoding='utf-8')+'\n# END CUSTOMER SERVICES',source,flags=re.S)
  source=re.sub(r'# BEGIN RETAIL REPORTS.*?# END RETAIL REPORTS',lambda _: '# BEGIN RETAIL REPORTS\n'+(root/'retail_reports.py').read_text(encoding='utf-8')+'\n# END RETAIL REPORTS',source,flags=re.S)
  source=re.sub(r'# BEGIN COMPUTER REGISTRY.*?# END COMPUTER REGISTRY',lambda _: '# BEGIN COMPUTER REGISTRY\n'+(root/'computer_registry.py').read_text(encoding='utf-8-sig')+'\n# END COMPUTER REGISTRY',source,flags=re.S)
