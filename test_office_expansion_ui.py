@@ -28,7 +28,7 @@ try:
   if p.locator('#sectionChooserForm').is_visible():p.locator('#sectionChooserForm [name=section][value=print]').check();p.locator('#sectionChooserForm button').click()
 
   if p.get_by_role('button',name='Skip for now',exact=True).is_visible():p.get_by_role('button',name='Skip for now',exact=True).click()
-  p.evaluate("storeSection('print')");expect(p.locator('#printPurpose .rrMetrics')).to_be_visible();p.screenshot(path=str(out/'Next-Dashboard-Desktop.png'))
+  p.evaluate("storeSection('print')");expect(p.locator('#printPurpose > .retailReport .rrResult > .rrMetrics')).to_be_visible();p.screenshot(path=str(out/'Next-Dashboard-Desktop.png'))
   p.set_viewport_size({'width':390,'height':844});p.locator('#printPurpose').scroll_into_view_if_needed();p.screenshot(path=str(out/'Next-Dashboard-Mobile.png'));assert p.evaluate('document.documentElement.scrollWidth<=innerWidth')
   desk=b.new_context(viewport={'width':1280,'height':900}).new_page();desk.goto(url+'/pos');expect(desk.locator('#deskPinForm')).to_be_visible();desk.screenshot(path=str(out/'Next-DESK-PIN.png'));desk.locator('#deskPinForm [name=pin]').fill('654321');desk.locator('#deskPinForm button.primary').click();expect(desk.locator('#cashier')).to_have_text('Employee');desk.locator('#signOut').click();expect(desk.locator('#deskPinForm')).to_be_visible();expect(desk.locator('#posRoot')).to_be_hidden();expect(desk.locator('#deskPinForm [name=pin]')).to_have_value('');assert not errors,errors
   b.close()

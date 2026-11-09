@@ -30,6 +30,10 @@ class StoreTests(unittest.TestCase):
    self.assertIn('error',b.request_exit('000000'));w.destroy.assert_not_called()
    w.evaluate_js.return_value=False;self.assertIn('error',b.request_exit('123456'));w.destroy.assert_not_called()
    w.evaluate_js.return_value=True;self.assertTrue(b.open_operations('pos')['ok']);w.load_url.assert_called_with('http://localhost:8080/pos?kiosk=1')
+   self.assertTrue(b.open_operations('delivery:123')['ok']);w.load_url.assert_called_with('http://localhost:8080/#pos-delivery-123')
+   for invalid in ('delivery:0','delivery:123/elsewhere','delivery:https://example.com'):
+    self.assertIn('error',b.open_operations(invalid))
+   w.evaluate_js.return_value=False;self.assertIn('error',b.open_operations('delivery:123'));w.evaluate_js.return_value=True
    w.get_current_url.return_value='https://other.example/pos';self.assertIn('error',b.request_exit('123456'))
    self.assertIn('error',b.configure_passcode('a'*64,'111111','111111'))
    w.get_current_url.return_value='http://localhost:8080/';self.assertTrue(b.request_exit('123456')['ok']);w.destroy.assert_called_once();self.assertTrue(b._closing())

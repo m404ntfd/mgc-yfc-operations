@@ -24,7 +24,7 @@ def run():
    form.locator('button').first.click();expect(p.locator('#officeUserRows')).to_contain_text('Office sample staff');assert not p.evaluate('changedForms.has(document.querySelector("#officeAddUser"))')
    p.locator('#officeRoleUser').select_option(label='Office sample staff');p.locator('#officeRoleChoice').select_option(label='Retail staff');p.locator('#officeUserRole button').first.click();expect(p.locator('#officeUserRows')).to_contain_text('Retail staff')
    p.screenshot(path=str(out/'CoastYouth-Retail-OFFICE-Users-Preview.png'))
-   q=context.new_page();q.goto(origin+'/#retail-users');expect(q.locator('#userSettingsPanel')).to_be_visible();expect(q.locator('#userSettingsPanel')).to_contain_text('Office sample staff')
+   q=context.new_page();q.goto(origin+'/office-security');expect(q.locator('#userSettingsPanel')).to_be_visible();expect(q.locator('#userSettingsPanel')).to_contain_text('Office sample staff')
    q.locator('#userForm [name=name]').fill('Operations sample staff');q.locator('#userForm [name=password]').fill('testpassword');q.locator('#userForm button').click();expect(q.locator('#addUserMessage')).to_contain_text('successfully');p.locator('#officeUsersRefresh').click();expect(p.locator('#officeUserRows')).to_contain_text('Operations sample staff')
    form.locator('[name=name]').fill('office SAMPLE staff');form.locator('[name=password]').fill('testpassword');form.locator('[name=confirm]').fill('testpassword');form.locator('button').first.click();expect(p.locator('#posStatus')).not_to_have_text('User added to the shared directory. Assign a role to set their access.');form.locator('[type=reset]').click()
    with server.connect() as c:

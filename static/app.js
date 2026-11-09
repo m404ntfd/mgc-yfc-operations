@@ -123,7 +123,7 @@ $('logout').onclick=async()=>{try{await api('logout',{pushDevice:commPushId()});
 $('dayTab').onclick=()=>quickView(null);$('weekTab').onclick=()=>quickView(0);$('nextWeekTab').onclick=()=>quickView(7);$('settingsTab').onclick=()=>tab('settings');$('addPickup').onclick=()=>openJob(null,'Pickup');$('addDelivery').onclick=()=>openJob(null,'Delivery');$('close').onclick=()=>$('editor').close();$('date').onchange=()=>{if(!$('date').value)$('date').value=localDate(new Date());tab('day');};$('filter').onchange=render;$('statusFilter').onchange=render;$('search').oninput=render;
 for(const [id,step]of [['prev',-1],['next',1]])$(id).onclick=()=>{$('date').value=shiftDate($('date').value,step*(mode==='week'?7:1));render();};
 $('jobs').onclick=e=>{const edit=e.target.closest('[data-edit]');const expand=!edit&&(e.target.closest('[data-expand],[data-toggle-appointment]')||e.target.closest('.job.collapsed'));if(expand){const id=expand.dataset.expand||expand.dataset.toggleAppointment||expand.dataset.appointment;if(expandedAppointments.has(id))expandedAppointments.delete(id);else expandedAppointments.add(id);render();return;}const b=e.target.closest('[data-edit]');if(b&&can('edit_appointments'))openJob(b.dataset.edit);const status=e.target.closest('[data-status]');if(status)openStatus(status.dataset.status);};
-$('jobForm').onsubmit=async e=>{e.preventDefault();$('save').disabled=true;bottomRequestSubmit.disabled=true;try{await api('save',{...Object.fromEntries(new FormData(e.target)),staffNames:new FormData(e.target).getAll('staffNames'),photos:requestPhotos,...(editing?{id:editing.id,revision:editing.revision}:{})});$('editor').close();toast('Appointment saved.');await refresh().catch(()=>toast('Saved. Reconnect to refresh the schedule.'));}catch(err){$('formError').textContent=err.message;}finally{$('save').disabled=false;bottomRequestSubmit.disabled=false;}};
+$('jobForm').onsubmit=async e=>{e.preventDefault();$('save').disabled=true;bottomRequestSubmit.disabled=true;try{await api('save',{...Object.fromEntries(new FormData(e.target)),staffNames:new FormData(e.target).getAll('staffNames'),photos:requestPhotos,...(window.retailDeliveryContext?{retail_sale:window.retailDeliveryContext.sale.id,type:'Delivery'}:{}),...(editing?{id:editing.id,revision:editing.revision}:{})});$('editor').close();toast('Appointment saved.');await refresh().catch(()=>toast('Saved. Reconnect to refresh the schedule.'));}catch(err){$('formError').textContent=err.message;}finally{$('save').disabled=false;bottomRequestSubmit.disabled=false;}};
 $('remove').onclick=async()=>{if(!editing||!confirm('Remove this appointment from the schedule? Use Canceled status instead if you want to keep its details.'))return;try{await api('delete',{id:editing.id,revision:editing.revision});$('editor').close();toast('Appointment removed.');await refresh().catch(()=>toast('Removed. Reconnect to refresh the schedule.'));}catch(e){$('formError').textContent=e.message;}};
 $('vehicleForm').onsubmit=async e=>{e.preventDefault();try{await api('vehicle',Object.fromEntries(new FormData(e.target)));e.target.reset();await refresh();toast('Vehicle added.');}catch(err){toast(err.message);}};
 $('auditButton').onclick=async()=>{try{const a=await api('audit');$('audit').innerHTML=a.map(r=>`<div class="listRow">${esc(r.action)}<div class="muted">${esc(r.actor)} · ${esc(r.at.replace('T',' '))}</div></div>`).join('')||'<p>No changes yet.</p>';}catch(e){toast(e.message);}};
@@ -240,7 +240,8 @@ const settingsCategories=document.createElement('nav');settingsCategories.classN
 const settingsTabs=document.createElement('nav');settingsTabs.className='settingsTabs settingsSubcategories';settingsTabs.id='settingsSubcategories';settingsTabs.setAttribute('aria-label','Settings subcategories');
 const settingsEmpty=document.createElement('p');settingsEmpty.id='settingsEmpty';settingsEmpty.setAttribute('role','status');settingsEmpty.hidden=true;
 let selectedSettingsCategory=null;
-function settingsAllowed(i){if(i===12)return can('manage_staff_schedule');return i!==0&&(i===8||i===9||!!user?.admin||([[],['backup_settings','create_backups'],['check_updates','configure_updates','install_updates'],['manage_vehicles'],['manage_users','reset_passwords','rename_users','manage_roles','manage_staff_schedule'],['view_audit'],['unlock_users'],[],[],[]][i]||[]).some(can));}
+const officeSecurityPage=location.pathname==='/office-security';
+function settingsAllowed(i){if(!officeSecurityPage&&[4,6].includes(i))return false;if(i===12)return can('manage_staff_schedule');return i!==0&&(i===8||i===9||!!user?.admin||([[],['backup_settings','create_backups'],['check_updates','configure_updates','install_updates'],['manage_vehicles'],['manage_users','reset_passwords','rename_users','manage_roles','manage_staff_schedule'],['view_audit'],['unlock_users'],[],[],[]][i]||[]).some(can));}
 function settingsCategory(index){
  index=index===null?0:index;selectedSettingsCategory=index;
  settingsPanels.forEach(panel=>panel.hidden=true);settingsTabs.hidden=false;settingsTabs.replaceChildren();settingsEmpty.hidden=true;
@@ -248,7 +249,7 @@ function settingsCategory(index){
  const descriptions={1:['↺','Configure backups and recovery.'],2:['↑','Check releases and connected users.'],3:['▰','Manage dispatch vehicles.'],4:['♙','Manage employee accounts and role assignments.'],5:['≡','Review recent application changes.'],6:['⊙','Manage login protection and locked accounts.'],7:['▤','Configure receipt categories.'],8:['◐','Choose your preferred color mode.'],9:['▣','Set the layout for this device.'],10:['↗','Choose available sharing options.'],11:['◈','Customize application page colors.'],12:['▦','Define jobs used in staff scheduling.']};
  const panels=settingsGroups[index].panels.filter(settingsAllowed);
  for(const i of panels){const button=document.createElement('button');button.type='button';button.dataset.settingsPanel=i;button.setAttribute('aria-label',settingsNames[i]);const [icon,description]=descriptions[i]||['⚙','Manage these settings.'];button.innerHTML=`<span class="settingsTileIcon" aria-hidden="true">${icon}</span><span><strong>${esc(settingsNames[i])}</strong><small>${description}</small></span><span aria-hidden="true">›</span>`;button.onclick=()=>settingsSection(i);settingsTabs.append(button);}
- if(index===0&&can('manage_roles')){const button=document.createElement('button');button.type='button';button.setAttribute('aria-label','Roles');button.innerHTML='<span class="settingsTileIcon" aria-hidden="true">☷</span><span><strong>Roles</strong><small>Manage shared permissions by category.</small></span><span aria-hidden="true">›</span>';button.onclick=()=>{settingsSection(4);selectUserSettings('roles');};settingsTabs.append(button);}
+ if(officeSecurityPage&&index===0&&can('manage_roles')){const button=document.createElement('button');button.type='button';button.setAttribute('aria-label','Roles');button.innerHTML='<span class="settingsTileIcon" aria-hidden="true">☷</span><span><strong>Roles</strong><small>Manage shared permissions by category.</small></span><span aria-hidden="true">›</span>';button.onclick=()=>{settingsSection(4);selectUserSettings('roles');};settingsTabs.append(button);}
  if(!settingsTabs.children.length){settingsEmpty.textContent='No settings are currently available in this category.';settingsEmpty.hidden=false;}
 }
 function settingsSection(index){if(!settingsAllowed(index))return;if(index===12)loadWorkJobs();if(index===4)selectUserSettings();if(index===10)loadSharingSettings();if(index===11)loadPageColors(true);const group=settingsGroups.findIndex(g=>g.panels.includes(index));if(group!==selectedSettingsCategory)settingsCategory(group);settingsPanels.forEach((panel,i)=>panel.hidden=i!==index);settingsTabs.hidden=true;}
@@ -699,6 +700,7 @@ $('renameUserForm').onsubmit=async e=>{
 };
 
 function selectUserSettings(target){
+ if(!officeSecurityPage)return;
  const usersAllowed=can('manage_users')||can('reset_passwords')||can('rename_users')||can('manage_staff_schedule'),rolesAllowed=can('manage_roles');
  const roles=rolesAllowed&&(target==='roles'||!usersAllowed);
  usersSettingsButton.hidden=!usersAllowed;openRoles.hidden=!rolesAllowed;
@@ -2943,7 +2945,7 @@ const rolePermissionPanel=document.createElement('section');rolePermissionPanel.
 $('roleForm').prepend(roleTabs,roleProperties,rolePermissionPanel);
 for(const name of ['properties','permissions']){const b=document.createElement('button');b.type='button';b.dataset.roleTab=name;b.textContent=name[0].toUpperCase()+name.slice(1);b.onclick=()=>selectRoleEditorTab(name);roleTabs.append(b);}
 function selectRoleEditorTab(name){roleProperties.hidden=name!=='properties';rolePermissionPanel.hidden=name!=='permissions';for(const b of roleTabs.children){const selected=b.dataset.roleTab===name;b.classList.toggle('selected',selected);b.setAttribute('aria-pressed',String(selected));}}
-const roleCancel=document.createElement('button');roleCancel.type='button';roleCancel.textContent='Cancel changes';roleCancel.onclick=()=>{if(rolesData)showRole();};$('roleForm').append(roleCancel);
+const roleCancel=document.createElement('button');roleCancel.type='button';roleCancel.textContent='Cancel changes';roleCancel.onclick=()=>{if(rolesData)showRole();changedForms.delete(roleForm);};$('roleForm').append(roleCancel);
 $('roleForm').querySelector('[type=submit]').classList.add('primary');
 
 // Keep password, role assignment and personal details as separate forms/actions.
@@ -2972,6 +2974,7 @@ userEditorPanels.properties.prepend(propertyActions);
 function selectUserEditorTab(name){for(const [key,panel]of Object.entries(userEditorPanels))panel.hidden=key!==name;for(const button of userEditorTabs.children){const selected=button.dataset.userTab===name;button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected));}}
 function renderUserAccessPreview(grants,admin){const items=[['Dispatch',admin||grants.view_schedule],['Paging',admin||grants.send_pages||grants.receive_pages],['Receipts & Accounting',true],['Dashboard',true],['My Timekeeping',true],['Manager scheduling',admin||grants.manage_staff_schedule],['Payroll export',admin||grants.export_payroll],['Role management',admin||grants.manage_roles]];$('userAccessPreview').innerHTML=items.map(([label,enabled])=>`<div><strong>${label}</strong><span>${enabled?'Available':'Not enabled'}</span></div>`).join('');}
 async function openUserSetup(name){
+ if(!officeSecurityPage){toast('Manage users in CoastYouth Retail OFFICE.');return;}
  const person=state.users.find(p=>p.name===name);if(!person)return;
  $('userEditorTitle').textContent='Edit user';$('userEditorSummary').textContent=name+' · '+(person.admin?'Administrator':'Employee');
  $('passwordForm').hidden=!(can('reset_passwords')&&(!person.admin||user.admin));
@@ -3133,7 +3136,7 @@ $('activitySettingsForm').onsubmit=async event=>{event.preventDefault();const bu
 const chooseLandingBeforePos=chooseLanding;
 chooseLanding=async function(force=false){
  const target=location.hash;
- if(!force&&['#retail-users','#retail-roles'].includes(target)){history.replaceState(null,'',location.pathname+location.search);if(!guardUpdateNavigation())return;if(!can(target==='#retail-roles'?'manage_roles':'manage_users')){toast('Your role does not have access to this setting.');return;}tab('settings');settingsSection(4);selectUserSettings(target==='#retail-roles'?'roles':'users');return;}
+ if(!force&&['#retail-users','#retail-roles'].includes(target)){if(!officeSecurityPage){location.replace('/office'+target);return;}history.replaceState(null,'',location.pathname+location.search);if(!guardUpdateNavigation())return;if(!can(target==='#retail-roles'?'manage_roles':'manage_users')){toast('Your role does not have access to this setting.');return;}tab('settings');settingsSection(4);selectUserSettings(target==='#retail-roles'?'roles':'users');return;}
  if(!force&&location.hash==='#office-timekeeping'){history.replaceState(null,'',location.pathname);workOpen(false,'time-cards');return;}
  if(!force&&['#pos-time-clock','#pos-reservations','#pos-paging'].includes(target)){
   history.replaceState(null,'',location.pathname+location.search);
@@ -3248,16 +3251,18 @@ installPosNativeToolbar();
 function retailReportCenter(root,mode='sales'){
  const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const dollar=n=>n===null?'Not available':new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(n/100);
- const sales=[['dashboard','Dashboard'],['sales','Sales report'],['transactions','Transaction log'],['cash','Cash summary'],['drawer','Drawer summary'],['employee-time','Employee sales by time'],['products','Products sold'],['modifiers','Products & modifiers'],['products-hour','Products sold by hour'],['seven-day','Revenue by day and hour'],['pricing','Pricing'],['hierarchy','Reporting hierarchy'],['tax-assignment','Tax assignment'],['tax-audit','Tax audit'],['accounts','Account information'],['adjustments','Adjustments log'],['journal','Sales journal'],['tabs','Open and held sales'],['reservations','Reservation schedule']];
+ const sales=[['dashboard','Dashboard'],['donations','Donation performance'],['donations-employee','Donations by employee'],['sales','Sales report'],['transactions','Transaction log'],['cash','Cash summary'],['drawer','Drawer summary'],['cash-reconciliation','Cash-drawer reconciliation'],['employee-time','Employee sales by time'],['products','Products sold'],['modifiers','Products & modifiers'],['products-hour','Products sold by hour'],['seven-day','Revenue by day and hour'],['pricing','Pricing'],['hierarchy','Reporting hierarchy'],['tax-assignment','Tax assignment'],['tax-audit','Tax audit'],['accounts','Account information'],['adjustments','Adjustments log'],['journal','Sales journal'],['tabs','Open and held sales'],['reservations','Reservation schedule']];
  const labor=[['labor','Labor hours'],['time-entries','Time entries'],['schedule','Print employee schedule']];
  const choices=mode==='labor'?labor:mode==='schedule'?[labor[2]]:sales;
  const today=new Date(),date=d=>new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);
- root.innerHTML=`<section class="retailReport"><h1>${mode==='dashboard'?'Dashboard':mode==='labor'?'Labor & time reports':mode==='schedule'?'Print schedule':'Sales analysis'}</h1><form class="rrFilters"><label>Report<select name="kind">${choices.map(([k,t])=>`<option value="${k}">${t}</option>`).join('')}</select></label><label>From<input type="date" name="start" value="${date(today)}" required></label><label>Through<input type="date" name="end" value="${date(today)}" required></label><button>Run report</button><button type="button" data-rr-print>Print</button><button type="button" data-rr-export>Export CSV</button></form><p class="rrStatus" role="status"></p><div class="rrResult"></div></section>`;
+ root.innerHTML=`<section class="retailReport"><h1>${mode==='dashboard'?'Dashboard':mode==='labor'?'Labor & time reports':mode==='schedule'?'Print schedule':'Sales analysis'}</h1><form class="rrFilters"><label>Store<select name="store_id"><option value="thrift-mart">Thrift Mart</option><option value="binopoly">Binopoly</option><option value="">All stores</option></select></label><label>Report<select name="kind">${choices.map(([k,t])=>`<option value="${k}">${t}</option>`).join('')}</select></label><label>From<input type="date" name="start" value="${date(today)}" required></label><label>Through<input type="date" name="end" value="${date(today)}" required></label><button>Run report</button><button type="button" data-rr-print>Print</button><button type="button" data-rr-export>Export CSV</button></form><p class="rrStatus" role="status"></p><div class="rrResult"></div></section>`;
  let result=null;const form=root.querySelector('form'),status=root.querySelector('.rrStatus'),output=root.querySelector('.rrResult');
- root.querySelector('[data-rr-print]').onclick=()=>{if(!result)return;let print=document.getElementById('retailPrintReport');if(!print){print=document.createElement('section');print.id='retailPrintReport';document.body.append(print);}print.innerHTML=`<h1>${escape(result.title||result.store||'Dashboard')}</h1><p>${escape(form.elements.start.value)} through ${escape(form.elements.end.value)}</p>`+output.innerHTML;document.body.classList.add('retailPrinting');window.print();document.body.classList.remove('retailPrinting');print.remove();};
- root.querySelector('[data-rr-export]').onclick=()=>{if(!result?.rows){status.textContent='Choose a detailed report to export rows.';return;}const cell=v=>'"'+String(v??'').replace(/^[=+@\-]/,"'$&").replace(/"/g,'""')+'"';const csv=[result.columns,...result.rows].map(r=>r.map(cell).join(',')).join('\r\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));a.download='CoastYouth-'+form.elements.kind.value+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);};
+ root.querySelector('[data-rr-print]').onclick=async()=>{if(!result)return;let print=document.getElementById('retailPrintReport');if(print)print.remove();print=document.createElement('section');print.id='retailPrintReport';print.classList.toggle('rrWide',(result.columns?.length||0)>6);print.innerHTML=output.innerHTML;document.body.append(print);await Promise.all([...print.querySelectorAll('img')].map(img=>img.decode().catch(()=>{})));document.body.classList.add('retailPrinting');try{window.print();}finally{document.body.classList.remove('retailPrinting');print.remove();}};
+ root.querySelector('[data-rr-export]').onclick=()=>{if(!result?.rows){status.textContent='Choose a detailed report to export rows.';return;}const cell=v=>'"'+String(v??'').replace(/^[=+@\-]/,"'$&").replace(/"/g,'""')+'"';const csv=[result.columns,...result.rows].map(r=>r.map(cell).join(',')).join('\r\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));a.download='CoastYouth-'+result.document.kind+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);};
  const chart=(title,values)=>{const entries=Object.entries(values),max=Math.max(1,...entries.map(x=>Math.abs(x[1])));return `<article class="rrCard"><h2>${title}</h2>${entries.length?entries.map(([name,n])=>`<div class="rrBar"><div><span>${escape(name)}</span><strong>${dollar(n)}</strong></div><div class="rrTrack"><i style="width:${Math.abs(n)/max*100}%;background:${n<0?'#b54a45':'#0969ed'}"></i></div></div>`).join(''):'<p>No activity in this period.</p>'}</article>`;};
- form.onsubmit=async e=>{e.preventDefault();status.textContent='Loading…';result=null;output.replaceChildren();try{const end=new Date(form.elements.end.value+'T00:00:00');end.setDate(end.getDate()+1);const endLocal=date(end)+'T00:00:00';const q=new URLSearchParams({kind:form.elements.kind.value,start:form.elements.start.value+'T00:00:00',end:endLocal});result=await api('retail-reports?'+q);if(result.rows){output.innerHTML=`<h2>${escape(result.title)}</h2><div class="rrTable"><table><thead><tr>${result.columns.map(c=>`<th>${escape(c)}</th>`).join('')}</tr></thead><tbody>${result.rows.map(r=>`<tr>${r.map(v=>`<td>${escape(v)}</td>`).join('')}</tr>`).join('')||`<tr><td colspan="${result.columns.length}">No records in this period.</td></tr>`}</tbody></table></div>`;}else{const delta=result.prior_net?((result.net-result.prior_net)/Math.abs(result.prior_net)*100).toFixed(1)+'%':'N/A';output.innerHTML=`<h2>${escape(result.store||'CoastYouth Retail')}</h2><div class="rrMetrics">${[['Gross sales',dollar(result.gross)],['Net sales',dollar(result.net)],['Transactions',result.transactions],['Average net sale',dollar(result.average)],['Prior-period change',delta],['Labor % of net sales','Not available']].map(([a,b])=>`<article class="rrCard"><span>${a}</span><strong>${b}</strong></article>`).join('')}</div><div class="rrCharts">${chart('Net sales over time',result.buckets)}${chart('Net sales by item',result.items)}${chart('Net sales by category',result.categories)}${chart('Net sales by employee',result.employees)}</div><article class="rrCard"><h2>Who’s working</h2>${result.working===null?'<p>Time card or payroll permission required.</p>':`<strong>${result.working.length} employees clocked in</strong><p>${result.working.map(escape).join(', ')}</p>`}</article>`;}status.textContent=result.note||'Report ready. Dates use the server’s local time.';}catch(err){status.textContent=err.message;}};
+ form.onsubmit=async e=>{e.preventDefault();status.textContent='Loading…';result=null;output.replaceChildren();try{const end=new Date(form.elements.end.value+'T00:00:00');end.setDate(end.getDate()+1);const endLocal=date(end)+'T00:00:00';const q=new URLSearchParams({store_id:form.elements.store_id.value,kind:form.elements.kind.value,start:form.elements.start.value+'T00:00:00',end:endLocal});result=await api('retail-reports?'+q);if(result.rows){output.innerHTML=`<h2>${escape(result.title)}</h2><div class="rrTable"><table><thead><tr>${result.columns.map(c=>`<th>${escape(c)}</th>`).join('')}</tr></thead><tbody>${result.rows.map(r=>`<tr>${r.map(v=>`<td>${escape(v)}</td>`).join('')}</tr>`).join('')||`<tr><td colspan="${result.columns.length}">No records in this period.</td></tr>`}</tbody></table></div>`;}else{const delta=result.prior_net?((result.net-result.prior_net)/Math.abs(result.prior_net)*100).toFixed(1)+'%':'N/A';output.innerHTML=`<h2>${escape(result.store||'CoastYouth Retail')}</h2><div class="rrMetrics">${[['Gross sales',dollar(result.gross)],['Net sales',dollar(result.net)],['Transactions',result.transactions],['Average net sale',dollar(result.average)],['Prior-period change',delta],['Labor % of net sales','Not available']].map(([a,b])=>`<article class="rrCard"><span>${a}</span><strong>${b}</strong></article>`).join('')}</div><article class="rrCard"><h2>Donation performance</h2><div class="rrMetrics">${[['Donations',dollar(result.donations.total)],['Donating transactions',result.donations.donors],['Participation',result.donations.participation===null?'N/A':result.donations.participation+'%'],['Average donation',dollar(result.donations.average)],['Donations per 1,000 transactions',dollar(result.donations.per_thousand)]].map(([a,b])=>`<div><span>${a}</span><strong>${b}</strong></div>`).join('')}</div><p>Voluntary donations are separate from merchandise revenue.</p></article><div class="rrCharts">${chart('Net sales over time',result.buckets)}${chart('Net sales by item',result.items)}${chart('Net sales by category',result.categories)}${chart('Net sales by employee',result.employees)}</div><article class="rrCard"><h2>Who’s working · shared employee directory</h2>${result.working===null?'<p>Time card or payroll permission required.</p>':`<strong>${result.working.length} employees clocked in</strong><p>${result.working.map(escape).join(', ')}</p>`}</article>`;}const doc=result.document,heading=result.title||choices.find(x=>x[0]===doc.kind)?.[1]||'Report';const existingTitle=output.querySelector(':scope>h2');if(existingTitle)existingTitle.remove();output.insertAdjacentHTML('afterbegin',`<header class="rrDocumentHeader">${doc.logo?`<img src="${escape(doc.logo)}" alt="${escape(doc.store)} logo">`:`<span class="rrBrandMark" aria-hidden="true">${escape(doc.store.split(/\s+/).slice(0,2).map(w=>w[0]).join(''))}</span>`}<div><p>COASTYOUTH RETAIL · REPORTS</p><strong>${escape(doc.store)}</strong><h2>${escape(heading)}</h2></div></header><div class="rrDocumentMeta"><span><b>Period:</b> ${escape(doc.start)} through ${escape(doc.end)}</span><span><b>Scope:</b> ${escape(doc.scope)}</span><span><b>Generated:</b> ${escape(new Date(doc.generated).toLocaleString())}</span></div>${result.rows?'<h3 class="rrSectionBar">Report details · '+result.rows.length+' records</h3>':''}`);output.insertAdjacentHTML('beforeend',`<footer class="rrDocumentFooter">${escape(result.note||'Report dates use the server’s local time.')}<br>${escape(doc.store)} · ${escape(heading)}</footer>`);status.textContent=result.note||'Report ready. Dates use the server’s local time.';}catch(err){status.textContent=err.message;}};
+ if(['labor','schedule'].includes(mode)){form.elements.store_id.value='';form.elements.store_id.closest('label').hidden=true;}
+ if(!['labor','schedule'].includes(mode)&&typeof retailStoreChoice!=='undefined')form.elements.store_id.value=retailStoreChoice;
  form.requestSubmit();
 }
 
@@ -3285,3 +3290,98 @@ commTestNotification.onclick=async()=>{try{
  }catch(e){$('commDeviceStatus').textContent=e.message;}};
 
 if(location.pathname==='/office-timekeeping')document.body.classList.add('officeTimeEmbed');
+
+// BEGIN FULFILLMENT PRINT
+// Shared DESK / STORE OPS printing of the saved sale and saved sold slip.
+function fulfillmentEscape(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function fulfillmentMoney(v){return new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(v/100);}
+function fulfillmentLine(l){return fulfillmentEscape(l.name)+(l.weight_milli?` · ${(l.weight_milli/1000).toFixed(3)} lb × ${fulfillmentMoney(l.price_per_lb)}/lb`:'');}
+function fulfillmentSlipMarkup(p,sale){
+ const e=fulfillmentEscape;
+ return ['CUSTOMER PICKUP SLIP','SOLD · HOLD FOR CUSTOMER'].map(title=>`<section class="fulfillmentTicket"><h1>${title}</h1><h2>${e(sale.settings.store)}</h2><h3>Receipt #${p.sale}</h3><p>${e(p.customer)} · ${e(p.contact)}</p><p>Storage: ${e(p.location)} · Due: ${e(p.due)}</p><p>Status: ${e(p.status.replaceAll('_',' '))}</p><ul>${sale.lines.filter(l=>!l.donation&&!l.gift_certificate).map(l=>`<li>${l.quantity} × ${fulfillmentLine(l)}</li>`).join('')}</ul><p>${e(p.notes)}</p><p>Dispatch: ${e(p.dispatch_reference||'Not scheduled')}</p></section>`).join('');
+}
+function fulfillmentReceiptMarkup(s){
+ const e=fulfillmentEscape,m=fulfillmentMoney,r=s.receipt_design||{};
+ return `<section>${r.logo?`<img alt="Store logo" style="max-width:160px" src="${e(r.logo)}">`:''}<h1>${e(s.settings.store)}</h1><p>${e(r.address)}<br>${e(r.phone)}</p><h2>Receipt #${s.id}</h2><p>${e(s.at)} · ${e(s.cashier)}</p><table><thead><tr><th>Item</th><th>Qty</th><th>Amount</th></tr></thead><tbody>${s.lines.map(l=>`<tr><td>${fulfillmentLine(l)}</td><td>${l.quantity}</td><td>${m(l.subtotal)}</td></tr>`).join('')}</tbody></table><p>Subtotal: ${m(s.subtotal)}<br>Tax: ${m(s.tax)}<br><strong>Total: ${m(s.total)}</strong><br>${s.store_credit?`Store credit: ${m(s.store_credit)} · ${e(s.credit_account)}<br>`:''}Cash received: ${m(s.tender)}<br>Change: ${m(s.change)}${s.cash_rounding?'<br>Cash rounding: '+m(s.cash_rounding):''}</p><p>${e(r.policy)}</p><p>${e(r.footer)}</p></section>`;
+}
+function fulfillmentPrint(title,html){
+ const w=window.open('','_blank');if(!w)return false;
+ w.document.write('<!doctype html><html><head><title>'+fulfillmentEscape(title)+'</title><style>body{font:16px Arial;padding:24px;color:#111;background:white}table{border-collapse:collapse;width:100%}td,th{padding:8px;border-bottom:1px solid #ccc;text-align:left}.fulfillmentTicket+ .fulfillmentTicket{break-before:page}p{white-space:pre-line}</style></head><body>'+html+'</body></html>');w.document.close();w.focus();w.print();return true;
+}
+
+// END FULFILLMENT PRINT
+// BEGIN DELIVERY WORKSPACE
+// Reuse the actual Operations editor and calendar; no second reservation store.
+window.retailDeliveryContext=null;
+const deliveryLandingBefore=chooseLanding;
+chooseLanding=async function(force=false){
+ const match=location.hash.match(/^#pos-delivery-([1-9][0-9]{0,12})$/);
+ if(!force&&match){try{await deliveryWorkspace(Number(match[1]));}catch(e){toast(e.message);}return;}
+ return deliveryLandingBefore(force);
+};
+function deliveryRequest(){return Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');}
+async function deliveryReturnToDesk(){
+ if(window.pywebview?.api?.open_operations){const r=await window.pywebview.api.open_operations('pos');if(r.error)toast(r.error);}
+ else location.assign('/pos');
+}
+async function deliveryWorkspace(ident){
+ if(window.retailDeliveryContext)return;
+ if(!guardUpdateNavigation())return;
+ const context=await api('pos/pickup-followup?sale='+ident);
+ if(!context.can_schedule)throw Error('Your account needs View schedule and Create appointments permissions. The sold slip remains saved for an authorized scheduler.');
+ if(context.followup?.appointment){toast('Delivery is already scheduled: '+context.followup.appointment);storeSection('dispatch');return;}
+ if(context.followup?.step!=='scheduling'||!context.pickup)throw Error('Choose delivery from the saved pickup-slip follow-up in DESK first.');
+ await refresh();if(!state.vehicles.length)throw Error('Add a delivery vehicle in STORE OPS settings before scheduling. The paid sale and sold slip remain saved.');
+ expandedAppointments.clear();storeSection('dispatch');quickView(0);openJob(null,'Delivery');
+ const editor=$('editor'),form=$('jobForm'),schedule=$('schedule'),nav=document.querySelector('.scheduleNav');
+ const anchors=[schedule,nav].map(node=>{const marker=document.createComment('delivery-workspace-return');node.before(marker);return {node,marker};});
+ const calendar=document.createElement('section');calendar.id='deliveryCalendar';calendar.setAttribute('aria-label','Delivery calendar');calendar.innerHTML='<h2>Appointments · this week</h2><p>Review existing bookings before choosing the delivery time.</p>';calendar.append(nav,schedule);editor.append(calendar);
+ const footer=document.createElement('footer');footer.id='deliveryFooter';footer.innerHTML='<button type="button" id="deliveryPrintReceipt">Reprint customer receipt</button><button type="button" id="deliveryPrintSlip">Reprint pickup / sold slips</button><button type="button" id="deliveryPageLoading">Page associate for loading</button><button type="button" id="deliveryNotNeeded">No delivery needed — return to POS</button>';editor.append(footer);
+ const message=document.createElement('p');message.id='deliveryReceiptContext';message.textContent='Paid receipt #'+ident+' · '+context.sale.settings.store+' · Stored at '+context.pickup.location;form.querySelector('.dialogTop').after(message);
+ editor.classList.add('deliveryWorkspace');window.retailDeliveryContext=context;
+ $('editTitle').textContent='New delivery appointment';form.elements.type.value='Delivery';form.elements.type.disabled=true;
+ form.elements.customer.value=context.pickup.customer;form.elements.phone.value=context.pickup.contact;
+ form.elements.items.value=context.sale.lines.filter(l=>!l.donation&&!l.gift_certificate).map(l=>l.quantity+' × '+l.name+(l.weight_milli?' ('+(l.weight_milli/1000).toFixed(3)+' lb)':'')).join('\n');
+ form.elements.notes.value='Receipt #'+ident+' · '+context.sale.settings.store+'\nStorage: '+context.pickup.location+(context.pickup.notes?'\n'+context.pickup.notes:'');
+ form.elements.start.value=context.pickup.due+'T09:00';form.elements.end.value=context.pickup.due+'T10:00';
+ changedForms.set(form,formSnapshot(form));
+ const previousClose=$('close').onclick;let leaving=false;
+ const closeDraft=()=>{if(writesInFlight){toast('Wait for the save to finish.');return;}if(changedForms.has(form)&&!confirm('Close these unsaved delivery details? The paid sale and pickup slip will remain saved.'))return;changedForms.delete(form);editor.close();};
+ $('close').onclick=closeDraft;const cancel=e=>{e.preventDefault();closeDraft();};editor.addEventListener('cancel',cancel);
+ const protectCalendar=e=>{if(e.target.closest('[data-edit],[data-status]')){e.preventDefault();e.stopImmediatePropagation();toast('Finish this new delivery before editing an existing appointment.');}};schedule.addEventListener('click',protectCalendar,true);
+ $('deliveryPrintReceipt').onclick=()=>{if(!fulfillmentPrint('Customer receipt #'+ident,fulfillmentReceiptMarkup(context.sale)))toast('Allow the print window to open.');};
+ $('deliveryPrintSlip').onclick=()=>{if(!fulfillmentPrint('Pickup / sold ticket set',fulfillmentSlipMarkup(context.pickup,context.sale)))toast('Allow the print window to open.');};
+ $('deliveryPageLoading').disabled=!can('send_pages');$('deliveryPageLoading').onclick=deliveryLoadingPage;
+ $('deliveryNotNeeded').onclick=async()=>{
+  if(writesInFlight){toast('Wait for the save to finish.');return;}
+  if(changedForms.has(form)&&!confirm('Discard the unsaved delivery details and return to POS?'))return;
+  try{await api('pos/pickup-followup',{sale:ident,revision:context.followup.revision,action:'skip',request:deliveryRequest()});leaving=true;changedForms.delete(form);editor.close();await deliveryReturnToDesk();}catch(e){$('formError').textContent=e.message;}
+ };
+ editor.addEventListener('close',async()=>{
+  editor.classList.remove('deliveryWorkspace');for(const {node,marker}of anchors){marker.replaceWith(node);}calendar.remove();footer.remove();message.remove();editor.removeEventListener('cancel',cancel);schedule.removeEventListener('click',protectCalendar,true);$('close').onclick=previousClose;form.elements.type.disabled=false;window.retailDeliveryContext=null;changedForms.delete(form);history.replaceState(null,'',location.pathname+location.search);
+  if(leaving)return;
+  try{const current=await api('pos/pickup-followup?sale='+ident);if(current.followup?.appointment){const d=document.createElement('dialog');d.innerHTML='<h2>Delivery scheduled</h2><p>The delivery is linked to receipt #'+ident+'. The paid sale remains unchanged.</p><button type="button">Return to POS</button>';document.body.append(d);d.showModal();d.querySelector('button').onclick=()=>{d.close();d.remove();deliveryReturnToDesk();};}}catch(e){toast('Check the saved delivery before trying again: '+e.message);}
+ },{once:true});
+}
+function deliveryLoadingPage(){
+ const d=document.createElement('dialog');d.innerHTML='<h2>Page associate for loading</h2><p>Choose an existing paging area. Sending uses the current STORE OPS paging system.</p><label>Paging area<select></select></label><p role="status"></p><button type="button" data-send>Send page</button><button type="button" data-close>Close</button>';document.body.append(d);
+ const select=d.querySelector('select');select.innerHTML=$('pageArea').innerHTML;const loading=[...select.options].find(o=>/load/i.test(o.textContent));if(loading)select.value=loading.value;
+ d.querySelector('[data-close]').onclick=()=>{d.close();d.remove();};d.querySelector('[data-send]').onclick=async()=>{const b=d.querySelector('[data-send]');b.disabled=true;try{await api('paging/send',{area:select.value});d.querySelector('[role=status]').textContent='Page queued for enabled speaker devices. Playback is not confirmed.';}catch(e){d.querySelector('[role=status]').textContent=e.message;}finally{b.disabled=false;}};d.showModal();
+}
+
+
+// END DELIVERY WORKSPACE
+
+// BEGIN OFFICE SECURITY
+// OFFICE owns shared account administration; STORE OPS keeps staff self-service.
+if(officeSecurityPage){
+ document.body.classList.add('officeSecurityEmbed');document.title='CoastYouth Retail OFFICE · Users & roles';
+ const securityLandingBefore=chooseLanding;
+ chooseLanding=async function(){
+  if(!user)return;
+  tab('settings');settingsSection(4);
+  selectUserSettings(location.hash==='#retail-roles'?'roles':'users');
+ };
+}
+
+// END OFFICE SECURITY

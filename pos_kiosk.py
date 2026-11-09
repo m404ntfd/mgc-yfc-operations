@@ -113,7 +113,8 @@ class KioskBridge:
  def open_operations(self,tool):
   try:
    if not self._trusted() or not self._store.configured:raise ValueError('Complete admin passcode setup first.')
-   targets={'clock':'#pos-time-clock','reservations':'#pos-reservations','paging':'#pos-paging','pos':'pos?kiosk=1','office':'office?kiosk=1','users':'#retail-users','roles':'#retail-roles','server':'#settings'}
+   targets={'clock':'#pos-time-clock','reservations':'#pos-reservations','paging':'#pos-paging','pos':'pos?kiosk=1','office':'office?kiosk=1','users':'office#retail-users','roles':'office#retail-roles','server':'#settings'}
+   if isinstance(tool,str) and re.fullmatch(r'delivery:[1-9][0-9]{0,12}',tool):targets[tool]='#pos-delivery-'+tool.split(':')[1]
    if tool not in targets:raise ValueError('Unknown Operations function.')
    if self._window.evaluate_js('window.posKioskCanLeave ? window.posKioskCanLeave() : false') is not True:raise ValueError('Finish or save your current work first.')
    self._window.load_url(self._address+'/'+targets[tool]);return {'ok':True}

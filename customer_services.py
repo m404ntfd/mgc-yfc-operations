@@ -115,7 +115,8 @@ def customer_worker():
 def customer_get(c,u,path,query):
     if path=='customer-settings':
         if not has_permission(u,'manage_pos'):raise Problem('Manage POS permission required.',403)
-        return dict(receipt=customer_settings(c,'receipt'),email=customer_settings(c,'email'),display=customer_settings(c,'display'),gmail_ready=customer_ready(c),server_time=dt.datetime.now().astimezone().isoformat())
+        profile=stores_profile(c,query['store_id'][0]) if query.get('store_id') else None
+        return dict(receipt=dict(profile['receipt'],revision=profile['revision']) if profile else customer_settings(c,'receipt'),email=customer_settings(c,'email'),display=customer_settings(c,'display'),gmail_ready=customer_ready(c),server_time=dt.datetime.now().astimezone().isoformat())
     if path=='reservation-messages':
         if not has_permission(u,'manage_pos') or not has_permission(u,'view_schedule'):raise Problem('POS settings and schedule permissions required.',403)
         customer_schedule(c)
@@ -132,7 +133,8 @@ def customer_post(handler,c,u,path,d,finish):
         kind=d.get('kind')
         if kind not in CUSTOMER_DEFAULTS:raise Problem('Choose receipt, email or display settings.')
         if kind=='email' and not u['admin']:raise Problem('Administrator access required for email delivery settings.',403)
-        old=customer_settings(c,kind)
+        profile=stores_profile(c,d['store_id']) if kind=='receipt' and d.get('store_id') else None
+        old=dict(profile['receipt'],revision=profile['revision']) if profile else customer_settings(c,kind)
         if d.get('revision')!=old['revision']:raise Problem('Settings changed. Reopen this screen before saving.',409)
         body={}
         for key,default in CUSTOMER_DEFAULTS[kind].items():
@@ -155,6 +157,10 @@ def customer_post(handler,c,u,path,d,finish):
                 if re.search(r'\{(?!customer\}|type\}|start\}|end\}|address\}|store\})[^}]*\}',body[key]):raise Problem('Use only the listed template fields.')
             if body['enabled'] and not (body['sender'] and customer_password()):raise Problem('Configure the Gmail app password on the server before enabling delivery.')
         if kind=='display' and (not body['welcome'] or not body['thanks']):raise Problem('Enter welcome and thank-you messages.')
+        if profile:
+            record={k:v for k,v in profile.items() if k not in ('id','revision')};record['receipt']=body
+            c.execute('INSERT INTO retail_stores VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,body=excluded.body',(profile['id'],profile['revision']+1,json.dumps(record)))
+            return finish(dict(settings=dict(body,revision=profile['revision']+1)),'Changed store receipt branding')
         c.execute('INSERT INTO customer_settings VALUES(?,?,?) ON CONFLICT(kind) DO UPDATE SET revision=excluded.revision,body=excluded.body',(kind,old['revision']+1,json.dumps(body)))
         if kind=='display' and not body['enabled']:c.execute('DELETE FROM customer_displays')
         return finish(dict(settings=customer_settings(c,kind)),'Changed customer '+kind+' settings')
@@ -214,7 +220,7 @@ def customer_display(c,token):
     if cart:
         data=pos_cart(cart)
         if not data.get('held'):
-            result.update(state='sale',lines=[dict(name=l['name'],quantity=l['quantity'],subtotal=l['subtotal']) for l in data['lines']],subtotal=data['subtotal'],tax=data['tax'],total=data['total'])
+            result.update(state='sale',lines=[dict(name=l['name'],quantity=l['quantity'],subtotal=l['subtotal'],weight_milli=l.get('weight_milli'),price_per_lb=l.get('price_per_lb')) for l in data['lines']],subtotal=data['subtotal'],tax=data['tax'],total=data['total'])
             result['donation_prompt']='Would you like to round up or add a donation? Please tell your cashier.' if thrift_settings(c)['donations'] and not any(l.get('donation') for l in data['lines']) else ''
             if data.get('adjustment'):result['adjustment']={k:data['adjustment'][k] for k in ('mode','amount')}
     return result

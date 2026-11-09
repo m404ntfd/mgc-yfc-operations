@@ -1,15 +1,15 @@
-# CoastYouth Retail STORE OPS 0.48.0 / DESK 1.10.0 / OFFICE 1.7.0
+# CoastYouth Retail STORE OPS 0.49.0 / DESK 1.11.0 / OFFICE 1.8.0
 
-- DESK adds thrift checkout tools: color-tag discounts, donated-item barcode entry, voluntary round-ups/custom donations, customer rewards and sold-item pickup slips.
-- OFFICE adds color schedules and category exclusions, donation and loyalty rules, customer profiles with separate marketing consent, assistance vouchers, fulfillment tracking and thrift reports.
-- Donation intake creates individually tracked catalog items with printable Code 39 price tags and inventory age. Checkout prevents duplicate sales; returned items require inspected restocking.
-- Assistance vouchers reuse the existing store-credit ledger with category and expiry restrictions. Returns restore the original account. Loyalty balances are checked at payment and corrected on partial returns.
-- Donation lines remain separate from merchandise metrics and cash-change rounding. The customer display shows an optional donation invitation. Merchandise returns cannot reverse donations.
-- Sold slips retain receipt references, storage locations, due dates and fulfillment history. Delivery scheduling remains in STORE OPS; enter its appointment reference on the slip.
-- Reports include tag performance, donations, voucher redemptions/balances, issued rewards and outstanding pickups, with Print / Save PDF.
+- Thrift Mart and Binopoly have separate store profiles, terminal assignments, sales, item pricing, tax settings and receipt branding. Existing records remain associated with Thrift Mart without rewriting historical data.
+- Sold-by-weight items prompt for manually entered pounds and calculate the pre-tax amount before Add to Sale. Digital scale integration remains a future hardware setup task.
+- Optional cash-drawer reconciliation, gift certificates, scannable membership cards and birthday rewards are available in OFFICE and remain off by default. Loyalty can earn and redeem collectively or separately per store, with source tracking and refund protection.
+- STORE OPS and OFFICE include donation performance and employee donation reports.
+- OFFICE products can be marked “May require a pickup slip.” After successful payment, DESK offers the saved pickup/sold ticket set, then optional delivery scheduling. The split delivery window reuses the existing appointment form and calendar, starts with appointments minimized, and includes receipt/slip reprinting, loading pages and return to POS. Follow-ups can be resumed; retrying a saved delivery does not duplicate it.
+- User and role administration is available within OFFICE, including shared role permissions, individual access, work assignments, profiles, PINs and login security. These configuration menus are removed from STORE OPS. Existing accounts and permissions remain shared; staff self-service stays available.
+- Reports have branded headers with the configured store logo/name, report title, date range, scope, section bars and alternating detail rows. Print/PDF layout supports repeated table headings and wide reports. Combined reports identify All stores; labor reports identify the shared staff directory.
 
-Update the existing server first, then DESK and OFFICE. All programs continue using the same server and existing data. New programs are disabled until configured in OFFICE. Barcode scanner and label-printer hardware selection/setup will be reviewed separately; no device drivers or printer assignments are changed. Credit cards remain planned for a future update.
+Update the existing server first, then DESK and OFFICE. The Computer Setup installer includes all three applications and lets you choose the computer's role. Existing installation IDs and data locations are unchanged. Credit cards will be added in future updates.
 
-Existing installation IDs, data locations, users, timecards, reservations, sales, settings and credit histories are retained. Schema changes are additive; historical sales remain immutable. Release checks exercise populated upgrade, backup, repeated startup, rollback, attachments, open punches/breaks, refunds, permissions, retries, duplicate-sale protection and actual Windows installer upgrades.
+Existing timecards, open punches and breaks, reservations, attachments, sales, users, settings and account histories are retained. Database changes are additive and historical sales remain immutable. Release validation covers populated upgrade, backup, repeated startup, rollback and Windows installer preservation checks.
 
-Create and verify a current backup before installing. Keep the existing installation and data folders. Publishing makes downloads available; it does not install updates on store computers.
+Create and verify a current backup before installing. Keep the existing installation and data folders. Publishing makes the downloads available; it does not install updates on store computers.

@@ -23,10 +23,10 @@ def thrift_settings(c):
 def thrift_require(u,permission):
     if not has_permission(u,permission):raise Problem('Required permission: '+permission.replace('_',' '),403)
 
-def thrift_customer(c,ident):
+def thrift_customer(c,ident,store='thrift-mart'):
     row=c.execute('SELECT * FROM thrift_customers WHERE id=?',(ident,)).fetchone()
     if not row:raise Problem('Customer not found.',404)
-    points=c.execute('SELECT COALESCE(SUM(amount),0) FROM thrift_points WHERE customer=?',(ident,)).fetchone()[0]
+    points=stores_points(c,ident,store)
     return dict(id=ident,revision=row['revision'],points=points,**json.loads(row['body']))
 
 def thrift_date(value,label,optional=True):
@@ -50,7 +50,7 @@ def thrift_get(c,u,path,q):
         if len(search)<2:raise Problem('Enter at least two characters to find a customer.')
         matches=[]
         for row in c.execute('SELECT id FROM thrift_customers ORDER BY id DESC'):
-            item=thrift_customer(c,row[0])
+            item=thrift_customer(c,row[0],q.get('store_id',['thrift-mart'])[0])
             if search in (str(item['id'])+' '+item['name']+' '+item['contact']).casefold():matches.append(item)
             if len(matches)==50:break
         return {'customers':matches}
@@ -64,7 +64,7 @@ def thrift_get(c,u,path,q):
         colors={};donations=0;voucher_used=0;loyalty_discount=0
         for row in c.execute('SELECT id,body FROM pos_sales'):
             s=json.loads(row['body'])
-            if not start<=s['at'][:10]<=end:continue
+            if not start<=s['at'][:10]<=end or (q.get('store_id',[''])[0] and stores_id(s)!=q['store_id'][0]):continue
             donations+=sum(l['subtotal'] for l in s['lines'] if l.get('donation'))
             voucher_used+=s.get('voucher_paid',0);loyalty_discount+=s.get('reward',{}).get('amount',0)
             for l in s['lines']:
@@ -74,6 +74,7 @@ def thrift_get(c,u,path,q):
             r=json.loads(row['body'])
             if not start<=r['at'][:10]<=end:continue
             s=json.loads(c.execute('SELECT body FROM pos_sales WHERE id=?',(row['sale'],)).fetchone()[0])
+            if q.get('store_id',[''])[0] and stores_id(s)!=q['store_id'][0]:continue
             if s.get('voucher_paid'):voucher_used-=r['store_credit']
             for l in r['lines']:
                 old=s['lines'][l['index']]
@@ -105,6 +106,13 @@ def thrift_post(c,u,path,d,finish):
     if path=='thrift-settings':
         thrift_require(u,'manage_pos');old=thrift_settings(c)
         if d.get('revision')!=old['revision']:raise Problem('Thrift settings changed. Reopen before saving.',409)
+        if 'loyalty_scope' in d:
+            programs=stores_programs(c)
+            if d.get('program_revision')!=programs['revision']:raise Problem('Loyalty scope changed. Reopen settings.',409)
+            if d['loyalty_scope'] not in ('shared','store'):raise Problem('Choose loyalty scope.')
+            if d['loyalty_scope']!=programs['loyalty_scope'] and any(json.loads(r[0]).get('reward') for r in c.execute("SELECT body FROM pos_carts WHERE status='open'")):raise Problem('Complete or remove rewards on saved sales before changing scope.')
+            programs['loyalty_scope']=d['loyalty_scope'];revision=programs.pop('revision')
+            c.execute('INSERT INTO retail_programs VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,body=excluded.body',(revision+1,json.dumps(programs)))
         body={}
         for key in ('donations','loyalty','stack_tags'):
             if type(d.get(key)) is not bool:raise Problem('Choose '+key+'.')
@@ -150,7 +158,7 @@ def thrift_post(c,u,path,d,finish):
         c.execute('INSERT INTO pos_credit_ledger(account,amount,balance,at,actor,reason) VALUES(?,?,?,?,?,?)',(ident,amount,amount,dt.datetime.now().astimezone().isoformat(),u['name'],reason))
         return finish({'account':pos_credit_account(c,ident)},'Assistance voucher issued')
     if path=='thrift-pickup-save':
-        thrift_require(u,'view_pos_sales');ident=pos_int(d.get('sale'),'receipt number',1)
+        ident=pos_int(d.get('sale'),'receipt number',1);fulfillment_sale(c,u,ident)
         s=c.execute('SELECT body,cart FROM pos_sales WHERE id=?',(ident,)).fetchone()
         if not s:raise Problem('Receipt not found.',404)
         old=c.execute('SELECT * FROM thrift_pickups WHERE sale=?',(ident,)).fetchone()
@@ -168,7 +176,7 @@ def thrift_post(c,u,path,d,finish):
 def thrift_tag(c,cart,d):
     if cart.get('reward') or cart.get('adjustment'):raise Problem('Remove the reward or restore original prices before changing tag discounts.')
     index=pos_int(d.get('index'),'line',0,len(cart['lines'])-1);line=cart['lines'][index]
-    if line.get('donation') or line.get('components'):raise Problem('Tag discounts apply to individual merchandise lines, not donations or bundles.')
+    if line.get('donation') or line.get('gift_certificate') or line.get('components'):raise Problem('Tag discounts apply to individual merchandise lines, not donations or bundles.')
     settings=thrift_settings(c);name=d.get('tag','')
     tag=next((x for x in settings['tags'] if x['name']==name),None) if name else None
     if name and not tag:raise Problem('Tag color no longer exists. Reopen the tag selector.',409)
@@ -201,16 +209,16 @@ def thrift_cart_action(c,u,cart,path,d,finish):
             settings=thrift_settings(c)
             if not settings['loyalty'] or not cart.get('customer'):raise Problem('Select a customer and enable loyalty in OFFICE.')
             if cart.get('adjustment'):raise Problem('Rewards cannot combine with manual discounts.')
-            customer=thrift_customer(c,cart['customer'])
+            customer=thrift_customer(c,cart['customer'],stores_id(cart))
             if customer['points']<settings['reward_points']:raise Problem('Insufficient reward points.')
-            targets=[l for l in cart['lines'] if not l.get('donation') and (settings['stack_tags'] or not l.get('tag',{}).get('discount'))]
+            targets=[l for l in cart['lines'] if not l.get('donation') and not l.get('gift_certificate') and (settings['stack_tags'] or not l.get('tag',{}).get('discount'))]
             if any(l.get('components') for l in targets):raise Problem('Rewards on bundles are not supported.')
             amount=min(settings['reward_cents'],sum(l['subtotal'] for l in targets))
             if amount<=0:raise Problem('No eligible merchandise for this reward.')
             cart['reward_original']=json.loads(json.dumps(cart['lines']))
             for l,part in zip(targets,retail_allocate(amount,[l['subtotal'] for l in targets])):
                 l['subtotal']-=part;l['tax']=(l['subtotal']*cart['settings']['tax_bps']+5000)//10000 if l['taxable'] else 0
-            cart['reward']=dict(points=settings['reward_points'],amount=amount)
+            cart['reward']=dict(points=settings['reward_points'],amount=amount,loyalty_scope=stores_programs(c)['loyalty_scope'])
     retail_save_cart(c,cart);retail_event(c,cart['id'],u['name'],path,{k:v for k,v in d.items() if k not in ('request',)})
     return finish({'cart':cart},'Thrift sale updated')
 
@@ -233,10 +241,10 @@ def thrift_sale_prepare(c,cart,path):
         if line['intake'] in seen or not row or row['status']!='available':raise Problem('A donated item in this sale has already sold. Remove it before payment.',409)
         seen.add(line['intake'])
     if cart.get('reward'):
-        if not settings['loyalty']:raise Problem('Loyalty is disabled. Remove the reward before checkout.')
-        if thrift_customer(c,cart['customer'])['points']<cart['reward']['points']:raise Problem('Reward balance changed. Remove the reward and try again.',409)
+        if not cart['reward'].get('birthday') and not settings['loyalty']:raise Problem('Loyalty is disabled. Remove the reward before checkout.')
+        if not cart['reward'].get('birthday') and thrift_customer(c,cart['customer'],stores_id(cart))['points']<cart['reward']['points']:raise Problem('Reward balance changed. Remove the reward and try again.',409)
     if cart.get('customer') and settings['loyalty']:
-        cart['loyalty_earned']=sum(l['subtotal'] for l in cart['lines'] if not l.get('donation'))//settings['earn_cents'] if path=='cash' else 0
+        cart['loyalty_earned']=sum(l['subtotal'] for l in cart['lines'] if not l.get('donation') and not l.get('gift_certificate'))//settings['earn_cents'] if path=='cash' else 0
         cart['loyalty_earn_cents']=settings['earn_cents']
 
 def thrift_sale_saved(c,sale,ident):
@@ -252,7 +260,7 @@ def thrift_refund_saved(c,result,refund):
         if original.get('intake'):c.execute("UPDATE thrift_intake SET status='returned' WHERE id=? AND sale=? AND status='sold'",(original['intake'],result['sale']))
     if not sale.get('customer'):return
     history=retail_refund_state(c,result['sale']);returned=sum(r['subtotal'] for r in history)
-    merchandise=sum(l['subtotal'] for l in sale['lines'] if not l.get('donation'))
+    merchandise=sum(l['subtotal'] for l in sale['lines'] if not l.get('donation') and not l.get('gift_certificate'))
     earned=sale.get('loyalty_earned',0);redeemed=sale.get('reward',{}).get('points',0)
     # Recompute the cumulative refund entitlement; repeated partial returns
     # cannot earn additional points. A negative balance is a future-earn debt.

@@ -69,7 +69,7 @@ def run():
 
             manager.locator('#settingsTab').click()
             manager.get_by_role('button',name='Application Settings',exact=True).click()
-            manager.locator('#settingsSubcategories').get_by_role('button',name='Users',exact=True).click()
+            ops_manager=manager;manager=ops_manager.context.new_page();manager.goto(origin+'/office-security')
             staff_row=manager.locator('#users .listRow').filter(has_text='Staff')
             expect(staff_row.get_by_role('button',name='Edit name',exact=True)).to_have_count(0)
             staff_row.get_by_role('button',name='Employee Profile',exact=True).click()
@@ -87,6 +87,7 @@ def run():
             assignments.locator('[name=require_location]').check()
             assignments.get_by_role('button',name='Save assignments').click()
             expect(manager.locator('#workAssignmentForm')).to_be_hidden()
+            manager.close();manager=ops_manager
             manager.locator('#headerClock').click()
             manager.locator('.workDropdown:has([data-work-view=team]) summary').click()
             manager.locator('[data-work-view=team]').click()

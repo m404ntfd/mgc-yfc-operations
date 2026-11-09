@@ -39,13 +39,14 @@ def run():
                 assert vehicle_response.value.status==200, vehicle_response.value.text()
                 expect(page.locator('#vehicles')).to_contain_text('White truck')
                 page.locator('#settingsCategories').get_by_role('button',name='Application Settings',exact=True).click()
-                page.locator('#settingsSubcategories').get_by_role('button',name='Users',exact=True).click()
+                ops=page;page=phone.new_page();page.goto(base+'/office-security')
                 page.locator('#userForm [name=name]').fill('Alex')
                 page.locator('#userForm [name=password]').fill('testpassword')
                 page.locator('#userForm button').click()
                 expect(page.locator('#addUserMessage')).to_have_text('User added successfully.')
                 page.locator('#addUserDone').click()
                 expect(page.locator('#users')).to_contain_text('Alex')
+                page.close();page=ops;page.evaluate('refresh()')
                 page.locator('#storeMenuButton').click();page.locator('#dispatchSection').click()
                 assert page.evaluate("weekStart('2026-10-31')") == '2026-10-25'
                 assert page.evaluate("weekStart('2026-11-01')") == '2026-11-01'

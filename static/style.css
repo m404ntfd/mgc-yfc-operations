@@ -477,3 +477,45 @@ body.officeTimeEmbed>header{display:none!important}
 body.officeTimeEmbed main>:not(#workforce):not(#auth):not(#offline){display:none!important}
 body.officeTimeEmbed main{padding:0;max-width:none;margin:0}
 body.officeTimeEmbed #workforce{margin:0}
+
+/* Paid-sale delivery workspace: shared form left, live appointment list right. */
+dialog.deliveryWorkspace[open]{width:min(1680px,98vw);max-width:98vw;height:96vh;max-height:96vh;box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.08fr);grid-template-rows:minmax(0,1fr) auto;gap:14px;padding:16px;overflow:hidden}
+.deliveryWorkspace #jobForm{grid-column:1;grid-row:1;min-width:0;min-height:0;overflow:auto;margin:0;padding-right:8px}
+.deliveryWorkspace #jobForm .grid{gap:8px;grid-template-columns:repeat(2,minmax(0,1fr))}
+.deliveryWorkspace #jobForm label{font-size:13px;gap:4px}.deliveryWorkspace #jobForm input,.deliveryWorkspace #jobForm select,.deliveryWorkspace #jobForm textarea{padding:7px 9px;font-size:14px;min-height:34px}.deliveryWorkspace #jobForm textarea{min-height:52px;height:58px}
+.deliveryWorkspace .dialogTop{margin-bottom:8px}.deliveryWorkspace .dialogTop h2{font-size:21px}.deliveryWorkspace #deliveryReceiptContext{margin:6px 0 10px;font-size:13px}
+#deliveryCalendar{grid-column:2;grid-row:1;min-height:0;min-width:0;display:flex;flex-direction:column;border-left:1px solid #b9c6d3;padding-left:14px}#deliveryCalendar h2{margin:4px 0;font-size:20px}#deliveryCalendar>p{margin:4px 0 10px;font-size:13px}
+#deliveryCalendar #schedule{display:flex;flex-direction:column;flex:1;min-height:0}#deliveryCalendar #jobs{overflow-y:auto;min-height:0;flex:1;padding-right:8px}#deliveryCalendar .toolbar{flex-wrap:wrap;gap:6px}#deliveryCalendar .toolbar input{min-width:0}#deliveryCalendar .quickControls,#deliveryCalendar #requestsButton,#deliveryCalendar #requestsList{display:none!important}#deliveryCalendar .job{font-size:13px}#deliveryCalendar .summary{font-size:12px}#deliveryCalendar .editIcon,#deliveryCalendar .statusUpdate{display:none}
+#deliveryFooter{grid-column:1/-1;grid-row:2;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;border-top:1px solid #b9c6d3;padding-top:12px;margin:0}#deliveryFooter button{font-size:13px;padding:10px}
+@media(max-width:850px){dialog.deliveryWorkspace[open]{grid-template-columns:1fr;grid-template-rows:minmax(280px,1fr) minmax(200px,.8fr) auto;overflow:auto}#deliveryCalendar{grid-column:1;grid-row:2;border-left:0;padding-left:0}#deliveryFooter{grid-row:3;grid-template-columns:1fr 1fr}}
+.deliveryWorkspace #jobForm label input,.deliveryWorkspace #jobForm label select,.deliveryWorkspace #jobForm label textarea{margin:4px 0 3px}.deliveryWorkspace #jobForm .actions{position:sticky;bottom:0;background:var(--card,#fff);padding:8px 0;margin-top:8px}.deliveryWorkspace #jobForm #formError:empty{display:none}
+body.officeSecurityEmbed>header,body.officeSecurityEmbed main>:not(#app):not(#auth):not(#offline){display:none!important}body.officeSecurityEmbed #app>:not(#settings){display:none!important}body.officeSecurityEmbed #settingsCategories,body.officeSecurityEmbed #settingsSubcategories,body.officeSecurityEmbed #profileWelcome{display:none!important}body.officeSecurityEmbed main{padding:12px;max-width:none;margin:0}body.officeSecurityEmbed #settings{margin:0}
+/* BEGIN REPORT DOCUMENT */
+/* Report documents use the same readable brand treatment on screen and paper. */
+.rrDocumentHeader{display:flex;align-items:center;gap:20px;padding:22px 24px;border-bottom:5px solid #168678;background:#16334d!important;color:#fff!important;margin:24px 0 0;border-radius:12px 12px 0 0}
+.rrDocumentHeader h2,.rrDocumentHeader strong{color:white!important}.rrDocumentHeader p{color:#cee0ec!important}
+.rrDocumentHeader img{width:88px;height:76px;object-fit:contain;background:#fff;padding:6px;border-radius:6px}.rrDocumentHeader .rrBrandMark{width:76px;height:76px;display:grid;place-items:center;border:2px solid #83b6ce;border-radius:10px;font-size:26px;font-weight:800;flex:none}
+.rrDocumentHeader p{margin:0 0 5px;color:#cee0ec;font-size:13px;letter-spacing:1px}.rrDocumentHeader h2{margin:0;font-size:27px;line-height:1.2;color:#fff}.rrDocumentHeader strong{display:block;margin-bottom:8px;font-size:19px}
+.rrDocumentMeta{display:flex;gap:20px;flex-wrap:wrap;background:#eef3f7;color:#243c50;border-bottom:1px solid #c9d5df;padding:12px 24px;font-size:12px;margin-bottom:22px}
+.rrSectionBar,.rrResult>.rrCard>h2,.rrResult .rrCharts .rrCard>h2,#retailPrintReport .rrCard>h2{background:#e8f0f5;color:#16334d;border-left:5px solid #168678;padding:10px 14px;font-size:17px;margin:18px 0 12px}
+.rrResult .rrTable th,#retailPrintReport th{background:#24465f;color:#fff;font-weight:700}.rrResult .rrTable tbody tr:nth-child(even),#retailPrintReport tbody tr:nth-child(even){background:#f1f5f8;color:#152d40}.rrResult .rrTable td,#retailPrintReport td{font-variant-numeric:tabular-nums}
+.rrDocumentFooter{border-top:2px solid #24465f;margin-top:24px;padding:12px 0;font-size:12px;color:#42586a;white-space:pre-line}
+@media(max-width:600px){.rrDocumentHeader{padding:16px;gap:12px}.rrDocumentHeader h2{font-size:21px}.rrDocumentHeader img,.rrDocumentHeader .rrBrandMark{width:56px;height:56px}.rrDocumentMeta{padding:10px 16px;gap:8px}}
+@page{size:letter;margin:14mm}
+@page retailWide{size:letter landscape;margin:12mm}
+@media print{
+ html{background:white!important}body.retailPrinting>:not(#retailPrintReport){display:none!important}
+ #retailPrintReport .rrDocumentHeader{display:flex!important;position:static!important;width:auto!important;min-height:0!important}
+ body.retailPrinting{-webkit-print-color-adjust:exact;print-color-adjust:exact;background:white!important;color:#152d40!important}
+ #retailPrintReport.rrWide{page:retailWide}#retailPrintReport{font:10pt Arial,sans-serif!important}
+ #retailPrintReport .rrDocumentHeader{margin-top:0;border-radius:0;padding:16px;break-inside:avoid;break-after:avoid}
+ #retailPrintReport .rrDocumentHeader h2{font-size:22pt}#retailPrintReport .rrDocumentMeta{break-inside:avoid;break-after:avoid}
+ #retailPrintReport .rrTable{overflow:visible}#retailPrintReport table{width:100%;table-layout:auto;border-collapse:collapse;font-size:9pt}
+ #retailPrintReport th,#retailPrintReport td{padding:7px 6px;border:1px solid #d4dde4;overflow-wrap:anywhere}
+ #retailPrintReport thead{display:table-header-group}#retailPrintReport tr{break-inside:avoid}
+ #retailPrintReport .rrSectionBar,#retailPrintReport h2{break-after:avoid}#retailPrintReport .rrMetrics{grid-template-columns:repeat(3,1fr);gap:10px}
+ #retailPrintReport .rrCard{padding:12px;border-radius:4px;color:#152d40;background:white;break-inside:avoid}#retailPrintReport .rrMetrics strong{font-size:21px}
+ #retailPrintReport .rrCharts{display:block}#retailPrintReport .rrCharts .rrCard{margin-bottom:14px}#retailPrintReport .rrDocumentFooter{font-size:9pt}
+}
+
+/* END REPORT DOCUMENT */

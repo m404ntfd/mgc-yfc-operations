@@ -92,3 +92,32 @@ body[data-retail-theme] .cardNotice,body[data-retail-theme] .cardNotice p{color:
 .thriftDialog #thriftTagForm,.thriftDialog #thriftDonation{display:inline-block;vertical-align:top;width:calc(50% - 18px);margin-right:16px;padding:16px;border:1px solid #b8c8d6;border-radius:10px}
 .thriftDialog #thriftSettings>button.primary{margin-top:18px}
 @media(max-width:700px){.thriftDialog #thriftTagForm,.thriftDialog #thriftDonation{display:block;width:100%;margin:12px 0}.thriftTagGrid{grid-template-columns:1fr}}
+/* BEGIN REPORT DOCUMENT */
+/* Report documents use the same readable brand treatment on screen and paper. */
+.rrDocumentHeader{display:flex;align-items:center;gap:20px;padding:22px 24px;border-bottom:5px solid #168678;background:#16334d!important;color:#fff!important;margin:24px 0 0;border-radius:12px 12px 0 0}
+.rrDocumentHeader h2,.rrDocumentHeader strong{color:white!important}.rrDocumentHeader p{color:#cee0ec!important}
+.rrDocumentHeader img{width:88px;height:76px;object-fit:contain;background:#fff;padding:6px;border-radius:6px}.rrDocumentHeader .rrBrandMark{width:76px;height:76px;display:grid;place-items:center;border:2px solid #83b6ce;border-radius:10px;font-size:26px;font-weight:800;flex:none}
+.rrDocumentHeader p{margin:0 0 5px;color:#cee0ec;font-size:13px;letter-spacing:1px}.rrDocumentHeader h2{margin:0;font-size:27px;line-height:1.2;color:#fff}.rrDocumentHeader strong{display:block;margin-bottom:8px;font-size:19px}
+.rrDocumentMeta{display:flex;gap:20px;flex-wrap:wrap;background:#eef3f7;color:#243c50;border-bottom:1px solid #c9d5df;padding:12px 24px;font-size:12px;margin-bottom:22px}
+.rrSectionBar,.rrResult>.rrCard>h2,.rrResult .rrCharts .rrCard>h2,#retailPrintReport .rrCard>h2{background:#e8f0f5;color:#16334d;border-left:5px solid #168678;padding:10px 14px;font-size:17px;margin:18px 0 12px}
+.rrResult .rrTable th,#retailPrintReport th{background:#24465f;color:#fff;font-weight:700}.rrResult .rrTable tbody tr:nth-child(even),#retailPrintReport tbody tr:nth-child(even){background:#f1f5f8;color:#152d40}.rrResult .rrTable td,#retailPrintReport td{font-variant-numeric:tabular-nums}
+.rrDocumentFooter{border-top:2px solid #24465f;margin-top:24px;padding:12px 0;font-size:12px;color:#42586a;white-space:pre-line}
+@media(max-width:600px){.rrDocumentHeader{padding:16px;gap:12px}.rrDocumentHeader h2{font-size:21px}.rrDocumentHeader img,.rrDocumentHeader .rrBrandMark{width:56px;height:56px}.rrDocumentMeta{padding:10px 16px;gap:8px}}
+@page{size:letter;margin:14mm}
+@page retailWide{size:letter landscape;margin:12mm}
+@media print{
+ html{background:white!important}body.retailPrinting>:not(#retailPrintReport){display:none!important}
+ #retailPrintReport .rrDocumentHeader{display:flex!important;position:static!important;width:auto!important;min-height:0!important}
+ body.retailPrinting{-webkit-print-color-adjust:exact;print-color-adjust:exact;background:white!important;color:#152d40!important}
+ #retailPrintReport.rrWide{page:retailWide}#retailPrintReport{font:10pt Arial,sans-serif!important}
+ #retailPrintReport .rrDocumentHeader{margin-top:0;border-radius:0;padding:16px;break-inside:avoid;break-after:avoid}
+ #retailPrintReport .rrDocumentHeader h2{font-size:22pt}#retailPrintReport .rrDocumentMeta{break-inside:avoid;break-after:avoid}
+ #retailPrintReport .rrTable{overflow:visible}#retailPrintReport table{width:100%;table-layout:auto;border-collapse:collapse;font-size:9pt}
+ #retailPrintReport th,#retailPrintReport td{padding:7px 6px;border:1px solid #d4dde4;overflow-wrap:anywhere}
+ #retailPrintReport thead{display:table-header-group}#retailPrintReport tr{break-inside:avoid}
+ #retailPrintReport .rrSectionBar,#retailPrintReport h2{break-after:avoid}#retailPrintReport .rrMetrics{grid-template-columns:repeat(3,1fr);gap:10px}
+ #retailPrintReport .rrCard{padding:12px;border-radius:4px;color:#152d40;background:white;break-inside:avoid}#retailPrintReport .rrMetrics strong{font-size:21px}
+ #retailPrintReport .rrCharts{display:block}#retailPrintReport .rrCharts .rrCard{margin-bottom:14px}#retailPrintReport .rrDocumentFooter{font-size:9pt}
+}
+
+/* END REPORT DOCUMENT */

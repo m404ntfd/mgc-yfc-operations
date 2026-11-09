@@ -12,13 +12,22 @@ def prepare(root=None):
  js=root/'static/pos.js';text=js.read_text(encoding='utf-8');text=re.sub(r'// BEGIN CUSTOMER OFFICE.*?// END CUSTOMER OFFICE',lambda _: '// BEGIN CUSTOMER OFFICE\n'+(root/'static/customer-office.js').read_text(encoding='utf-8')+'\n// END CUSTOMER OFFICE',text,flags=re.S);js.write_text(text,encoding='utf-8')
  for filename in ('app.js','pos.js'):
   file=root/'static'/filename;content=file.read_text(encoding='utf-8')
+  content=re.sub(r'// BEGIN FULFILLMENT PRINT.*?// END FULFILLMENT PRINT',lambda _: '// BEGIN FULFILLMENT PRINT\n'+(root/'static/fulfillment-print.js').read_text(encoding='utf-8')+'\n// END FULFILLMENT PRINT',content,flags=re.S)
+  if filename=='pos.js':content=re.sub(r'// BEGIN PICKUP FOLLOWUP.*?// END PICKUP FOLLOWUP',lambda _: '// BEGIN PICKUP FOLLOWUP\n'+(root/'static/pickup-followup.js').read_text(encoding='utf-8')+'\n// END PICKUP FOLLOWUP',content,flags=re.S)
+  if filename=='app.js':content=re.sub(r'// BEGIN DELIVERY WORKSPACE.*?// END DELIVERY WORKSPACE',lambda _: '// BEGIN DELIVERY WORKSPACE\n'+(root/'static/delivery-workspace.js').read_text(encoding='utf-8')+'\n// END DELIVERY WORKSPACE',content,flags=re.S)
+  if filename=='app.js':content=re.sub(r'// BEGIN OFFICE SECURITY.*?// END OFFICE SECURITY',lambda _: '// BEGIN OFFICE SECURITY\n'+(root/'static/office-security.js').read_text(encoding='utf-8')+'\n// END OFFICE SECURITY',content,flags=re.S)
   content=re.sub(r'// BEGIN REPORT CENTER.*?// END REPORT CENTER',lambda _: '// BEGIN REPORT CENTER\n'+(root/'static/report-center.js').read_text(encoding='utf-8')+'\n// END REPORT CENTER',content,flags=re.S)
+  if filename=='pos.js':content=re.sub(r'// BEGIN STORE UI.*?// END STORE UI',lambda _: '// BEGIN STORE UI\n'+(root/'static/retail-stores.js').read_text(encoding='utf-8')+'\n// END STORE UI',content,flags=re.S)
   if filename=='pos.js':content=re.sub(r'// BEGIN THRIFT UI.*?// END THRIFT UI',lambda _: '// BEGIN THRIFT UI\n'+(root/'static/thrift-retail.js').read_text(encoding='utf-8')+'\n// END THRIFT UI',content,flags=re.S)
   if filename=='pos.js':content=re.sub(r'// BEGIN OFFICE EXPANSION.*?// END OFFICE EXPANSION',lambda _: '// BEGIN OFFICE EXPANSION\n'+(root/'static/office-expansion.js').read_text(encoding='utf-8')+'\n// END OFFICE EXPANSION',content,flags=re.S)
   file.write_text(content,encoding='utf-8')
+ for name in ('pos.css','style.css'):
+  css=root/'static'/name;content=css.read_text(encoding='utf-8-sig');content=re.sub(r'/\* BEGIN REPORT DOCUMENT \*/.*?/\* END REPORT DOCUMENT \*/','',content,flags=re.S);css.write_text(content.rstrip()+'\n/* BEGIN REPORT DOCUMENT */\n'+(root/'static/report-document.css').read_text(encoding='utf-8')+'\n/* END REPORT DOCUMENT */\n',encoding='utf-8')
  pos={name:(root/'static'/name).read_text(encoding='utf-8') for name in ('pos.html','pos.js','pos.css','customer-display.html','customer-display.js','customer-display.css')}
  source,count=re.subn(r'^POS_ASSETS=.* # prepared POS application assets$',lambda _: 'POS_ASSETS='+repr(pos)+' # prepared POS application assets',source,flags=re.M)
  if count!=1:raise ValueError('POS asset marker missing')
+ source=re.sub(r'# BEGIN RETAIL FULFILLMENT.*?# END RETAIL FULFILLMENT',lambda _: '# BEGIN RETAIL FULFILLMENT\n'+(root/'retail_fulfillment.py').read_text(encoding='utf-8')+'\n# END RETAIL FULFILLMENT',source,flags=re.S)
+ source=re.sub(r'# BEGIN RETAIL STORES.*?# END RETAIL STORES',lambda _: '# BEGIN RETAIL STORES\n'+(root/'retail_stores.py').read_text(encoding='utf-8')+'\n# END RETAIL STORES',source,flags=re.S)
  source=re.sub(r'# BEGIN THRIFT RETAIL.*?# END THRIFT RETAIL',lambda _: '# BEGIN THRIFT RETAIL\n'+(root/'thrift_retail.py').read_text(encoding='utf-8')+'\n# END THRIFT RETAIL',source,flags=re.S)
  source=re.sub(r'# BEGIN CUSTOMER SERVICES.*?# END CUSTOMER SERVICES',lambda _: '# BEGIN CUSTOMER SERVICES\n'+(root/'customer_services.py').read_text(encoding='utf-8')+'\n# END CUSTOMER SERVICES',source,flags=re.S)
  source=re.sub(r'# BEGIN RETAIL REPORTS.*?# END RETAIL REPORTS',lambda _: '# BEGIN RETAIL REPORTS\n'+(root/'retail_reports.py').read_text(encoding='utf-8')+'\n# END RETAIL REPORTS',source,flags=re.S)

@@ -32,13 +32,11 @@ def run():
    errors=[]
    def login(name):
     page=browser.new_page(viewport={'width':1360,'height':1100},reduced_motion='reduce');page.on('pageerror',lambda e:errors.append(str(e)))
-    page.goto(f'http://127.0.0.1:{F.port}');page.locator('#login [name=name]').fill(name);page.locator('#login [name=password]').fill('testpassword');page.locator('#login button').click()
-    expect(page.locator('#sectionChooser')).to_be_visible();page.locator('#sectionChooserForm button').click()
-    if page.locator('#profileWelcomeSkip').is_visible():page.locator('#profileWelcomeSkip').click()
-    page.locator('#settingsTab').click();return page
+    page.goto(f'http://127.0.0.1:{F.port}/office-security');page.locator('#login [name=name]').fill(name);page.locator('#login [name=password]').fill('testpassword');page.locator('#login button').click()
+    expect(page.locator('#settings')).to_be_visible();return page
    page=login('Admin');out=Path(os.environ.get('TEST_ARTIFACTS',F.tmp.name));out.mkdir(exist_ok=True,parents=True)
-   expect(page.locator('#settingsSubcategories')).to_be_visible();page.screenshot(path=str(out/'settings-menu.png'))
-   page.locator('#settingsSubcategories').get_by_role('button',name='Roles',exact=True).click()
+   expect(page.locator('#settingsSubcategories')).to_be_hidden();page.screenshot(path=str(out/'settings-menu.png'))
+   page.locator('#openRoles').click()
    page.locator('#roleSelect').select_option(str(ident));expect(page.locator('#roleName')).to_have_value('Office team')
    page.locator('[data-role-tab=permissions]').click()
    page.locator('#roleCategories select').select_option('Receipts & Accounting')
@@ -67,11 +65,8 @@ def run():
    page.locator('#editIndividualAccess').click();page.locator('#individualTools input').fill('Submit receipts');page.locator('[data-grant=submit_receipts]').check();page.locator('#individualSave').click();expect(page.locator('#permissionMessage')).to_contain_text('Individual permissions saved')
    stored=next(u for u in F.call('admin/permission-catalog')[1]['users'] if u['name']=='Employee')['grants'];assert stored==dict(original,submit_receipts=True)
    page.set_viewport_size({'width':390,'height':900});page.locator('[data-user-tab=properties]').click();assert page.evaluate('document.documentElement.scrollWidth<=innerWidth');page.screenshot(path=str(out/'user-setup-mobile.png'))
-   page.locator('#passwordClose').click();page.locator('#settingsCategories').get_by_role('button',name='Application Settings',exact=True).click()
-   assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
-   page.locator('#settingsSubcategories').get_by_role('button',name='Appearance',exact=True).click();page.locator('#appearanceMode').select_option('dark');expect(page.locator('html')).to_have_attribute('data-theme','dark');page.locator('#appearanceSettings .settingsBack').click() if page.locator('#appearanceSettings').count() else page.locator('.settingsBack:visible').click()
-   page.screenshot(path=str(out/'settings-menu-dark-mobile.png'))
-   limited=login('Limited');limited.locator('#settingsSubcategories').get_by_role('button',name='Roles',exact=True).click();limited.locator('#roleSelect').select_option(str(ident));limited.locator('[data-role-tab=permissions]').click();expect(limited.locator('[data-role-grant=export_payroll]')).to_be_disabled()
+   page.locator('#passwordClose').click();page.evaluate("window.appAppearance.set('dark')");page.screenshot(path=str(out/'settings-menu-dark-mobile.png'))
+   limited=login('Limited');limited.locator('#openRoles').click();limited.locator('#roleSelect').select_option(str(ident));limited.locator('[data-role-tab=permissions]').click();expect(limited.locator('[data-role-grant=export_payroll]')).to_be_disabled()
    limited.locator('#roleCategories').get_by_role('button',name='Disable shown').click();expect(limited.locator('[data-role-grant=export_payroll]')).to_be_checked()
    assert records()==before,'Account UI changed operational records'
    assert not errors,errors
