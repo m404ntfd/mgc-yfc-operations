@@ -1852,7 +1852,7 @@ def stores_profile(c,ident='thrift-mart'):
     if row:return dict(json.loads(row['body']),id=ident,revision=row['revision'])
     if ident not in ('thrift-mart','binopoly'):raise Problem('Store not found.',404)
     legacy=pos_settings(c)
-    return dict(id=ident,revision=0,name='Thrift Mart' if ident=='thrift-mart' else 'Binopoly',tax_bps=legacy['tax_bps'] if ident=='thrift-mart' else None,receipt=customer_settings(c,'receipt') if ident=='thrift-mart' else dict(CUSTOMER_DEFAULTS['receipt']))
+    return dict(id=ident,revision=0,name=(legacy.get('store') or 'Thrift Mart') if ident=='thrift-mart' else 'Binopoly',tax_bps=legacy['tax_bps'] if ident=='thrift-mart' else None,receipt=customer_settings(c,'receipt') if ident=='thrift-mart' else dict(CUSTOMER_DEFAULTS['receipt']))
 
 def stores_list(c):
     ids=['thrift-mart','binopoly']+[r[0] for r in c.execute("SELECT id FROM retail_stores WHERE id NOT IN ('thrift-mart','binopoly') ORDER BY id")]
