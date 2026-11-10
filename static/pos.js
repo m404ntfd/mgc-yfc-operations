@@ -254,7 +254,7 @@ const officeCards=[
  {section:'accounts',title:'Store-credit accounts',description:'Customer and employee balances, adjustments and history.',icon:'◎',action:'accounts',permission:'manage_store_credit'},
  {section:'security',title:'Users',description:'Add users and assign roles shared with Operations.',icon:'♙',action:'users',permission:'manage_users'},
  {section:'security',title:'Roles & permissions',description:'Create roles and manage shared permissions here in OFFICE.',icon:'☷',action:'roles',permission:'manage_roles'},
- {section:'system',title:'Computer updates',description:'Check versions and update registered DESK and OFFICE computers.',icon:'↓',action:'computer-updates',permission:'admin'},
+ {section:'system',title:'Computer updates',description:'Check versions and update registered DESK, STORE OPS and OFFICE computers.',icon:'↓',action:'computer-updates',permission:'admin'},
  {section:'system',title:'Operations & server',description:'Open server updates and administration in Operations.',icon:'▣',action:'server',permission:'admin'},
  {section:'system',title:'Credit-card processing',description:'Credit cards will be added in future updates.',icon:'▰',action:'cards',permission:'manage_pos'}
 ];
@@ -477,6 +477,7 @@ async function retailSave(action,data){
 }
 
 async function retailEnroll(){
+ if(window.nativeTerminalAvailable){await window.openTerminalRegistration();return;}
  if(unfinished()){posMessage('Finish the current transaction or form before changing terminal setup.');return;}
  try{const config=await api('pos/retail-config');const dialog=document.createElement('dialog');dialog.innerHTML=`<form><h2>Register this checkout</h2><p>Connect this device to the shared server terminal list.</p><label>Terminal<select name="terminal"><option value="">Create new terminal</option>${config.terminals.filter(t=>!t.device||t.device===retailTerminal?.device).map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select></label><label>Name for a new terminal<input name="name" placeholder="Front counter 1" maxlength="60"></label><label>Layout<select name="layout"><option value="">Standard catalog</option>${config.layouts.map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select></label><p class="retailError" role="status"></p><button>Register</button><button type="button" class="cancel">Cancel</button></form>`;document.body.append(dialog);dialog.querySelector('.cancel').onclick=()=>{changedForms.delete(dialog.querySelector('form'));dialog.close();dialog.remove();};dialog.oncancel=()=>{changedForms.delete(dialog.querySelector('form'));dialog.remove();};dialog.querySelector('form').onsubmit=async e=>{e.preventDefault();const f=e.target.elements;try{const old=config.terminals.find(t=>t.id===f.terminal.value);await retailSave('terminal-save',{...(old||{}),name:old?.name||f.name.value,device:await retailDevice(),layout:f.layout.value||old?.layout||'',enabled:true});changedForms.delete(e.target);dialog.close();dialog.remove();await retailLoadTerminal();posRender();}catch(err){dialog.querySelector('.retailError').textContent=err.message;}};dialog.showModal();}catch(e){posMessage(e.message);}
 }
@@ -774,22 +775,22 @@ officeAction=async function(action){
  if(!['computer-register','computer-updates'].includes(action))return officeBeforeComputers(action);
  if(!navigationAllowed()||unfinished())return;
  const registration=action==='computer-register';
- const dialog=flowModal(registration?'Registered computers':'Computer updates',`<div class="computerIntro"><p>${registration?'Register each computer once. Its identity stays the same when its IP address changes.':'Send one update request to all selected computers. Each application warns staff and waits for transactions and unsaved work to finish.'}</p><p class="muted">MAC addresses are reference information. Computers are matched by a persistent Windows identity, not by IP or MAC alone.</p></div><div class="actions"><button id="computerRefresh">Refresh computers</button><button id="computerCheck">Check for updates</button></div><p id="computerStatus" role="status"></p><div id="computerVersions" class="computerVersions"></div>${registration?'':`<form id="computerRollout"><label>Employee warning (seconds)<input name="seconds" type="number" min="30" max="3600" value="120" required></label><button class="primary" type="submit">Notify staff & update selected computers</button><button type="button" id="computerCancel">Cancel pending rollout</button></form>`}<div id="computerRows"></div><p class="muted">Keep DESK or OFFICE open and signed in to receive updates. Closed applications and offline computers remain pending until they reconnect. Computers need this desktop update installed once before they can appear here. Server upgrades remain in the server’s Updates tab, with its backup and active-user checks.</p>`);
- dialog.classList.add('computerDialog');let current=null,busy=false;const selected=new Set();let selectionInitialized=false;
+ const dialog=flowModal(registration?'Registered computers':'Computer updates',`<div class="computerIntro"><p>${registration?'Register each computer once. Its identity stays the same when its IP address changes.':'Send one update request to all selected computers. Each application warns staff and waits for transactions and unsaved work to finish.'}</p><p class="muted">MAC addresses are reference information. Computers are matched by a persistent Windows identity, not by IP or MAC alone.</p></div><div class="actions"><button id="computerRefresh">Refresh computers</button><button id="computerCheck">Check for updates</button></div><p id="computerStatus" role="status"></p><div id="computerVersions" class="computerVersions"></div>${registration?'':`<div class="computerSelectionTools"><button id="computerSelectAll" type="button">Select all registered</button><button id="computerSelectNone" type="button">Clear selection</button><strong id="computerSelectionCount" aria-live="polite">0 selected</strong></div><form id="computerRollout"><label>Employee warning (seconds)<input name="seconds" type="number" min="30" max="3600" value="120" required></label><button class="primary" type="submit">Notify staff & update selected computers</button><button type="button" id="computerCancel">Cancel pending rollout</button></form>`}<div id="computerRows"></div><p class="muted">Keep DESK, STORE OPS or OFFICE open and signed in to receive updates. Closed applications and offline computers remain pending until they reconnect. Computers need this desktop update installed once before they can appear here. Server upgrades remain in the server’s Updates tab, with its backup and active-user checks.</p>`);
+ dialog.classList.add('computerDialog');let current=null,busy=false;const selected=new Set();
+ const selectionStatus=()=>{if(registration)return;$('computerSelectionCount').textContent=selected.size+' computer(s) selected';$('computerRollout').querySelector('[type=submit]').disabled=!selected.size;};
  const render=data=>{
-  current=data;const rel=data.releases;
-  $('computerVersions').innerHTML=['pos','office'].map(app=>`<article><span>${app==='pos'?'DESK':'OFFICE'}</span><strong>${esc(rel[app].checking?'Checking…':rel[app].error?'Check failed':rel[app].version||'Not checked')}</strong>${rel[app].error?`<small>${esc(rel[app].error)}</small>`:''}</article>`).join('');
-  if(!selectionInitialized){data.computers.filter(p=>p.registered).forEach(p=>selected.add(p.id));selectionInitialized=true;}
-  $('computerRows').innerHTML=data.computers.map(pc=>`<article class="computerCard"><header><div><h3>${esc(pc.name||pc.hostname||'Unnamed computer')}</h3><p>${esc(pc.hostname)} · ${esc(pc.role)} · <strong>${pc.registered?'Registered':'Awaiting registration'}</strong></p></div>${!registration&&pc.registered?`<label><input type="checkbox" data-select-computer="${pc.id}" ${selected.has(pc.id)?'checked':''}> Include</label>`:''}</header><p class="muted">Computer ID ${esc(pc.id.slice(0,12))}… · MAC ${esc(pc.macs.join(', ')||'Unavailable')}</p>${registration?`<form data-register-computer="${pc.id}" data-revision="${pc.revision}"><label>Display name<input name="name" maxlength="80" required value="${esc(pc.name||pc.hostname)}"></label><label>Computer role<select name="role">${[['pos','POS checkout'],['office','Office computer'],['server','Server computer'],['other','Other']].map(([v,t])=>`<option value="${v}" ${pc.role===v?'selected':''}>${t}</option>`).join('')}</select></label><button>${pc.registered?'Save registration':'Register computer'}</button></form>`:''}<div class="computerApps">${pc.apps.map(a=>`<div><strong>${a.app==='pos'?'DESK':'OFFICE'} ${esc(a.version)}</strong><span class="computerBadge ${a.online?'online':''}">${a.online?'Connected':'Offline / closed'}</span><span>${a.complete?'Updated to target':a.target?`Target ${esc(a.target)} · ${esc(a.progress)}`:a.available?'Update available':rel[a.app].version?'Up to date':'Not checked'}</span><small>Last seen ${esc(new Date(a.seen*1000).toLocaleString())} · IP ${esc(a.ip)}</small></div>`).join('')}</div></article>`).join('')||'<div class="computerEmpty"><h3>No computers discovered yet</h3><p>Open the updated DESK or OFFICE application and sign in on each computer. Then register it here.</p></div>';
+  current=data;for(const id of selected)if(!data.computers.some(pc=>pc.id===id&&pc.registered))selected.delete(id);const rel={ops:{},...data.releases};
+  $('computerVersions').innerHTML=['pos','office','ops'].map(app=>`<article><span>${app==='pos'?'DESK':app==='ops'?'STORE OPS':'OFFICE'}</span><strong>${esc(rel[app].checking?'Checking…':rel[app].error?'Check failed':rel[app].version||'Not checked')}</strong>${rel[app].error?`<small>${esc(rel[app].error)}</small>`:''}</article>`).join('');
+  $('computerRows').innerHTML=data.computers.map(pc=>`<article class="computerCard"><header><div><h3>${esc(pc.name||pc.hostname||'Unnamed computer')}</h3><p>${esc(pc.hostname)} · ${esc(pc.role)} · <strong>${pc.registered?'Registered':'Awaiting registration'}</strong></p></div>${!registration?`<label class="computerSelectLabel"><input type="checkbox" aria-label="Select ${esc(pc.name||pc.hostname)} for updates" data-select-computer="${pc.id}" ${pc.registered?'':'disabled'} ${selected.has(pc.id)?'checked':''}> ${pc.registered?'Include in update':'Register first'}</label>`:''}</header><p class="muted">Computer ID ${esc(pc.id.slice(0,12))}… · MAC ${esc(pc.macs.join(', ')||'Unavailable')}</p>${registration?`<form data-register-computer="${pc.id}" data-revision="${pc.revision}"><label>Display name<input name="name" maxlength="80" required value="${esc(pc.name||pc.hostname)}"></label><label>Computer role<select name="role">${[['pos','POS checkout'],['office','Office computer'],['server','Server computer'],['other','Other']].map(([v,t])=>`<option value="${v}" ${pc.role===v?'selected':''}>${t}</option>`).join('')}</select></label><button>${pc.registered?'Save registration':'Register computer'}</button></form>`:''}<div class="computerApps">${pc.apps.map(a=>`<div><strong>${a.app==='pos'?'DESK':a.app==='ops'?'STORE OPS':'OFFICE'} ${esc(a.version)}</strong><span class="computerBadge ${a.online?'online':''}">${a.online?'Connected':'Offline / closed'}</span><span>${a.complete?'Updated to target':a.target?`Target ${esc(a.target)} · ${esc(a.progress)}`:a.available?'Update available':rel[a.app].version?'Up to date':'Not checked'}</span><small>Last seen ${esc(new Date(a.seen*1000).toLocaleString())} · IP ${esc(a.ip)}</small></div>`).join('')}</div></article>`).join('')||'<div class="computerEmpty"><h3>No computers discovered yet</h3><p>Open the updated DESK, STORE OPS or OFFICE application and sign in on each computer. Then register it here.</p></div>';
   const pending=data.computers.flatMap(p=>p.apps).filter(a=>a.target&&!a.complete).length,complete=data.computers.flatMap(p=>p.apps).filter(a=>a.complete).length;
-  $('computerStatus').textContent=pending?`${pending} application update(s) pending · ${complete} verified complete`:complete?`Rollout complete: ${complete} application update(s) verified.`:`${data.computers.filter(p=>p.registered).length} registered computer(s).`;
+  selectionStatus();$('computerStatus').textContent=pending?`${pending} application update(s) pending · ${complete} verified complete`:complete?`Rollout complete: ${complete} application update(s) verified.`:`${data.computers.filter(p=>p.registered).length} registered computer(s).`;
  };
  const refresh=async()=>{if(busy||!dialog.open||[...changedForms].some(f=>dialog.contains(f)))return;busy=true;try{render(await api('computers/state'));}catch(e){$('computerStatus').textContent=e.message;}finally{busy=false;}};
  const act=async(path,body)=>{if(busy)return;busy=true;try{render(await api('computers/'+path,body));}catch(e){$('computerStatus').textContent=e.message;}finally{busy=false;}};
  $('computerRefresh').onclick=refresh;$('computerCheck').onclick=()=>act('check',{});
- $('computerRows').onchange=e=>{if(e.target.dataset.selectComputer){if(e.target.checked)selected.add(e.target.dataset.selectComputer);else selected.delete(e.target.dataset.selectComputer);}};
+ $('computerRows').onchange=e=>{if(e.target.dataset.selectComputer){if(e.target.checked)selected.add(e.target.dataset.selectComputer);else selected.delete(e.target.dataset.selectComputer);selectionStatus();}};
  $('computerRows').onsubmit=e=>{const form=e.target;if(!form.dataset.registerComputer)return;e.preventDefault();changedForms.delete(form);act('register',{id:form.dataset.registerComputer,revision:Number(form.dataset.revision),name:form.elements.name.value,role:form.elements.role.value});};
- if(!registration){$('computerRollout').onsubmit=e=>{e.preventDefault();changedForms.delete(e.target);act('start',{computers:[...selected],seconds:Number(e.target.elements.seconds.value)});};$('computerCancel').onclick=()=>{if(confirm('Cancel pending computer updates? Installers already running will finish.'))act('cancel',{});};}
+ if(!registration){$('computerSelectAll').onclick=()=>{current.computers.filter(pc=>pc.registered).forEach(pc=>selected.add(pc.id));render(current);};$('computerSelectNone').onclick=()=>{selected.clear();render(current);};$('computerRollout').onsubmit=e=>{e.preventDefault();changedForms.delete(e.target);act('start',{computers:[...selected],seconds:Number(e.target.elements.seconds.value)});};$('computerCancel').onclick=()=>{if(confirm('Cancel pending computer updates? Installers already running will finish.'))act('cancel',{});};}
  if(computerPanelTimer)clearInterval(computerPanelTimer);computerPanelTimer=setInterval(refresh,5000);dialog.addEventListener('close',()=>{clearInterval(computerPanelTimer);computerPanelTimer=null;},{once:true});await refresh();
 };
 
@@ -1078,3 +1079,78 @@ if(!document.body.dataset.retailTheme)document.body.dataset.retailTheme='glass-b
 
 officeCards.push({section:'sales',action:'surcharge-settings',title:'Surcharge rules',description:'Set general sale surcharge limits separately from discounts.',permission:'manage_pos',icon:'+'},{section:'sales',action:'card-future-settings',title:'Credit card settings (future)',description:'Card payments and card surcharges will be added in future updates.',permission:'manage_pos',icon:'▤'});
 const surchargeOfficeAction=officeAction;officeAction=async function(action){if(['surcharge-settings','card-future-settings'].includes(action)){await surchargeOfficeAction('cash-rules');if($('financeRules')){financeTab=action==='surcharge-settings'?'surcharges':'cards';$('financeRules').querySelector(`[data-finance-tab="${financeTab}"]`).click();}return;}return surchargeOfficeAction(action);};
+// BEGIN TERMINAL REGISTRATION
+// Shared native desktop registration; ordinary web browsers keep their current login flow.
+(()=>{
+ const get=id=>document.getElementById(id),safe=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ let info=null,state=null,busy=false,dialog=null,button=null,lastStatus='Connected';
+ const dirty=()=>typeof hasUnfinishedWork==='function'?hasUnfinishedWork():typeof unfinished==='function'&&unfinished();
+ const clearForm=form=>{if(typeof changedForms!=='undefined')changedForms.delete(form);};
+ const discard=()=>!get('nativeTerminalForm')||!changedForms.has(get('nativeTerminalForm'))||confirm('Discard unsaved terminal registration changes?');
+ const required=()=>state&&(!state.computer.registered||(info.app==='pos'&&!state.terminal));
+ function label(){if(!button)return;button.textContent=state?.computer.registered?'Terminal: '+state.computer.name+' · Registered':'Terminal setup · Registration required';}
+ async function show(){
+  if(dialog?.open)return;
+  if(!state)return;
+  dialog ||= document.createElement('dialog');dialog.id='nativeTerminalSetup';dialog.className='nativeTerminalSetup';
+  if(!dialog.isConnected)document.body.append(dialog);
+  let choices=[],editRevision=state.computer.revision;
+  if(user.admin&&info.app==='pos'&&!state.terminal){
+   try{const config=await api('pos/retail-config');choices=config.terminals.filter(t=>!t.device&&t.enabled);}
+   catch(error){
+    dialog.dataset.verifying='true';dialog.innerHTML='<h2>Terminal setup</h2><p>Unable to load checkout assignments. Reconnect to the server to finish registration.</p><p id="nativeTerminalError" role="status"></p><button id="nativeTerminalRetry" type="button">Retry connection</button><button id="nativeTerminalSignOut" type="button">Sign out</button>';
+    get('nativeTerminalError').textContent=error.message;dialog.oncancel=e=>e.preventDefault();get('nativeTerminalRetry').onclick=()=>refresh(true);get('nativeTerminalSignOut').onclick=async()=>{await api('logout',{});location.reload();};dialog.showModal();return;
+   }
+  }
+  dialog.innerHTML=`<h2>Terminal setup</h2><p><strong>${state.computer.registered?'Registered: '+safe(state.computer.name):'Register this computer'}</strong></p><p>Server: ${safe(location.origin)}<br>Computer: ${safe(state.computer.hostname)}</p>${state.terminal?`<p>Checkout terminal: <strong>${safe(state.terminal.name)}</strong> · Registered</p>`:''}<p>Registration stays on the shared server when this computer restarts, changes IP address or receives an update.</p>${user.admin?`<form id="nativeTerminalForm"><label>Registered computer name<input name="name" maxlength="60" required value="${safe(state.computer.name||state.terminal?.name||state.computer.hostname)}"></label><label>Computer role<select name="role">${[['pos','POS checkout'],['office','Office computer'],['server','Server computer'],['other','Other / STORE OPS']].map(([v,t])=>`<option value="${v}" ${v===(state.computer.registered?state.computer.role:info.app==='pos'?'pos':info.app==='ops'?'other':'office')?'selected':''}>${t}</option>`).join('')}</select></label>${info.app==='pos'&&!state.terminal?`<label>Checkout assignment<select name="terminal"><option value="">Create a checkout using this name</option>${choices.map(t=>`<option value="${safe(t.id)}">${safe(t.name)}</option>`).join('')}</select></label>`:''}<button class="primary">${state.computer.registered?'Save registration':'Register terminal'}</button></form>`:'<p>An administrator must sign in to complete registration before staff use this desktop application.</p>'}<p id="nativeTerminalError" role="status"></p><div class="actions"><button id="nativeTerminalSignOut" type="button">Sign out${user.admin?'':' and sign in as administrator'}</button>${required()?'':'<button id="nativeTerminalClose" type="button">Close</button>'}</div>`;
+  dialog.oncancel=e=>{if(required()||!discard())e.preventDefault();else clearForm(get('nativeTerminalForm'));};
+  get('nativeTerminalSignOut').onclick=async()=>{if(!discard())return;const form=get('nativeTerminalForm');if(form)clearForm(form);await api('logout',{});location.reload();};
+  if(get('nativeTerminalClose'))get('nativeTerminalClose').onclick=()=>{if(!discard())return;const form=get('nativeTerminalForm');if(form)clearForm(form);dialog.close();};
+  if(user.admin)get('nativeTerminalForm').onsubmit=async e=>{
+   e.preventDefault();const form=e.target;const submit=form.querySelector('button');submit.disabled=true;
+   try{await api('computers/register',{id:state.computer.id,revision:editRevision,name:form.elements.name.value,role:form.elements.role.value,app:info.app,device:info.device,terminal:form.elements.terminal?.value||''});clearForm(form);dialog.close();await refresh(true);if(info.app==='pos'&&typeof retailLoadTerminal==='function'){await retailLoadTerminal();posRender();}}
+   catch(error){get('nativeTerminalError').textContent=error.message;if(error.status===409){try{state=await api('computers/self',{...info,status:lastStatus});editRevision=state.computer.revision;label();}catch{}}}finally{submit.disabled=false;}
+  };
+  dialog.showModal();
+ }
+ window.openTerminalRegistration=async()=>{if(dirty()){(typeof posMessage==='function'?posMessage:toast)('Save or finish your current work before opening terminal setup.');return;}await refresh(true);await show();};
+ async function refresh(force=false){
+  const native=window.pywebview?.api;if(!native?.terminal_info||busy||window.posUpdateInstalling)return;
+  if(!user){if(get('login')&&!get('desktopSetupHint')){const hint=document.createElement('p');hint.id='desktopSetupHint';hint.textContent='First-time computer setup: sign in with an administrator account to register this terminal.';get('login').append(hint);}return;}
+  busy=true;
+  if(!state){
+   dialog ||= document.createElement('dialog');dialog.id='nativeTerminalSetup';dialog.className='nativeTerminalSetup';dialog.dataset.verifying='true';
+   if(!dialog.isConnected)document.body.append(dialog);
+   dialog.innerHTML='<h2>Terminal setup</h2><p>Checking this computer’s registration with the server…</p><p id="nativeTerminalError" role="status"></p><button id="nativeTerminalRetry" type="button">Retry connection</button><button id="nativeTerminalSignOut" type="button">Sign out</button>';
+   dialog.oncancel=e=>e.preventDefault();get('nativeTerminalRetry').onclick=()=>refresh(true);get('nativeTerminalSignOut').onclick=async()=>{await api('logout',{});location.reload();};
+   if(!dialog.open)dialog.showModal();
+  }
+  try{
+   info=await native.terminal_info();if(info.error)throw Error(info.error);window.nativeTerminalAvailable=true;
+   if(!button){button=document.createElement('button');button.id='nativeTerminalStatus';button.type='button';button.textContent='Terminal setup';button.onclick=window.openTerminalRegistration;(document.querySelector('.headerRight')||document.querySelector('.connectionInfo')||document.querySelector('body>header')).append(button);}
+   state=await api('computers/self',{...info,status:lastStatus});window.terminalRegistration=state;label();if(dialog?.dataset.verifying){delete dialog.dataset.verifying;dialog.close();}
+   if(required()){if(!dialog?.open)await show();return;}
+   if(info.app==='ops'&&native.ops_update_status){
+    const job=state.campaign,update=await native.ops_update_status(job?.id||null);
+    let banner=get('opsComputerUpdateBanner');if(!banner){banner=document.createElement('aside');banner.id='opsComputerUpdateBanner';banner.setAttribute('role','status');document.body.prepend(banner);}
+    banner.hidden=!job||update.state==='complete';lastStatus=update.error||update.state||'Connected';
+    banner.textContent=update.error||('STORE OPS update pending. Finish and save your work. '+(update.seconds?'Update in '+update.seconds+' seconds.':'Waiting for unfinished work to be saved.'));
+    if(job&&update.state==='ready'&&!update.seconds&&!dirty()&&!dialog?.open){const result=await native.ops_install_update();if(result.error)banner.textContent=result.error;}
+   }
+  }catch(error){if(button)button.textContent='Terminal setup · Unable to verify';if(dialog?.open)get('nativeTerminalError').textContent=error.message;}
+  finally{busy=false;}
+ }
+ if(typeof officeMode==='undefined'){
+  window.posUpdateFreeze=()=>{if(dirty()||dialog?.open)return false;window.posUpdateInstalling=true;document.body.inert=true;return true;};
+  window.posUpdateUnfreeze=()=>{window.posUpdateInstalling=false;document.body.inert=false;};
+ }
+ // STORE OPS may finish fetching its starting-page choice after desktop setup opens.
+ // Keep required registration above that chooser without discarding either form.
+ if(typeof chooseLanding==='function'){
+  const landing=chooseLanding;chooseLanding=async function(...args){await landing(...args);if(dialog?.open){dialog.close();dialog.showModal();}};
+ }
+ const before=boot;boot=async function(...args){await before(...args);await refresh();};
+ window.addEventListener('pywebviewready',()=>refresh());setTimeout(()=>refresh(),300);setInterval(()=>refresh(),5000);
+})();
+
+// END TERMINAL REGISTRATION

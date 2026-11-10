@@ -92,73 +92,6 @@ body[data-retail-theme] .cardNotice,body[data-retail-theme] .cardNotice p{color:
 .thriftDialog #thriftTagForm,.thriftDialog #thriftDonation{display:inline-block;vertical-align:top;width:calc(50% - 18px);margin-right:16px;padding:16px;border:1px solid #b8c8d6;border-radius:10px}
 .thriftDialog #thriftSettings>button.primary{margin-top:18px}
 @media(max-width:700px){.thriftDialog #thriftTagForm,.thriftDialog #thriftDonation{display:block;width:100%;margin:12px 0}.thriftTagGrid{grid-template-columns:1fr}}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /* BEGIN GLASS THEME */
 /* Readable report cards in every theme; printed pages remain white. */
 @media screen {
@@ -240,6 +173,20 @@ body[data-retail-theme] #posManual {background:var(--rt-surface,#fff);color:var(
 }
 
 /* END GLASS THEME */
+/* BEGIN TERMINAL REGISTRATION */
+@media screen {
+.computerCard header{padding:12px;flex-wrap:wrap}
+.computerSelectLabel{display:flex!important;align-items:center;gap:10px;min-width:180px;padding:12px;border:2px solid #607d96;border-radius:8px}
+.computerSelectLabel input[type=checkbox]{appearance:auto!important;display:inline-block!important;flex:0 0 22px!important;width:22px!important;height:22px!important;margin:0!important;accent-color:#245c8e}
+.computerSelectionTools{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:16px 0}
+.computerVersions{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+.nativeTerminalSetup{width:min(580px,92vw);max-height:90vh;overflow:auto;box-sizing:border-box;padding:24px}
+.nativeTerminalSetup label{display:block;margin:14px 0}.nativeTerminalSetup input,.nativeTerminalSetup select{width:100%;box-sizing:border-box}
+#nativeTerminalStatus{font-size:12px;white-space:normal;max-width:300px}
+#opsComputerUpdateBanner{background:#fff1c9;color:#3f310b;padding:14px;position:sticky;top:0;z-index:10000;border:2px solid #9c7320}
+}
+
+/* END TERMINAL REGISTRATION */
 /* BEGIN REPORT DOCUMENT */
 /* Report documents use the same readable brand treatment on screen and paper. */
 .rrDocumentHeader{display:flex;align-items:center;gap:20px;padding:22px 24px;border-bottom:5px solid #168678;background:#16334d!important;color:#fff!important;margin:24px 0 0;border-radius:12px 12px 0 0}

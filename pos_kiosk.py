@@ -74,6 +74,8 @@ class KioskBridge:
    try:message=json.loads(e.read(8192)).get('error','Administrator approval failed.')
    except Exception:message='Administrator approval failed.'
    raise ValueError(message) from e
+ def terminal_info(self):
+  info=self.kiosk_info();return {**info,'app':'pos'}
  def kiosk_info(self):
   if not self._trusted():return {'error':'Open the configured Operations server.'}
   from pos_updater import VERSION

@@ -33,6 +33,9 @@ with sqlite3.connect(database) as c:
     c.execute("INSERT INTO pos_sales VALUES(?,?,?,?)",(801,'fixture-cart','stable-employee-id',json.dumps(dict(total=1284,subtotal=1200,tax=84,tender=2000,change=716,lines=[dict(product='fixture-product',quantity=1,price=1200)]))))
     c.execute("INSERT INTO pos_credit_accounts VALUES(?,?,?,?,?,?)",(901,'Fixture customer','customer',None,'fixture contact',1))
     c.execute("INSERT INTO pos_credit_ledger VALUES(?,?,?,?,?,?,?,?)",(902,901,2500,2500,'2026-11-01','Manager','Fixture credit',None))
+    c.execute("INSERT INTO retail_terminals VALUES('fixture-terminal','Original checkout','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',NULL,1,7,'Original PC')")
+    c.execute("INSERT INTO retail_computers VALUES('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb','Original PC','[]','Windows','Original registered name','pos',1,4,1000)")
+    c.execute("INSERT INTO retail_computer_apps VALUES('pos','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb','1.12.1','Connected',1000,'192.0.2.1')")
 c.close()
 def snapshot(path):
     with sqlite3.connect(path) as c:

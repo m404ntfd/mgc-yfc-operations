@@ -1,3 +1,4 @@
+import os
 """Run the real STORE OPS WebView2 window against synthetic server data only."""
 import tempfile, time, traceback
 from pathlib import Path
@@ -9,6 +10,7 @@ def run():
     import faulthandler
     faulthandler.dump_traceback_later(100, exit=True)
     f = CoordinatorFixture(); tmp = tempfile.TemporaryDirectory(); errors = []
+    os.environ['APPDATA']=tmp.name
     w = ops_window(f"http://127.0.0.1:{f.port}", hidden=True)
     def wait(js):
         for _ in range(200):
@@ -24,6 +26,9 @@ def run():
             w.evaluate_js("document.querySelector('#login [name=name]').value='Admin';document.querySelector('#login [name=password]').value='testpassword';document.querySelector('#login').requestSubmit()")
             wait('typeof user !== "undefined" && user && user.admin')
             assert w.evaluate_js('!!document.querySelector("#work") || !!document.querySelector("#paging")')
+            wait("document.querySelector('#nativeTerminalForm')")
+            w.evaluate_js("document.querySelector('#nativeTerminalForm').requestSubmit()")
+            wait("document.querySelector('#nativeTerminalStatus').textContent.includes('Registered') && !document.querySelector('#nativeTerminalSetup').open")
             # Exercise the shared unsaved-work guard without creating business records.
             w.evaluate_js("let f=document.createElement('form');f.id='opsTestForm';f.innerHTML='<input name=test>';document.body.append(f);changedForms.set(f,'test')")
             w.destroy(); time.sleep(.5)

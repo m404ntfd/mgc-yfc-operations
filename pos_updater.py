@@ -2,7 +2,7 @@
 import hashlib,json,os,re,shutil,subprocess,sys,threading,time
 from pathlib import Path
 from urllib.request import Request,urlopen
-VERSION='1.12.1'
+VERSION='1.13.0'
 REPO='m404ntfd/mgc-yfc-operations'
 def version(value):
  if not isinstance(value,str) or not re.fullmatch(r'\d+\.\d+\.\d+',value):raise ValueError('Invalid POS version.')
@@ -14,7 +14,7 @@ def fetch(url,limit=1000000):
 def verified_installer(expected,app='pos'):
  release=json.loads(fetch('https://api.github.com/repos/'+REPO+'/releases/latest'))
  if release.get('draft') or release.get('prerelease'):raise ValueError('Stable POS release required.')
- name=('CoastYouth-Retail-OFFICE-Setup-v' if app=='office' else 'MGC-YFC-POS-Setup-v')+expected+'.exe'
+ name={'office':'CoastYouth-Retail-OFFICE-Setup-v','pos':'MGC-YFC-POS-Setup-v','ops':'CoastYouth-Retail-STORE-OPS-Setup-v'}[app]+expected+'.exe'
  asset=next((a for a in release.get('assets',[]) if a.get('name')==name),None)
  if not asset:raise ValueError('The POS release changed. Ask an administrator to check again.')
  digest=asset.get('digest','');url=asset.get('browser_download_url','')

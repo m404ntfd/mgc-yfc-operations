@@ -3,6 +3,11 @@ import json,os,sys,threading
 from pathlib import Path
 from pos_desktop import server_url
 
+def save_connection(settings,address):
+ from pos_kiosk import KioskStore
+ url=server_url(address);store=KioskStore(settings);store.data['server']=url;store.save()
+ return url
+
 class OfficeBridge:
  def __init__(self,address=None):self._window=None;self._exiting=False;self._checking=False;self._address=address;self._kiosk=None
  def _trusted(self):
@@ -10,13 +15,15 @@ class OfficeBridge:
   if not self._window:return False
   actual=urlsplit(self._window.get_current_url());expected=urlsplit(self._address)
   return (actual.scheme,actual.netloc)==(expected.scheme,expected.netloc) and actual.path in ('/office','/office/')
+ def terminal_info(self):
+  info=self.office_update_info();return {**info,'app':'office'}
  def office_update_info(self):
   from pos_kiosk import KioskStore
   from pos_updater import PosUpdater
   if not self._trusted():return {'error':'Open the configured OFFICE server.'}
   if not hasattr(self,'_updates'):
    self._store=KioskStore(Path(os.environ.get('APPDATA',str(Path.home())))/'CoastYouthRetailOffice'/'settings.json')
-   self._updates=PosUpdater(self,app='office',current='1.9.1')
+   self._updates=PosUpdater(self,app='office',current='1.10.0')
   from computer_identity import computer_info
   return {'computer':computer_info(),'device':self._store.data['device'],'version':self._updates.version,'updater':True}
  def office_update_status(self,ident=None):
@@ -83,15 +90,14 @@ def main():
   try:address=server_url(json.loads(settings.read_text(encoding='utf-8'))['server'])
   except Exception:pass
  if not settings.exists() or '--configure' in sys.argv:
-  root=tk.Tk();root.title('CoastYouth Retail OFFICE');root.geometry('550x260');root.resizable(False,False)
+  root=tk.Tk();root.title('CoastYouth Retail OFFICE');root.geometry('620x280');root.resizable(False,False)
   frame=ttk.Frame(root,padding=24);frame.pack(fill='both',expand=True)
   ttk.Label(frame,text='Connect OFFICE',font=('Segoe UI',20,'bold')).pack(anchor='w')
-  ttk.Label(frame,text='Use your existing Operations server address.\nCatalog, accounts and permissions stay on that server.').pack(anchor='w',pady=16)
+  ttk.Label(frame,text='Use your existing Operations server address.\nSign in as an administrator next to register this computer.').pack(anchor='w',pady=16)
   value=tk.StringVar(value=address);ttk.Entry(frame,textvariable=value).pack(fill='x');chosen=[]
   def save():
    try:
-    url=server_url(value.get());directory.mkdir(parents=True,exist_ok=True)
-    temp=settings.with_suffix('.tmp');temp.write_text(json.dumps({'server':url}),encoding='utf-8');os.replace(temp,settings);chosen.append(url);root.destroy()
+    url=save_connection(settings,value.get());chosen.append(url);root.destroy()
    except Exception as e:messagebox.showerror('OFFICE connection',str(e),parent=root)
   ttk.Button(frame,text='Connect',command=save).pack(anchor='e',pady=16);root.mainloop()
   if not chosen:return

@@ -1,3 +1,4 @@
+import os
 """Hidden native OFFICE client against isolated shared server data."""
 import tempfile,time,traceback
 from pathlib import Path
@@ -8,7 +9,7 @@ from test_update_coordination import CoordinatorFixture
 def run():
  import faulthandler
  faulthandler.dump_traceback_later(80,exit=True)
- f=CoordinatorFixture();tmp=tempfile.TemporaryDirectory();errors=[];w=office_window(f'http://127.0.0.1:{f.port}',Path(tmp.name),hidden=True)
+ f=CoordinatorFixture();tmp=tempfile.TemporaryDirectory();errors=[];os.environ['APPDATA']=tmp.name;w=office_window(f'http://127.0.0.1:{f.port}',Path(tmp.name),hidden=True)
  def wait(js):
   for _ in range(150):
    try:
@@ -21,6 +22,9 @@ def run():
    wait("document.querySelector('#login') && typeof officeAction==='function'")
    w.evaluate_js("document.querySelector('#login [name=name]').value='Admin';document.querySelector('#login [name=password]').value='testpassword';document.querySelector('#login').requestSubmit()")
    wait("document.querySelector('[data-office-action=users]') && document.querySelector('[data-office-action=thrift-settings]')")
+   wait("document.querySelector('#nativeTerminalForm')")
+   w.evaluate_js("document.querySelector('#nativeTerminalForm').requestSubmit()")
+   wait("document.querySelector('#nativeTerminalStatus').textContent.includes('Registered') && !document.querySelector('#nativeTerminalSetup').open")
    w.evaluate_js("officeAction('users')")
    wait("document.querySelector('#officeUserRows').textContent.includes('Employee')")
    w.evaluate_js("let field=document.querySelector('#officeAddUser [name=name]');field.value='Unsaved sample';field.dispatchEvent(new Event('input',{bubbles:true}))")

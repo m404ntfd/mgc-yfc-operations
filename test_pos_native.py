@@ -29,6 +29,9 @@ def run():
    wait("document.querySelector('#kioskSetupDialog').open")
    w.evaluate_js("document.querySelector('#kioskPasscodeForm [name=code]').value='123456';document.querySelector('#kioskPasscodeForm [name=confirm]').value='123456';document.querySelector('#kioskPasscodeForm').requestSubmit()")
    wait("document.body.dataset.kiosk==='ready'");assert KioskStore(store.path).verify('123456')
+   wait("document.querySelector('#nativeTerminalForm')")
+   w.evaluate_js("document.querySelector('#nativeTerminalForm').requestSubmit()")
+   wait("document.querySelector('#nativeTerminalStatus').textContent.includes('Registered') && !document.querySelector('#nativeTerminalSetup').open")
    assert bridge._closing() is False
    wait("document.querySelector('#posExitDialog').open")
    w.evaluate_js("document.querySelector('#posExitCancel').click()")

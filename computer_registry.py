@@ -40,6 +40,10 @@ def computer_require_admin(u):
 
 def computer_check(force=False):
     global POS_UPDATE_RELEASE,OFFICE_UPDATE_RELEASE
+    if force or OPS_UPDATE_RELEASE.get('attempted',0)<time.time()-3600:
+        with connect() as c:has_ops=c.execute("SELECT 1 FROM retail_computer_apps WHERE app='ops'").fetchone()
+        if has_ops and not OPS_UPDATE_RELEASE.get('checking'):
+            OPS_UPDATE_RELEASE.update(checking=True,attempted=time.time());threading.Thread(target=ops_update_check,daemon=True).start()
     for app in ('pos','office'):
         release=POS_UPDATE_RELEASE if app=='pos' else OFFICE_UPDATE_RELEASE
         if not release.get('checking') and (force or time.time()-release.get('attempted',release.get('checked',0))>3600):
@@ -54,12 +58,12 @@ def computer_check(force=False):
 def computer_state(c,u,check=True):
     computer_require_admin(u)
     if check:computer_check()
-    jobs={app:computer_campaign(c,app) for app in ('pos','office')}
-    releases={'pos':POS_UPDATE_RELEASE,'office':OFFICE_UPDATE_RELEASE};computers=[]
+    jobs={app:computer_campaign(c,app) for app in ('pos','office','ops')}
+    releases={'pos':POS_UPDATE_RELEASE,'office':OFFICE_UPDATE_RELEASE,'ops':OPS_UPDATE_RELEASE};computers=[]
     for row in c.execute('SELECT * FROM retail_computers ORDER BY registered DESC,name,hostname'):
         pc=dict(row);pc['macs']=json.loads(pc['macs']);pc['apps']=[]
         for record in c.execute('SELECT * FROM retail_computer_apps WHERE computer=? ORDER BY app,device',(pc['id'],)):
-            item=dict(record);item['online']=time.time()-item['seen']<60;job=jobs[item['app']];latest=releases[item['app']].get('version')
+            item=dict(record);item['online']=time.time()-item['seen']<60;job=jobs.get(item['app']);latest=releases[item['app']].get('version')
             item['available']=bool(latest and updater.version(latest)>updater.version(item['version']))
             item['target']=job['version'] if job and item['device'] in job['targets'] else None
             item['complete']=bool(item['target'] and updater.version(item['version'])>=updater.version(item['target']))
@@ -69,13 +73,15 @@ def computer_state(c,u,check=True):
     return {'computers':computers,'releases':releases,'campaigns':jobs,'server_version':updater.current()}
 
 def computer_post(handler,c,u,path,d):
+    if path=='self':return computer_self(handler,c,u,d)
     computer_require_admin(u)
     if path=='register':
         ident=d.get('id');row=c.execute('SELECT * FROM retail_computers WHERE id=?',(ident,)).fetchone()
-        if not row:raise Problem('Open the updated DESK or OFFICE on that computer first.',404)
+        if not row:raise Problem('Open DESK, STORE OPS or OFFICE on that computer and sign in first.',404)
         if d.get('revision')!=row['revision']:raise Problem('Computer registration changed. Refresh and try again.',409)
         name=str(d.get('name','')).strip();role=d.get('role','office')
         if not 1<=len(name)<=80 or role not in ('pos','office','server','other'):raise Problem('Enter a computer name and valid role.')
+        computer_link_terminal(c,ident,d,name,row['hostname'])
         c.execute('UPDATE retail_computers SET name=?,role=?,registered=1,revision=revision+1 WHERE id=?',(name,role,ident))
         c.execute('INSERT INTO audit VALUES(?,?,?,?)',(dt.datetime.now().isoformat(timespec='seconds'),u['name'],'Registered or renamed computer',json.dumps({'id':ident,'name':name,'role':role})))
     elif path=='check':computer_check(True)
@@ -86,9 +92,10 @@ def computer_post(handler,c,u,path,d):
         selected=set(selected);known={r['id'] for r in c.execute('SELECT id FROM retail_computers WHERE registered=1')}
         if not selected<=known:raise Problem('Register the selected computers first.')
         pending=[]
-        for app,release in [('pos',POS_UPDATE_RELEASE),('office',OFFICE_UPDATE_RELEASE)]:
-            if release.get('checking') or release.get('error') or not release.get('version') or time.time()-release.get('checked',0)>3600:raise Problem('Finish checking both applications for updates first.',409)
-            if (pos_update_read() if app=='pos' else office_update_read()).get('campaign'):raise Problem('Cancel the existing '+app.upper()+' update request before starting a computer rollout.',409)
+        for app,release in [('pos',POS_UPDATE_RELEASE),('office',OFFICE_UPDATE_RELEASE),('ops',OPS_UPDATE_RELEASE)]:
+            if not any(r['computer'] in selected for r in c.execute('SELECT computer FROM retail_computer_apps WHERE app=?',(app,))):continue
+            if release.get('checking') or release.get('error') or not release.get('version') or time.time()-release.get('checked',0)>3600:raise Problem('Finish checking the selected applications for updates first.',409)
+            if app!='ops' and (pos_update_read() if app=='pos' else office_update_read()).get('campaign'):raise Problem('Cancel the existing '+app.upper()+' update request before starting a computer rollout.',409)
             old=computer_campaign(c,app)
             if old:
                 versions={r['device']:r['version'] for r in c.execute('SELECT device,version FROM retail_computer_apps WHERE app=?',(app,))}
@@ -106,3 +113,49 @@ def computer_post(handler,c,u,path,d):
     else:raise Problem('Unknown computer action.',404)
     c.commit()
     return handler.send(computer_state(c,u,False))
+
+
+OPS_UPDATE_RELEASE={'checking':False}
+def ops_update_check():
+    try:
+        repository='m404ntfd/mgc-yfc-operations'
+        release=json.loads(updater.fetch('https://api.github.com/repos/'+repository+'/releases/latest',1000000))
+        if release.get('draft') or release.get('prerelease'):raise ValueError('A stable release is required.')
+        candidates=[]
+        for asset in release.get('assets',[]):
+            match=re.fullmatch(r'CoastYouth-Retail-STORE-OPS-Setup-v(\d+\.\d+\.\d+)\.exe',asset.get('name',''))
+            if match and re.fullmatch(r'sha256:[a-f0-9]{64}',asset.get('digest') or ''):candidates.append((updater.version(match[1]),match[1],asset))
+        if not candidates:raise ValueError('No verified STORE OPS installer is available.')
+        _,version,asset=max(candidates)
+        if not asset['browser_download_url'].startswith('https://github.com/'+repository+'/releases/download/'):raise ValueError('Unexpected installer address.')
+        with LOCK:OPS_UPDATE_RELEASE.update(checking=False,version=version,url=asset['browser_download_url'],checked=time.time(),error=None)
+    except Exception as e:
+        with LOCK:OPS_UPDATE_RELEASE.update(checking=False,error=str(e))
+
+def computer_self(handler,c,u,d):
+    app=d.get('app');device=d.get('device');version=d.get('version')
+    if app not in ('pos','office','ops') or not re.fullmatch('[a-f0-9]{32}',str(device)) or not re.fullmatch(r'\d+\.\d+\.\d+',str(version)):raise Problem('Invalid desktop identity.')
+    meta=d.get('computer')
+    if not isinstance(meta,dict) or not re.fullmatch('[a-f0-9]{32}',str(meta.get('id',''))):raise Problem('Windows computer identity is unavailable. Contact your administrator.')
+    computer_heartbeat(handler,app,d)
+    row=c.execute('SELECT * FROM retail_computers WHERE id=?',(meta['id'],)).fetchone()
+    terminal=c.execute('SELECT id,name,enabled FROM retail_terminals WHERE device=?',(device,)).fetchone() if app=='pos' else None
+    result={'computer':{k:row[k] for k in ('id','name','hostname','role','registered','revision')},'terminal':dict(terminal) if terminal else None}
+    return handler.send(computer_client_state(app,device,result))
+
+def computer_link_terminal(c,ident,d,name,hostname):
+    # First-time DESK enrollment may link an available terminal, never replace an existing binding.
+    device=d.get('device')
+    if d.get('app')!='pos' or not device:return
+    member=c.execute("SELECT 1 FROM retail_computer_apps WHERE computer=? AND app='pos' AND device=?",(ident,device)).fetchone()
+    if not member:raise Problem('Refresh this computer before registering its checkout.',409)
+    current=c.execute('SELECT * FROM retail_terminals WHERE device=?',(device,)).fetchone()
+    if current:return
+    target=d.get('terminal')
+    if target:
+        row=c.execute('SELECT * FROM retail_terminals WHERE id=?',(target,)).fetchone()
+        if not row or row['device'] or not row['enabled']:raise Problem('Choose an enabled, unassigned terminal.',409)
+        c.execute('UPDATE retail_terminals SET device=?,hostname=?,revision=revision+1 WHERE id=?',(device,hostname,target))
+    else:
+        if len(name)>60 or c.execute('SELECT 1 FROM retail_terminals WHERE name=? COLLATE NOCASE',(name,)).fetchone():raise Problem('Choose the existing terminal or enter a unique name of 60 characters or fewer.',409)
+        c.execute('INSERT INTO retail_terminals VALUES(?,?,?,?,?,?,?)',(secrets.token_hex(16),name,device,None,1,1,hostname))

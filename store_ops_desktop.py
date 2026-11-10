@@ -6,7 +6,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 TITLE = "CoastYouth Retail STORE OPS"
-VERSION = "1.0.1"
+VERSION = "1.1.0"
 DEFAULT_SERVER = "https://operations.coastyfc.com"
 
 def server_url(value):
@@ -19,8 +19,33 @@ def server_url(value):
     return value.rstrip("/")
 
 class CloseGuard:
-    def __init__(self, window):
-        self.window, self.exiting, self.checking = window, False, False
+    def __init__(self, window, address=None):
+        self.exiting, self.checking = False, False
+        self._window=window;self._address=address
+    @property
+    def _exiting(self): return self.exiting
+    @_exiting.setter
+    def _exiting(self, value): self.exiting=value
+    def _trusted(self):
+        if not self._window or not self._address:return False
+        current=urlsplit(self._window.get_current_url());expected=urlsplit(self._address)
+        return (current.scheme,current.netloc)==(expected.scheme,expected.netloc) and current.path=='/'
+    def terminal_info(self):
+        if not self._trusted():return {'error':'Open the configured STORE OPS server.'}
+        from pos_kiosk import KioskStore
+        from computer_identity import computer_info
+        from pos_updater import PosUpdater
+        if not hasattr(self,'_store'):
+            self._store=KioskStore(Path(os.environ.get('APPDATA',str(Path.home())))/'CoastYouthRetailStoreOps'/'settings.json')
+            self._updates=PosUpdater(self,app='ops',current=VERSION)
+        return {'computer':computer_info(),'device':self._store.data['device'],'version':VERSION,'app':'ops'}
+    def ops_update_status(self, ident=None):
+        if self.terminal_info().get('error'):return {'error':'Open the configured server.'}
+        return self._updates.observe(ident)
+    def ops_install_update(self):
+        if self.terminal_info().get('error'):return {'error':'Open the configured server.'}
+        try:return self._updates.install()
+        except Exception as exc:return {'error':str(exc)}
     def closing(self):
         if self.exiting: return True
         if not self.checking:
@@ -29,12 +54,12 @@ class CloseGuard:
         return False
     def check(self):
         try:
-            busy = self.window.evaluate_js('typeof hasUnfinishedWork === "function" && hasUnfinishedWork()')
+            busy = self._window.evaluate_js('typeof hasUnfinishedWork === "function" && hasUnfinishedWork()')
             if busy:
-                self.window.evaluate_js('typeof toast === "function" ? toast("Save or discard your unfinished work before closing STORE OPS.") : alert("Save your work before closing STORE OPS.")')
+                self._window.evaluate_js('typeof toast === "function" ? toast("Save or discard your unfinished work before closing STORE OPS.") : alert("Save your work before closing STORE OPS.")')
                 return
             self.exiting = True
-            self.window.destroy()
+            self._window.destroy()
         except Exception:
             # Never interpret an unsuccessful work-state check as permission to close.
             pass
@@ -43,8 +68,9 @@ class CloseGuard:
 
 def ops_window(address, hidden=False):
     import webview
-    window = webview.create_window(TITLE, server_url(address) + "/", width=1366, height=900, min_size=(900, 650), hidden=hidden)
-    guard = CloseGuard(window)
+    guard = CloseGuard(None,server_url(address))
+    window = webview.create_window(TITLE, server_url(address) + "/", js_api=guard, width=1366, height=900, min_size=(900, 650), hidden=hidden)
+    guard._window=window
     window.events.closing += guard.closing
     window._ops_guard = guard
     return window
@@ -55,7 +81,7 @@ def configure(directory, address):
     root = tk.Tk(); root.title(TITLE); root.geometry("620x310"); root.resizable(False, False)
     frame = ttk.Frame(root, padding=24); frame.pack(fill="both", expand=True)
     ttk.Label(frame, text="Connect STORE OPS", font=("Segoe UI", 22, "bold")).pack(anchor="w")
-    ttk.Label(frame, text="Use the same server as your website, DESK and OFFICE.\nAll timecards, reservations and sales stay on that server.").pack(anchor="w", pady=18)
+    ttk.Label(frame, text="Use the same server as your website, DESK and OFFICE.\nSign in as an administrator next to register this computer.").pack(anchor="w", pady=18)
     ttk.Label(frame, text="Server address").pack(anchor="w")
     value = tk.StringVar(value=address); ttk.Entry(frame, textvariable=value).pack(fill="x", pady=6)
     chosen = []
@@ -75,6 +101,9 @@ def configure(directory, address):
 def main():
     import sys
     import webview
+    if "--apply-pos-update" in sys.argv:
+        from pos_updater import apply_update
+        apply_update(sys.argv[sys.argv.index("--apply-pos-update")+1]);return
     if "--smoke-test" in sys.argv:
         errors = []
         window = webview.create_window(TITLE, html="<html><body>STORE OPS</body></html>", hidden=True)

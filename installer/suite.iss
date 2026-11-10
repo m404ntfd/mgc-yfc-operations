@@ -26,9 +26,9 @@ Name: "pos"; Description: "CoastYouth Retail DESK"; Types: pos
 Name: "ops"; Description: "CoastYouth Retail STORE OPS (all web operations)"; Types: office
 [Files]
 Source: "..\dist\MGC-YFC-Operations-Setup-v{#AppVersion}.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
-Source: "..\dist\CoastYouth-Retail-OFFICE-Setup-v1.9.1.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
-Source: "..\dist\MGC-YFC-POS-Setup-v1.12.1.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
-Source: "..\dist\CoastYouth-Retail-STORE-OPS-Setup-v1.0.1.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
+Source: "..\dist\CoastYouth-Retail-OFFICE-Setup-v1.10.0.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
+Source: "..\dist\MGC-YFC-POS-Setup-v1.13.0.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
+Source: "..\dist\CoastYouth-Retail-STORE-OPS-Setup-v1.1.0.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 [Code]
 var NamePage: TInputQueryWizardPage;
 procedure InitializeWizard;
@@ -70,9 +70,9 @@ var Code: Integer; Params: String;
 begin
  if CurStep <> ssPostInstall then Exit;
  if WizardIsComponentSelected('server') then RunInstaller('MGC-YFC-Operations-Setup-v{#AppVersion}.exe', '/NORESTART /TYPE=both', 'SERVERDIR');
- if WizardIsComponentSelected('office') then RunInstaller('CoastYouth-Retail-OFFICE-Setup-v1.9.1.exe', '/NORESTART', 'OFFICEDIR');
- if WizardIsComponentSelected('pos') then RunInstaller('MGC-YFC-POS-Setup-v1.12.1.exe', '/NORESTART', 'POSDIR');
- if WizardIsComponentSelected('ops') then RunInstaller('CoastYouth-Retail-STORE-OPS-Setup-v1.0.1.exe', '/NORESTART', 'OPSDIR');
+ if WizardIsComponentSelected('office') then RunInstaller('CoastYouth-Retail-OFFICE-Setup-v1.10.0.exe', '/NORESTART', 'OFFICEDIR');
+ if WizardIsComponentSelected('pos') then RunInstaller('MGC-YFC-POS-Setup-v1.13.0.exe', '/NORESTART', 'POSDIR');
+ if WizardIsComponentSelected('ops') then RunInstaller('CoastYouth-Retail-STORE-OPS-Setup-v1.1.0.exe', '/NORESTART', 'OPSDIR');
  if NamePage.Values[0] <> '' then begin
   Params := '-NoProfile -Command "try { Rename-Computer -NewName ''' + NamePage.Values[0] + ''' -Force -ErrorAction Stop; exit 0 } catch { exit 1 }"';
   if not ShellExec('runas', ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'), Params, '', SW_HIDE, ewWaitUntilTerminated, Code) then

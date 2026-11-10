@@ -6,9 +6,8 @@ import pos_updater
 
 def run(app="pos"):
  root=Path(__file__).parent
- version="1.9.1" if app=="office" else "1.12.1"
- name="CoastYouth Retail OFFICE.exe" if app=="office" else "MGC YFC Point of Sale.exe"
- setup=root/"dist"/(("CoastYouth-Retail-OFFICE-Setup-v" if app=="office" else "MGC-YFC-POS-Setup-v")+version+".exe")
+ version,name,prefix={'office':('1.10.0','CoastYouth Retail OFFICE.exe','CoastYouth-Retail-OFFICE-Setup-v'),'pos':('1.13.0','MGC YFC Point of Sale.exe','MGC-YFC-POS-Setup-v'),'ops':('1.1.0','CoastYouth Retail STORE OPS.exe','CoastYouth-Retail-STORE-OPS-Setup-v')}[app]
+ setup=root/'dist'/(prefix+version+'.exe')
  with tempfile.TemporaryDirectory() as tmp:
   target=Path(tmp)/'installed';target.mkdir();exe=target/name;shutil.copy2(root/'dist'/name,exe)
   settings=Path(tmp)/'settings.json';settings.write_text('{"device":"retain","passcode":{"hash":"retain-existing-hash"},"server":"http://unchanged"}')
@@ -30,3 +29,4 @@ def run(app="pos"):
 if __name__=='__main__':
  run('pos')
  run('office')
+ run('ops')

@@ -80,10 +80,10 @@ def main():
   try:open_pos(address,store);return
   except Exception as e:
    root=tk.Tk();root.withdraw();messagebox.showerror('Unable to open POS',str(e));root.destroy();return
- root=tk.Tk();root.title('CoastYouth Retail DESK '+VERSION);root.geometry('520x270');root.resizable(False,False)
+ root=tk.Tk();root.title('CoastYouth Retail DESK '+VERSION);root.geometry('620x280');root.resizable(False,False)
  frame=ttk.Frame(root,padding=24);frame.pack(fill='both',expand=True)
  ttk.Label(frame,text='Connect CoastYouth Retail DESK',font=('Segoe UI',18,'bold')).pack(anchor='w')
- ttk.Label(frame,text='Use the address shown by your Operations server.\nThis computer does not need a separate database.').pack(anchor='w',pady=14)
+ ttk.Label(frame,text='Use the address shown by your Operations server.\nSign in as an administrator next to register this checkout.').pack(anchor='w',pady=14)
  value=tk.StringVar(value=address);entry=ttk.Entry(frame,textvariable=value);entry.pack(fill='x');entry.focus_set()
  selected=[]
  def connect():

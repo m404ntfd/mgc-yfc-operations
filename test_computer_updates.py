@@ -5,11 +5,12 @@ import server
 class ComputerTests(unittest.TestCase):
  def setUp(self):
   self.f=CoordinatorFixture()
-  self.old=(server.POS_UPDATE_RELEASE,server.OFFICE_UPDATE_RELEASE)
+  self.old=(server.POS_UPDATE_RELEASE,server.OFFICE_UPDATE_RELEASE,server.OPS_UPDATE_RELEASE)
   server.POS_UPDATE_RELEASE={'version':'9.0.0','checked':time.time(),'checking':False}
+  server.OPS_UPDATE_RELEASE={'version':'9.0.0','checked':time.time(),'attempted':time.time(),'checking':False}
   server.OFFICE_UPDATE_RELEASE={'version':'9.0.0','checked':time.time(),'checking':False}
  def tearDown(self):
-  server.POS_UPDATE_RELEASE,server.OFFICE_UPDATE_RELEASE=self.old;self.f.close()
+  server.POS_UPDATE_RELEASE,server.OFFICE_UPDATE_RELEASE,server.OPS_UPDATE_RELEASE=self.old;self.f.close()
  def heartbeat(self,app='pos',device='a'*32,computer='1'*32,version='1.0.0'):
   return self.f.call(app+'-update/heartbeat',dict(device=device,version=version,updater=True,status='Connected',computer=dict(id=computer,hostname='TEST-POS',macs=['AA:BB:CC:DD:EE:00'],os='Windows test')))
  def register(self,ident='1'*32,revision=0):
@@ -37,7 +38,7 @@ class ComputerTests(unittest.TestCase):
   result=self.heartbeat(device='c'*32,computer='2'*32)[1];self.assertFalse(result.get('campaign'))
   self.assertEqual(self.f.call('computers/start',dict(computers=['1'*32],seconds=30))[0],409)
  def test_start_atomicity_and_operational_rows_untouched(self):
-  self.heartbeat();self.register()
+  self.heartbeat();self.heartbeat('office','b'*32);self.register()
   with server.connect() as c:
    before={r[0]:c.execute('SELECT * FROM "'+r[0]+'" ORDER BY rowid').fetchall() for r in c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'retail_computer%' AND name NOT IN ('audit','sqlite_sequence')")}
   server.OFFICE_UPDATE_RELEASE={'error':'Unavailable','checked':time.time()}
