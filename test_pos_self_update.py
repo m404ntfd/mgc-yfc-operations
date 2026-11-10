@@ -6,7 +6,7 @@ import pos_updater
 
 def run(app="pos"):
  root=Path(__file__).parent
- version="1.9.0" if app=="office" else "1.12.0"
+ version="1.9.1" if app=="office" else "1.12.1"
  name="CoastYouth Retail OFFICE.exe" if app=="office" else "MGC YFC Point of Sale.exe"
  setup=root/"dist"/(("CoastYouth-Retail-OFFICE-Setup-v" if app=="office" else "MGC-YFC-POS-Setup-v")+version+".exe")
  with tempfile.TemporaryDirectory() as tmp:
