@@ -17,6 +17,11 @@ CREATE TRIGGER IF NOT EXISTS retail_reward_sources_no_delete BEFORE DELETE ON re
 CREATE TABLE IF NOT EXISTS retail_members(customer INTEGER PRIMARY KEY,card TEXT UNIQUE,birthday TEXT NOT NULL DEFAULT '');
 CREATE TABLE IF NOT EXISTS retail_birthdays(customer INTEGER NOT NULL,store TEXT NOT NULL,year INTEGER NOT NULL,sale INTEGER NOT NULL,PRIMARY KEY(customer,store,year));
 CREATE TABLE IF NOT EXISTS retail_gifts(account INTEGER PRIMARY KEY,code TEXT NOT NULL UNIQUE,store TEXT NOT NULL,sale INTEGER NOT NULL,amount INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS retail_cash_advances(id INTEGER PRIMARY KEY AUTOINCREMENT,request TEXT NOT NULL UNIQUE,employee TEXT NOT NULL,employee_name TEXT NOT NULL,actor TEXT NOT NULL,actor_name TEXT NOT NULL,store TEXT NOT NULL,store_name TEXT NOT NULL,terminal TEXT NOT NULL,terminal_name TEXT NOT NULL,drawer INTEGER,drawer_event INTEGER UNIQUE,at TEXT NOT NULL,amount INTEGER NOT NULL CHECK(amount>0),reason TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS retail_cash_advance_store ON retail_cash_advances(store,at);
+CREATE INDEX IF NOT EXISTS retail_cash_advance_employee ON retail_cash_advances(employee,at);
+CREATE TRIGGER IF NOT EXISTS retail_cash_advances_no_update BEFORE UPDATE ON retail_cash_advances BEGIN SELECT RAISE(ABORT,'Employee cash advance history is immutable'); END;
+CREATE TRIGGER IF NOT EXISTS retail_cash_advances_no_delete BEFORE DELETE ON retail_cash_advances BEGIN SELECT RAISE(ABORT,'Employee cash advance history is immutable'); END;
 CREATE TABLE IF NOT EXISTS retail_drawers(id INTEGER PRIMARY KEY,terminal TEXT NOT NULL,store TEXT NOT NULL,opened TEXT NOT NULL,actor TEXT NOT NULL,opening INTEGER NOT NULL,closed TEXT,body TEXT NOT NULL);
 CREATE UNIQUE INDEX IF NOT EXISTS retail_drawer_open ON retail_drawers(terminal) WHERE closed IS NULL;
 CREATE TABLE IF NOT EXISTS retail_drawer_events(id INTEGER PRIMARY KEY,drawer INTEGER NOT NULL,at TEXT NOT NULL,actor TEXT NOT NULL,amount INTEGER NOT NULL,reason TEXT NOT NULL);
@@ -129,12 +134,13 @@ def stores_drawer(c,ident):
     row=c.execute('SELECT * FROM retail_drawers WHERE id=?',(ident,)).fetchone()
     if not row:raise Problem('Cash drawer not found.',404)
     d=dict(row);d.update(json.loads(d.pop('body')))
-    if d['closed']:return d
+    if d['closed']:return dict(d,advances=d.get('advances',0))
     sales=[json.loads(r[0]) for r in c.execute('SELECT body FROM pos_sales')]
     refunds=[json.loads(r[0]) for r in c.execute('SELECT body FROM retail_refunds')]
     d['cash_sales']=sum(s.get('cash_paid',s['tender']-s['change']) for s in sales if s.get('drawer_id')==ident)
     d['cash_refunds']=sum(r['cash'] for r in refunds if r.get('drawer_id')==ident)
     d['movements']=sum(r[0] for r in c.execute('SELECT amount FROM retail_drawer_events WHERE drawer=?',(ident,)))
+    d['advances']=c.execute('SELECT COALESCE(SUM(amount),0) FROM retail_cash_advances WHERE drawer=?',(ident,)).fetchone()[0]
     d['expected']=d['opening']+d['cash_sales']-d['cash_refunds']+d['movements']
     return d
 
@@ -145,6 +151,16 @@ def stores_donations(sales):
     return dict(total=total,transactions=len(eligible),donors=len(giving),participation=round(100*len(giving)/len(eligible),1) if eligible else None,average=(total+len(giving)//2)//len(giving) if giving else None,per_thousand=(total*1000+len(eligible)//2)//len(eligible) if eligible else None)
 
 def stores_get(c,u,path,q):
+    if path=='cash-advance-status':
+        request=q.get('request',[''])[0]
+        if not re.fullmatch('[0-9a-f]{32}',request):raise Problem('Invalid cash advance reference.')
+        row=c.execute('SELECT * FROM retail_cash_advances WHERE request=? AND actor=?',(request,u['receipt_owner'])).fetchone()
+        return dict(advance=dict(row) if row else None)
+    if path=='cash-advance-setup':
+        context=stores_advance_context(c,u,q.get('device',[''])[0])
+        employees=[dict(id=r[0],name=r[1]) for r in c.execute('SELECT p.profile_id,p.name FROM receipt_profiles p JOIN users u ON u.name=p.name WHERE p.profile_id<>? ORDER BY p.name COLLATE NOCASE',(u['receipt_owner'],))]
+        return dict(context=context,employees=employees)
+
     if path=='stores':return dict(stores=stores_list(c),programs=stores_programs(c),terminals=retail_config(c)['terminals'],assignments=dict(c.execute('SELECT terminal,store FROM retail_terminal_stores').fetchall()))
     if path=='programs':return dict(programs=stores_programs(c))
     if path=='membership-scan':
@@ -167,6 +183,7 @@ def stores_get(c,u,path,q):
     return None
 
 def stores_post(c,u,path,d,finish):
+    if path=='cash-advance':return stores_advance_post(c,u,d,finish)
     if path=='store-save':
         thrift_require(u,'manage_pos');ident=pos_text(d.get('id'),'store ID',40);old=stores_profile(c,ident)
         if d.get('revision')!=old['revision']:raise Problem('Store settings changed. Reopen before saving.',409)
@@ -318,3 +335,41 @@ def stores_refund_drawer(c,result,d):
     ident=d.get('drawer_id') or (rows[0][0] if len(rows)==1 else None)
     if ident not in [r[0] for r in rows]:raise Problem('Choose an open cash drawer in the original store for this refund.')
     result['drawer_id']=ident
+
+def stores_advance_context(c,u,device):
+    thrift_require(u,'issue_cash_advances')
+    if not isinstance(device,str) or not re.fullmatch('[0-9a-f]{32}',device):raise Problem('Register this DESK terminal before issuing a cash advance.',409)
+    terminal=stores_terminal(c,device)
+    if not terminal:raise Problem('Register this DESK terminal in OFFICE before issuing an employee cash advance.',409)
+    if not terminal['enabled']:raise Problem('This terminal is disabled.',403)
+    store=stores_profile(c,terminal['store_id'])
+    tracked=stores_programs(c)['drawers']
+    row=c.execute('SELECT id FROM retail_drawers WHERE terminal=? AND closed IS NULL',(terminal['id'],)).fetchone() if tracked else None
+    drawer=stores_drawer(c,row[0]) if row else None
+    if drawer and drawer['store']!=store['id']:raise Problem('The open drawer belongs to another store.',409)
+    return dict(terminal=terminal['id'],terminal_name=terminal['name'],store_id=store['id'],store_name=store['name'],drawer_id=drawer['id'] if drawer else None,drawers_enabled=tracked,expected=drawer['expected'] if drawer else None)
+
+def stores_advance_post(c,u,d,finish):
+    context=stores_advance_context(c,u,d.get('device'))
+    if d.get('terminal')!=context['terminal'] or d.get('store_id')!=context['store_id'] or d.get('drawer_id')!=context['drawer_id']:
+        raise Problem('The terminal, store or drawer changed. Reopen Cash Advance before proceeding.',409)
+    if context['drawers_enabled'] and context['drawer_id'] is None:raise Problem('Open this terminal’s cash drawer before issuing an advance.',409)
+    employee=pos_text(d.get('employee'),'an employee',80)
+    person=c.execute('SELECT p.profile_id,p.name FROM receipt_profiles p JOIN users u ON u.name=p.name WHERE p.profile_id=?',(employee,)).fetchone()
+    if not person:raise Problem('Choose a current employee from the shared user directory.')
+    if employee==u['receipt_owner']:raise Problem('Another authorized employee must issue your own cash advance.',403)
+    amount=pos_int(d.get('amount'),'cash advance amount',1)
+    reason=pos_text(d.get('reason'),'a reason or reference',300)
+    if d.get('confirmed') is not True:raise Problem('Confirm the employee and amount before recording the advance.')
+    if context['expected'] is not None and amount>context['expected']:raise Problem('Cash advance exceeds expected drawer cash.',409)
+    now=dt.datetime.now().astimezone().isoformat(timespec='seconds')
+    event=None
+    if context['drawer_id'] is not None:
+        event=c.execute('INSERT INTO retail_drawer_events(drawer,at,actor,amount,reason) VALUES(?,?,?,?,?)',(context['drawer_id'],now,u['name'],-amount,'Employee cash advance: '+person['name']+' — '+reason)).lastrowid
+    ident=c.execute('''INSERT INTO retail_cash_advances(request,employee,employee_name,actor,actor_name,store,store_name,terminal,terminal_name,drawer,drawer_event,at,amount,reason)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',(d['request'],employee,person['name'],u['receipt_owner'],u['name'],context['store_id'],context['store_name'],context['terminal'],context['terminal_name'],context['drawer_id'],event,now,amount,reason)).lastrowid
+    advance=dict(c.execute('SELECT * FROM retail_cash_advances WHERE id=?',(ident,)).fetchone())
+    return finish(dict(advance=advance),'Employee cash advance #'+str(ident)+' issued to '+person['name'])
+
+def stores_advance_rows(c,start,end,store='',employee=''):
+    return [dict(r) for r in c.execute('SELECT * FROM retail_cash_advances ORDER BY id DESC') if (not store or r['store']==store) and start<=retail_epoch(r['at'],'cash advance date')<end and (not employee or employee.casefold() in r['employee_name'].casefold())]

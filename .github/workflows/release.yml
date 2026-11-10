@@ -23,7 +23,7 @@ jobs:
       - run: python -m unittest test_server test_updater test_remote test_lockout test_journal test_receipts test_daily_session test_native_revision test_login_counts test_revision29 test_page_colors test_receipt_assignment test_roles test_comms test_workforce test_web_push test_web_assets test_mobile_media test_store_ops_review test_computer_updates test_computer_native test_terminal_registration
       - run: node --check static/app.js
       - run: node --check static/pos.js
-      - run: python -m unittest test_thrift_retail.ThriftTests test_retail_stores.StoreTests test_pickup_followup.PickupTests test_hr_catalog test_catalog_hierarchy test_hr_browser test_hr_completion test_hr_formats test_hr_sources
+      - run: python -m unittest test_cash_advances test_thrift_retail.ThriftTests test_retail_stores.StoreTests test_pickup_followup.PickupTests test_hr_catalog test_catalog_hierarchy test_hr_browser test_hr_completion test_hr_formats test_hr_sources
       - run: python -m unittest test_schedule_redesign test_data_integrity test_update_connections test_update_coordination test_activity_controller test_pos test_pos_credit test_pos_kiosk test_pos_updates
   mobile-browser:
     runs-on: ubuntu-24.04
@@ -63,16 +63,19 @@ jobs:
       - run: python test_customer_services_ui.py
       - run: python test_thrift_retail_ui.py
       - run: python test_retail_stores_ui.py
+      - run: python test_cash_advances_ui.py
       - run: python test_pickup_followup_ui.py
       - run: python test_office_security_reports_ui.py
       - run: python test_hr_catalog_ui.py
       - run: python test_catalog_hierarchy_ui.py
       - run: python test_setup_list_ui.py
+      - run: python test_office_search_ui.py
       - run: python test_hr_browser_ui.py
       - run: python test_hr_sources_ui.py
       - run: python test_office_expansion_ui.py
       - run: python test_store_ops_ui.py
       - run: python test_computer_updates_ui.py
+      - run: python test_office_web_updates_ui.py
       - run: python test_terminal_registration_ui.py
       - run: python test_computer_auto_ui.py
       - run: python test_pos_redesign_ui.py
@@ -135,7 +138,7 @@ jobs:
         shell: pwsh
         run: |
           $baseline = Join-Path $env:RUNNER_TEMP 'retail-upgrade-baseline'
-          git clone --depth 1 --branch v0.51.0 https://github.com/m404ntfd/mgc-yfc-operations.git $baseline
+          git clone --depth 1 --branch v0.52.0 https://github.com/m404ntfd/mgc-yfc-operations.git $baseline
           if ($LASTEXITCODE -ne 0) { throw 'Baseline checkout failed' }
           $env:RETAIL_BASE_SOURCE = $baseline
           python test_retail_release_upgrade.py
@@ -157,12 +160,12 @@ jobs:
           & $compiler "/DAppVersion=$version" installer/suite.iss
           if ($LASTEXITCODE -ne 0) { throw "Computer setup installer build failed" }
           $officeInstall = Join-Path $env:RUNNER_TEMP 'OfficeInstallTest'
-          $p = Start-Process -WindowStyle Hidden -FilePath 'dist/CoastYouth-Retail-OFFICE-Setup-v1.11.0.exe' -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$officeInstall") -PassThru -Wait
+          $p = Start-Process -WindowStyle Hidden -FilePath 'dist/CoastYouth-Retail-OFFICE-Setup-v1.12.0.exe' -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$officeInstall") -PassThru -Wait
           if ($p.ExitCode -ne 0) { throw 'OFFICE install failed' }
           $p = Start-Process -WindowStyle Hidden -FilePath (Join-Path $officeInstall 'CoastYouth Retail OFFICE.exe') -ArgumentList '--smoke-test' -PassThru -Wait
           if ($p.ExitCode -ne 0) { throw 'Installed OFFICE failed' }
           $posInstall = Join-Path $env:RUNNER_TEMP 'PosInstallTest'
-          $p = Start-Process -WindowStyle Hidden -FilePath 'dist/MGC-YFC-POS-Setup-v1.14.0.exe' -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$posInstall") -PassThru -Wait
+          $p = Start-Process -WindowStyle Hidden -FilePath 'dist/MGC-YFC-POS-Setup-v1.15.0.exe' -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$posInstall") -PassThru -Wait
           if ($p.ExitCode -ne 0) { throw 'POS install failed' }
           $p = Start-Process -WindowStyle Hidden -FilePath (Join-Path $posInstall 'MGC YFC Point of Sale.exe') -ArgumentList '--smoke-test' -PassThru -Wait
           if ($p.ExitCode -ne 0) { throw 'Installed POS failed' }
@@ -224,4 +227,4 @@ jobs:
             echo "Release already exists; leaving published assets unchanged."
             exit 0
           fi
-          gh release create "$tag" dist/*.exe dist/Store-Dispatch-Update.zip --target "$GITHUB_SHA" --title "CoastYouth Retail Catalog Setup + Server $tag" --notes-file RELEASE-NOTES.md
+          gh release create "$tag" dist/*.exe dist/Store-Dispatch-Update.zip --target "$GITHUB_SHA" --title "CoastYouth Retail Cash Advances + OFFICE Updates $tag" --notes-file RELEASE-NOTES.md

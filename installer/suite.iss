@@ -26,8 +26,8 @@ Name: "pos"; Description: "CoastYouth Retail DESK"; Types: pos
 Name: "ops"; Description: "CoastYouth Retail STORE OPS (all web operations)"; Types: office
 [Files]
 Source: "..\dist\MGC-YFC-Operations-Setup-v{#AppVersion}.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
-Source: "..\dist\CoastYouth-Retail-OFFICE-Setup-v1.11.0.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
-Source: "..\dist\MGC-YFC-POS-Setup-v1.14.0.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
+Source: "..\dist\CoastYouth-Retail-OFFICE-Setup-v1.12.0.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
+Source: "..\dist\MGC-YFC-POS-Setup-v1.15.0.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 Source: "..\dist\CoastYouth-Retail-STORE-OPS-Setup-v1.2.0.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 [Code]
 var NamePage: TInputQueryWizardPage;
@@ -70,8 +70,8 @@ var Code: Integer; Params: String;
 begin
  if CurStep <> ssPostInstall then Exit;
  if WizardIsComponentSelected('server') then RunInstaller('MGC-YFC-Operations-Setup-v{#AppVersion}.exe', '/NORESTART /TYPE=both', 'SERVERDIR');
- if WizardIsComponentSelected('office') then RunInstaller('CoastYouth-Retail-OFFICE-Setup-v1.11.0.exe', '/NORESTART', 'OFFICEDIR');
- if WizardIsComponentSelected('pos') then RunInstaller('MGC-YFC-POS-Setup-v1.14.0.exe', '/NORESTART', 'POSDIR');
+ if WizardIsComponentSelected('office') then RunInstaller('CoastYouth-Retail-OFFICE-Setup-v1.12.0.exe', '/NORESTART', 'OFFICEDIR');
+ if WizardIsComponentSelected('pos') then RunInstaller('MGC-YFC-POS-Setup-v1.15.0.exe', '/NORESTART', 'POSDIR');
  if WizardIsComponentSelected('ops') then RunInstaller('CoastYouth-Retail-STORE-OPS-Setup-v1.2.0.exe', '/NORESTART', 'OPSDIR');
  if NamePage.Values[0] <> '' then begin
   Params := '-NoProfile -Command "try { Rename-Computer -NewName ''' + NamePage.Values[0] + ''' -Force -ErrorAction Stop; exit 0 } catch { exit 1 }"';

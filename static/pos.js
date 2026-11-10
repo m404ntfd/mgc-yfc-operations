@@ -23,7 +23,7 @@ async function api(path,data){
  try{
   const r=await fetch('/api/'+path,{method:data?'POST':'GET',headers:{'X-Dispatch-Connection':connectionId,...(data?{'Content-Type':'application/json','X-Dispatch':'1'}:{})},body:data?JSON.stringify(data):undefined,signal:AbortSignal.timeout(20000)});
   const value=await r.json();$('connection').textContent='Connected to Operations';
-  if(!r.ok){if(r.status===401){$('creditDialog')?.close();user=null;$('posRoot').hidden=true;$('auth').hidden=false;$('cashier').textContent='';}throw Object.assign(Error(value.error||'Request failed'),{status:r.status});}
+  if(!r.ok){if(r.status===401){$('cashAdvanceDialog')?.close();$('creditDialog')?.close();user=null;$('posRoot').hidden=true;$('auth').hidden=false;$('cashier').textContent='';}throw Object.assign(Error(value.error||'Request failed'),{status:r.status});}
   if(mutation&&form&&stamp===snapshot(form))changedForms.delete(form);
   return value;
  }catch(e){if(!e.status)$('connection').textContent='Connection interrupted';throw e;}
@@ -36,10 +36,10 @@ async function boot(){
   if(s.setup){$('authError').textContent='Set up the Operations server first, then sign in here.';return;}
   if(!user){document.body.removeAttribute('data-retail-theme');return;}
   await loadRetailTheme();
-  if(!can('use_pos')&&!(officeMode&&['manage_users','manage_roles','manage_hr','review_staff_communications','unlock_users','reset_passwords','rename_users','edit_time_cards','add_time_cards','export_payroll','manage_work_sites','review_requests','manage_staff_schedule'].some(can))){$('posRoot').hidden=true;$('auth').hidden=false;$('authError').textContent='Ask an administrator to grant Point of Sale access to your role.';return;}
+  if(!can('use_pos')&&!(officeMode&&['view_cash_advances','manage_users','manage_roles','manage_hr','review_staff_communications','unlock_users','reset_passwords','rename_users','edit_time_cards','add_time_cards','export_payroll','manage_work_sites','review_requests','manage_staff_schedule'].some(can))){$('posRoot').hidden=true;$('auth').hidden=false;$('authError').textContent='Ask an administrator to grant Point of Sale access to your role.';return;}
   $('navSetup').hidden=true;$('posSetupShortcut').hidden=true;
   for(const [id,allowed]of [['linkClock',true],['linkReservations',can('view_schedule')],['linkPaging',can('send_pages')]]){$(id).setAttribute('aria-disabled',String(!allowed));$(id).tabIndex=allowed?0:-1;}
-  if(officeMode&&!['manage_pos','manage_store_credit','view_pos_sales','manage_users','manage_roles','manage_hr','review_staff_communications','unlock_users','reset_passwords','rename_users','approve_pos_adjustments','transfer_pos_sales','refund_pos_sales','edit_time_cards','add_time_cards','export_payroll','manage_work_sites','review_requests','manage_staff_schedule'].some(can)){$('posRoot').hidden=true;$('auth').hidden=false;$('authError').textContent='OFFICE requires POS configuration, account management, or sales reporting permission.';return;}
+  if(officeMode&&!['view_cash_advances','manage_pos','manage_store_credit','view_pos_sales','manage_users','manage_roles','manage_hr','review_staff_communications','unlock_users','reset_passwords','rename_users','approve_pos_adjustments','transfer_pos_sales','refund_pos_sales','edit_time_cards','add_time_cards','export_payroll','manage_work_sites','review_requests','manage_staff_schedule'].some(can)){$('posRoot').hidden=true;$('auth').hidden=false;$('authError').textContent='OFFICE requires POS configuration, account management, or sales reporting permission.';return;}
   if(can('use_pos'))await posLoad();if(officeMode){officeRender();if(['#retail-users','#retail-roles'].includes(location.hash))await officeAction(location.hash==='#retail-roles'?'roles':'users');if(location.hash==='#terminals'&&can('manage_pos'))await retailEditor('terminals');}
  }catch(e){$('authError').textContent=e.message;}
 }
@@ -255,15 +255,16 @@ const officeCards=[
  {section:'accounts',title:'Store-credit accounts',description:'Customer and employee balances, adjustments and history.',icon:'◎',action:'accounts',permission:'manage_store_credit'},
  {section:'security',title:'Users',description:'Add users and assign roles shared with Operations.',icon:'♙',action:'users',permission:'manage_users'},
  {section:'security',title:'Roles & permissions',description:'Create roles and manage shared permissions here in OFFICE.',icon:'☷',action:'roles',permission:'manage_roles'},
- {section:'system',title:'Computer updates',description:'Check versions and update registered DESK, STORE OPS and OFFICE computers.',icon:'↓',action:'computer-updates',permission:'admin'},
- {section:'system',title:'Operations & server',description:'Open server updates and administration in Operations.',icon:'▣',action:'server',permission:'admin'},
+ {section:'system',title:'Application updates',description:'Update the STORE OPS web app, shared server and registered DESK, STORE OPS desktop and OFFICE computers.',icon:'↓',action:'computer-updates',permission:'admin'},
+ {section:'system',title:'Operations & server',description:'Open Operations settings and shared server administration.',icon:'▣',action:'server',permission:'admin'},
  {section:'system',title:'Credit-card processing',description:'Credit cards will be added in future updates.',icon:'▰',action:'cards',permission:'manage_pos'}
 ];
 let officeSection='home';
 const officeHub=document.createElement('section');officeHub.id='officeHub';officeHub.hidden=!officeMode;officeHub.innerHTML=`<div class="officeIntro"><div><span class="eyebrow">COASTYOUTH RETAIL OFFICE</span><h1 id="officeHeading">Retail administration</h1><p>Configure your store. Keep checkout focused.</p></div><span class="officeConnected">● Shared Operations server</span></div><div id="officeTiles"></div><section id="officeWork" hidden><button id="officeBack" type="button">‹ Back to menu</button><h2 id="officeWorkTitle"></h2><div id="officeForms"></div><div id="officeCatalog"></div></section>`;posPanel.append(officeHub);
 const officeNav=document.createElement('nav');officeNav.id='officeNav';officeNav.hidden=!officeMode;officeNav.setAttribute('aria-label','OFFICE sections');officeNav.innerHTML=officeSections.map(([id,label,icon])=>`<button type="button" data-office-section="${id}"><span aria-hidden="true">${icon}</span>${label}</button>`).join('');document.querySelector('.sidebar').insertBefore(officeNav,$('navCheckout'));
 function officeRenderCatalog(){if(!officeMode||!posOverview)return;const products=posOverview.products;$('officeCatalog').innerHTML='<h3>Catalog · '+products.length+' products</h3><p>Groups become category buttons in DESK.</p><table><thead><tr><th>Product</th><th>Group</th><th>Price</th><th>Tax</th></tr></thead><tbody>'+products.map(x=>`<tr><td>${esc(x.name)}<small class="flowLineNote">${esc(flowLineDetails(x)+(x.tag?' · '+x.tag.name+' tag · '+posMoney(x.tag.discount)+' markdown':''))}</small></td><td>${esc(x.category)}</td><td>${posMoney(x.price)}</td><td>${x.taxable?'Taxable':'Non-taxable'}</td></tr>`).join('')+'</tbody></table>';}
-function officeRender(){if(!officeMode)return;const allowed=officeCards.filter(x=>(x.action==='user-setup'?['manage_users','reset_passwords','rename_users','manage_staff_schedule'].some(can):x.action==='timekeeping-manage'?['edit_time_cards','add_time_cards','manage_staff_schedule','export_payroll','manage_work_sites','review_requests'].some(can):x.action==='labor-reports'?['edit_time_cards','add_time_cards','export_payroll'].some(can):x.permission==='admin'?user?.admin:can(x.permission))&&(['hr-onboarding','users','user-setup','roles','server','updates','labor-reports','schedule-report','login-security','review-communications','timekeeping-manage'].includes(x.action)||can('use_pos')));$('officeHeading').textContent=officeSection==='home'?'Retail administration':officeSections.find(x=>x[0]===officeSection)[1];$('officeTiles').innerHTML=allowed.filter(x=>officeSection==='home'||x.section===officeSection).map(x=>`<button type="button" class="officeTile" data-office-action="${x.action}"><span class="officeIcon" aria-hidden="true">${x.icon}</span><span><strong>${x.title}</strong><small>${x.description}</small></span><span aria-hidden="true">›</span></button>`).join('')||'<p>No tools are enabled for your role in this section.</p>';for(const b of officeNav.querySelectorAll('button'))b.setAttribute('aria-current',b.dataset.officeSection===officeSection?'page':'false');}
+function officeAvailableCards(){return user?officeCards.filter(x=>(x.action==='user-setup'?['manage_users','reset_passwords','rename_users','manage_staff_schedule'].some(can):x.action==='timekeeping-manage'?['edit_time_cards','add_time_cards','manage_staff_schedule','export_payroll','manage_work_sites','review_requests'].some(can):x.action==='labor-reports'?['edit_time_cards','add_time_cards','export_payroll'].some(can):x.permission==='admin'?user?.admin:can(x.permission))&&(['cash-advance-report','hr-onboarding','users','user-setup','roles','server','updates','labor-reports','schedule-report','login-security','review-communications','timekeeping-manage'].includes(x.action)||can('use_pos'))):[];}
+function officeRender(){if(!officeMode)return;const allowed=officeAvailableCards();$('officeHeading').textContent=officeSection==='home'?'Retail administration':officeSections.find(x=>x[0]===officeSection)[1];$('officeTiles').innerHTML=allowed.filter(x=>officeSection==='home'||x.section===officeSection).map(x=>`<button type="button" class="officeTile" data-office-action="${x.action}"><span class="officeIcon" aria-hidden="true">${x.icon}</span><span><strong>${x.title}</strong><small>${x.description}</small></span><span aria-hidden="true">›</span></button>`).join('')||'<p>No tools are enabled for your role in this section.</p>';for(const b of officeNav.querySelectorAll('button'))b.setAttribute('aria-current',b.dataset.officeSection===officeSection?'page':'false');}
 function officeHome(section='home'){if(!navigationAllowed())return;if(unfinished()){posMessage('Save or clear the current form before switching OFFICE sections.');return;}officeSection=section;$('officeWork').hidden=true;$('officeTiles').hidden=false;officeRender();}
 async function openRetailOffice(){if(!navigationAllowed()||unfinished()){posMessage('Save or clear unfinished entries before opening OFFICE.');return;}if(window.pywebview?.api?.open_operations){const r=await window.pywebview.api.open_operations('office');if(r.error)posMessage(r.error);}else window.open('/office','_blank','noopener');}
 async function officeAction(action){if(action==='receipt'){if(navigationAllowed()&&!unfinished())await storesProfiles();return;}if($('flowOffice'))$('flowOffice').hidden=true;if(flowActions.includes(action)||action==='catalog'){await flowOffice(action==='catalog'?'product-tools':action);return;}if(['layouts','terminals'].includes(action)){await retailEditor(action);return;}if($('retailEditor'))$('retailEditor').hidden=true;if(!navigationAllowed())return;if(action==='users'){if(unfinished()){posMessage('Save or clear the current form first.');return;}$('officeTiles').hidden=true;$('officeWork').hidden=false;$('officeWorkTitle').textContent='Users';$('officeForms').hidden=true;$('officeCatalog').hidden=true;$('officeUsers').hidden=false;await officeLoadUsers();return;}if(action==='catalog'||action==='receipt'){if(unfinished()){posMessage('Save or clear the current form first.');return;}$('officeTiles').hidden=true;$('officeWork').hidden=false;$('officeUsers').hidden=true;$('officeForms').hidden=false;$('officeWorkTitle').textContent=action==='catalog'?'Products & Sub Departments':'Receipt & tax';$('posProduct').hidden=action!=='catalog';$('posSetup').hidden=action!=='receipt';$('officeCatalog').hidden=action!=='catalog';officeRenderCatalog();return;}if(action==='accounts'){$('creditOpen').click();return;}if(action==='history'){$('posHistory').click();return;}if(action==='updates'){$('openPosUpdates').click();return;}if(action==='cards'){posMessage('Credit cards will be added in future updates.');return;}const urls={users:'/#retail-users',roles:'/#retail-roles',server:'/#settings'};if(urls[action]){if(unfinished()){posMessage('Save or clear unfinished work first.');return;}if(window.pywebview?.api?.open_operations){const result=await window.pywebview.api.open_operations(action);if(result.error)posMessage(result.error);}else window.open(urls[action],'_blank','noopener');}}
@@ -279,7 +280,7 @@ $('officeUserRole').onsubmit=async e=>{e.preventDefault();const form=e.currentTa
 
 if(officeMode){
  const officeReceipt=document.createElement('dialog');officeReceipt.id='officeReceipt';officeReceipt.append($('posReceipt'),$('posPrint'));posPanel.append(officeReceipt);
- document.title='CoastYouth Retail OFFICE';document.querySelector('.brand strong').textContent='OFFICE';document.querySelector('.version').textContent='CoastYouth Retail OFFICE · 1.8.0';document.querySelector('.workspace>header h1').textContent='OFFICE';document.querySelector('.workspace>header .eyebrow').textContent='RETAIL CONFIGURATION';$('officeForms').append($('posProduct'),$('posSetup'));
+ document.title='CoastYouth Retail OFFICE';document.querySelector('.brand strong').textContent='OFFICE';document.querySelector('.version').textContent='CoastYouth Retail OFFICE · 1.12.0';document.querySelector('.workspace>header h1').textContent='OFFICE';document.querySelector('.workspace>header .eyebrow').textContent='RETAIL CONFIGURATION';$('officeForms').append($('posProduct'),$('posSetup'));
  for(const form of [$('posProduct'),$('posSetup')]){const clear=document.createElement('button');clear.type='reset';clear.textContent='Clear unsaved entries';form.append(clear);}
  const returnDesk=document.createElement('button');returnDesk.type='button';returnDesk.id='officeReturnDesk';returnDesk.textContent='Open DESK';returnDesk.onclick=async()=>{if(!navigationAllowed()||unfinished()){posMessage('Save or clear your current work first.');return;}if(window.pywebview?.api?.open_operations){const r=await window.pywebview.api.open_operations('pos');if(r.error)posMessage(r.error);}else window.open('/pos','_blank','noopener');};document.querySelector('.headerRight').prepend(returnDesk);
 }else{
@@ -682,14 +683,14 @@ function retailReportCenter(root,mode='sales'){
  const dollar=n=>n===null?'Not available':new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(n/100);
  const sales=[['dashboard','Dashboard'],['donations','Donation performance'],['donations-employee','Donations by employee'],['sales','Sales report'],['transactions','Transaction log'],['cash','Cash summary'],['drawer','Drawer summary'],['cash-reconciliation','Cash-drawer reconciliation'],['employee-time','Employee sales by time'],['products','Products sold'],['sub-departments','Sales by Sub Department'],['departments','Sales by Department'],['revenue-centers','Sales by Revenue Center'],['modifiers','Products & modifiers'],['products-hour','Products sold by hour'],['seven-day','Revenue by day and hour'],['pricing','Pricing'],['hierarchy','Reporting hierarchy'],['tax-assignment','Tax assignment'],['tax-audit','Tax audit'],['accounts','Account information'],['adjustments','Adjustments log'],['journal','Sales journal'],['tabs','Open and held sales'],['reservations','Reservation schedule']];
  const labor=[['labor','Labor hours'],['time-entries','Time entries'],['schedule','Print employee schedule']];
- const choices=mode==='labor'?labor:mode==='schedule'?[labor[2]]:sales;
+ const choices=mode==='cash-advances'?[['cash-advances','Employee cash advances']]:mode==='labor'?labor:mode==='schedule'?[labor[2]]:sales;
  const today=new Date(),date=d=>new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);
- root.innerHTML=`<section class="retailReport"><h1>${mode==='dashboard'?'Dashboard':mode==='labor'?'Labor & time reports':mode==='schedule'?'Print schedule':'Sales analysis'}</h1><form class="rrFilters"><label>Store<select name="store_id"><option value="thrift-mart">Thrift Mart</option><option value="binopoly">Binopoly</option><option value="">All stores</option></select></label><label>Report<select name="kind">${choices.map(([k,t])=>`<option value="${k}">${t}</option>`).join('')}</select></label><label>From<input type="date" name="start" value="${date(today)}" required></label><label>Through<input type="date" name="end" value="${date(today)}" required></label><button>Run report</button><button type="button" data-rr-print>Print</button><button type="button" data-rr-export>Export CSV</button></form><p class="rrStatus" role="status"></p><div class="rrResult"></div></section>`;
+ root.innerHTML=`<section class="retailReport"><h1>${mode==='cash-advances'?'Employee cash advances':mode==='dashboard'?'Dashboard':mode==='labor'?'Labor & time reports':mode==='schedule'?'Print schedule':'Sales analysis'}</h1><form class="rrFilters"><label>Store<select name="store_id"><option value="thrift-mart">Thrift Mart</option><option value="binopoly">Binopoly</option><option value="">All stores</option></select></label><label>Report<select name="kind">${choices.map(([k,t])=>`<option value="${k}">${t}</option>`).join('')}</select></label><label>From<input type="date" name="start" value="${date(today)}" required></label><label>Through<input type="date" name="end" value="${date(today)}" required></label>${mode==='cash-advances'?'<label>Employee name<input name="employee" type="search" placeholder="All employees"></label>':''}<button>Run report</button><button type="button" data-rr-print>Print</button><button type="button" data-rr-export>Export CSV</button></form><p class="rrStatus" role="status"></p><div class="rrResult"></div></section>`;
  let result=null;const form=root.querySelector('form'),status=root.querySelector('.rrStatus'),output=root.querySelector('.rrResult');
  root.querySelector('[data-rr-print]').onclick=async()=>{if(!result)return;let print=document.getElementById('retailPrintReport');if(print)print.remove();print=document.createElement('section');print.id='retailPrintReport';print.classList.toggle('rrWide',(result.columns?.length||0)>6);print.innerHTML=output.innerHTML;document.body.append(print);await Promise.all([...print.querySelectorAll('img')].map(img=>img.decode().catch(()=>{})));document.body.classList.add('retailPrinting');try{window.print();}finally{document.body.classList.remove('retailPrinting');print.remove();}};
  root.querySelector('[data-rr-export]').onclick=()=>{if(!result?.rows){status.textContent='Choose a detailed report to export rows.';return;}const cell=v=>'"'+String(v??'').replace(/^[=+@\-]/,"'$&").replace(/"/g,'""')+'"';const csv=[result.columns,...result.rows].map(r=>r.map(cell).join(',')).join('\r\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));a.download='CoastYouth-'+result.document.kind+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);};
  const chart=(title,values)=>{const entries=Object.entries(values),max=Math.max(1,...entries.map(x=>Math.abs(x[1])));return `<article class="rrCard"><h2>${title}</h2>${entries.length?entries.map(([name,n])=>`<div class="rrBar"><div><span>${escape(name)}</span><strong>${dollar(n)}</strong></div><div class="rrTrack"><i style="width:${Math.abs(n)/max*100}%;background:${n<0?'#b54a45':'#0969ed'}"></i></div></div>`).join(''):'<p>No activity in this period.</p>'}</article>`;};
- form.onsubmit=async e=>{e.preventDefault();status.textContent='Loading…';result=null;output.replaceChildren();try{const end=new Date(form.elements.end.value+'T00:00:00');end.setDate(end.getDate()+1);const endLocal=date(end)+'T00:00:00';const q=new URLSearchParams({store_id:form.elements.store_id.value,kind:form.elements.kind.value,start:form.elements.start.value+'T00:00:00',end:endLocal});result=await api('retail-reports?'+q);if(result.rows){output.innerHTML=`<h2>${escape(result.title)}</h2><div class="rrTable"><table><thead><tr>${result.columns.map(c=>`<th>${escape(c)}</th>`).join('')}</tr></thead><tbody>${result.rows.map(r=>`<tr>${r.map(v=>`<td>${escape(v)}</td>`).join('')}</tr>`).join('')||`<tr><td colspan="${result.columns.length}">No records in this period.</td></tr>`}</tbody></table></div>`;}else{const delta=result.prior_net?((result.net-result.prior_net)/Math.abs(result.prior_net)*100).toFixed(1)+'%':'N/A';output.innerHTML=`<h2>${escape(result.store||'CoastYouth Retail')}</h2><div class="rrMetrics">${[['Gross sales',dollar(result.gross)],['Net sales',dollar(result.net)],['Transactions',result.transactions],['Average net sale',dollar(result.average)],['Prior-period change',delta],['Labor % of net sales','Not available']].map(([a,b])=>`<article class="rrCard"><span>${a}</span><strong>${b}</strong></article>`).join('')}</div><article class="rrCard"><h2>Donation performance</h2><div class="rrMetrics">${[['Donations',dollar(result.donations.total)],['Donating transactions',result.donations.donors],['Participation',result.donations.participation===null?'N/A':result.donations.participation+'%'],['Average donation',dollar(result.donations.average)],['Donations per 1,000 transactions',dollar(result.donations.per_thousand)]].map(([a,b])=>`<div><span>${a}</span><strong>${b}</strong></div>`).join('')}</div><p>Voluntary donations are separate from merchandise revenue.</p></article><div class="rrCharts">${chart('Net sales over time',result.buckets)}${chart('Net sales by item',result.items)}${chart('Net sales by Sub Department',result.categories)}${chart('Net sales by employee',result.employees)}</div><article class="rrCard"><h2>Who’s working · shared employee directory</h2>${result.working===null?'<p>Time card or payroll permission required.</p>':`<strong>${result.working.length} employees clocked in</strong><p>${result.working.map(escape).join(', ')}</p>`}</article>`;}const doc=result.document,heading=result.title||choices.find(x=>x[0]===doc.kind)?.[1]||'Report';const existingTitle=output.querySelector(':scope>h2');if(existingTitle)existingTitle.remove();output.insertAdjacentHTML('afterbegin',`<header class="rrDocumentHeader">${doc.logo?`<img src="${escape(doc.logo)}" alt="${escape(doc.store)} logo">`:`<span class="rrBrandMark" aria-hidden="true">${escape(doc.store.split(/\s+/).slice(0,2).map(w=>w[0]).join(''))}</span>`}<div><p>COASTYOUTH RETAIL · REPORTS</p><strong>${escape(doc.store)}</strong><h2>${escape(heading)}</h2></div></header><div class="rrDocumentMeta"><span><b>Period:</b> ${escape(doc.start)} through ${escape(doc.end)}</span><span><b>Scope:</b> ${escape(doc.scope)}</span><span><b>Generated:</b> ${escape(new Date(doc.generated).toLocaleString())}</span></div>${result.rows?'<h3 class="rrSectionBar">Report details · '+result.rows.length+' records</h3>':''}`);output.insertAdjacentHTML('beforeend',`<footer class="rrDocumentFooter">${escape(result.note||'Report dates use the server’s local time.')}<br>${escape(doc.store)} · ${escape(heading)}</footer>`);status.textContent=result.note||'Report ready. Dates use the server’s local time.';}catch(err){status.textContent=err.message;}};
+ form.onsubmit=async e=>{e.preventDefault();status.textContent='Loading…';result=null;output.replaceChildren();try{const end=new Date(form.elements.end.value+'T00:00:00');end.setDate(end.getDate()+1);const endLocal=date(end)+'T00:00:00';const q=new URLSearchParams({store_id:form.elements.store_id.value,kind:form.elements.kind.value,...(form.elements.employee?{employee:form.elements.employee.value}:{}),start:form.elements.start.value+'T00:00:00',end:endLocal});result=await api('retail-reports?'+q);if(result.rows){output.innerHTML=`<h2>${escape(result.title)}</h2><div class="rrTable"><table><thead><tr>${result.columns.map(c=>`<th>${escape(c)}</th>`).join('')}</tr></thead><tbody>${result.rows.map(r=>`<tr>${r.map(v=>`<td>${escape(v)}</td>`).join('')}</tr>`).join('')||`<tr><td colspan="${result.columns.length}">No records in this period.</td></tr>`}</tbody></table></div>`;}else{const delta=result.prior_net?((result.net-result.prior_net)/Math.abs(result.prior_net)*100).toFixed(1)+'%':'N/A';output.innerHTML=`<h2>${escape(result.store||'CoastYouth Retail')}</h2><div class="rrMetrics">${[['Gross sales',dollar(result.gross)],['Net sales',dollar(result.net)],['Transactions',result.transactions],['Average net sale',dollar(result.average)],['Prior-period change',delta],['Labor % of net sales','Not available']].map(([a,b])=>`<article class="rrCard"><span>${a}</span><strong>${b}</strong></article>`).join('')}</div><article class="rrCard"><h2>Donation performance</h2><div class="rrMetrics">${[['Donations',dollar(result.donations.total)],['Donating transactions',result.donations.donors],['Participation',result.donations.participation===null?'N/A':result.donations.participation+'%'],['Average donation',dollar(result.donations.average)],['Donations per 1,000 transactions',dollar(result.donations.per_thousand)]].map(([a,b])=>`<div><span>${a}</span><strong>${b}</strong></div>`).join('')}</div><p>Voluntary donations are separate from merchandise revenue.</p></article><div class="rrCharts">${chart('Net sales over time',result.buckets)}${chart('Net sales by item',result.items)}${chart('Net sales by Sub Department',result.categories)}${chart('Net sales by employee',result.employees)}</div><article class="rrCard"><h2>Who’s working · shared employee directory</h2>${result.working===null?'<p>Time card or payroll permission required.</p>':`<strong>${result.working.length} employees clocked in</strong><p>${result.working.map(escape).join(', ')}</p>`}</article>`;}const doc=result.document,heading=result.title||choices.find(x=>x[0]===doc.kind)?.[1]||'Report';const existingTitle=output.querySelector(':scope>h2');if(existingTitle)existingTitle.remove();output.insertAdjacentHTML('afterbegin',`<header class="rrDocumentHeader">${doc.logo?`<img src="${escape(doc.logo)}" alt="${escape(doc.store)} logo">`:`<span class="rrBrandMark" aria-hidden="true">${escape(doc.store.split(/\s+/).slice(0,2).map(w=>w[0]).join(''))}</span>`}<div><p>COASTYOUTH RETAIL · REPORTS</p><strong>${escape(doc.store)}</strong><h2>${escape(heading)}</h2></div></header><div class="rrDocumentMeta"><span><b>Period:</b> ${escape(doc.start)} through ${escape(doc.end)}</span><span><b>Scope:</b> ${escape(doc.scope)}</span><span><b>Generated:</b> ${escape(new Date(doc.generated).toLocaleString())}</span></div>${result.rows?'<h3 class="rrSectionBar">Report details · '+result.rows.length+' records</h3>':''}`);if(result.summary)output.querySelector('.rrDocumentMeta').insertAdjacentHTML('afterend',`<div class="rrMetrics">${result.summary.map(([name,value])=>`<article class="rrCard"><span>${escape(name)}</span><strong>${escape(value)}</strong></article>`).join('')}</div>`);output.insertAdjacentHTML('beforeend',`<footer class="rrDocumentFooter">${escape(result.note||'Report dates use the server’s local time.')}<br>${escape(doc.store)} · ${escape(heading)}</footer>`);status.textContent=result.note||'Report ready. Dates use the server’s local time.';}catch(err){status.textContent=err.message;}};
  if(['labor','schedule'].includes(mode)){form.elements.store_id.value='';form.elements.store_id.closest('label').hidden=true;}
  if(!['labor','schedule'].includes(mode)&&typeof retailStoreChoice!=='undefined')form.elements.store_id.value=retailStoreChoice;
  form.requestSubmit();
@@ -706,17 +707,17 @@ if(!officeMode){
  pin.onsubmit=async e=>{e.preventDefault();try{await api('pos-pin-login',{pin:pin.elements.pin.value});pin.reset();$('deskPinError').textContent='';await boot();}catch(e){pin.reset();$('deskPinError').textContent=e.message;}};
  const previousBoot=boot;boot=async function(){await previousBoot();if(!user){$('login').hidden=true;pin.reset();}};
 }
-officeCards.push({section:'sales',title:'Sales analysis',description:'Sales, cash, products, taxes and transaction reports.',icon:'▥',action:'report-center',permission:'view_pos_sales'},
+officeCards.push({section:'accounts',title:'Employee cash advances',description:'Cash paid to employees by store, date and issuing staff member.',icon:'▤',action:'cash-advance-report',permission:'view_cash_advances'},{section:'sales',title:'Sales analysis',description:'Sales, cash, products, taxes and transaction reports.',icon:'▥',action:'report-center',permission:'view_pos_sales'},
  {section:'security',title:'Login security / unlock',description:'Review locked users and configure login attempt limits.',icon:'♙',action:'login-security',permission:'unlock_users'},
  {section:'timekeeping',title:'Labor & time reports',description:'Worked hours, breaks and time entries.',icon:'◷',action:'labor-reports',permission:'edit_time_cards'},
  {section:'timekeeping',title:'Print employee schedule',description:'Print staff shifts for a selected date range.',icon:'▦',action:'schedule-report',permission:'manage_staff_schedule'});
 const originalOfficeAction=officeAction;
 officeAction=async function(action){
- if(!['report-center','labor-reports','schedule-report','login-security'].includes(action))return originalOfficeAction(action);
+ if(!['cash-advance-report','report-center','labor-reports','schedule-report','login-security'].includes(action))return originalOfficeAction(action);
  if(!navigationAllowed()||unfinished())return;
  $('officeTiles').hidden=true;$('officeWork').hidden=false;for(const id of ['officeForms','officeCatalog','officeUsers','retailEditor','flowOffice'])if($(id))$(id).hidden=true;
  let root=$('officeExpansion');if(!root){root=document.createElement('section');root.id='officeExpansion';$('officeWork').append(root);}root.hidden=false;$('officeWorkTitle').textContent='';
- if(action!=='login-security'){retailReportCenter(root,action==='labor-reports'?'labor':action==='schedule-report'?'schedule':'sales');return;}
+ if(action!=='login-security'){retailReportCenter(root,action==='cash-advance-report'?'cash-advances':action==='labor-reports'?'labor':action==='schedule-report'?'schedule':'sales');return;}
  try{const data=await api('admin/lockouts');root.innerHTML=`<h2>Login security / unlock</h2>${user.admin?'<form id="officeLoginLimit"><label>Failed attempts before account lock<input name="max_attempts" type="number" min="1" max="100" required></label><button>Save limit</button></form>':''}<div id="officeLockedUsers">${data.users.map(p=>`<p>${esc(p.name)} · ${p.failures} failed attempts <button data-office-unlock="${esc(p.name)}">Unlock</button></p>`).join('')||'<p>No locked accounts.</p>'}</div><p id="officeSecurityStatus" role="status"></p>`;
  if(user.admin){const settings=await api('admin/login-security');$('officeLoginLimit').elements.max_attempts.value=settings.max_attempts;$('officeLoginLimit').onsubmit=async e=>{e.preventDefault();try{await api('admin/login-security',{max_attempts:Number(e.target.elements.max_attempts.value)});changedForms.delete(e.target);$('officeSecurityStatus').textContent='Login limit saved.';}catch(e){$('officeSecurityStatus').textContent=e.message;}};}
  root.onclick=async e=>{const b=e.target.closest('[data-office-unlock]');if(b){try{await api('admin/unlock-user',{name:b.dataset.officeUnlock});officeAction('login-security');}catch(e){$('officeSecurityStatus').textContent=e.message;}}};
@@ -784,29 +785,29 @@ officeAction=async function(action){
  if(!['computer-register','computer-updates'].includes(action))return officeBeforeComputers(action);
  if(!navigationAllowed()||unfinished())return;
  const registration=action==='computer-register';
- const dialog=flowModal(registration?'Registered computers':'Computer updates',`<div class="computerIntro"><p>${registration?'Register each computer once. Its identity stays the same when its IP address changes.':'Send one update request to all selected computers. Each application warns staff and waits for transactions and unsaved work to finish.'}</p><p class="muted">MAC addresses are reference information. Computers are matched by a persistent Windows identity, not by IP or MAC alone.</p></div><div class="actions"><button id="computerRefresh">Refresh computers</button><button id="computerCheck">Check for updates</button></div><p id="computerStatus" role="status"></p><div id="computerVersions" class="computerVersions"></div>${registration?'':`<div class="computerSelectionTools"><button id="computerSelectAll" type="button">Select all registered</button><button id="computerSelectNone" type="button">Clear selection</button><strong id="computerSelectionCount" aria-live="polite">0 selected</strong></div><form id="computerRollout"><label>Employee warning (seconds)<input name="seconds" type="number" min="30" max="3600" value="120" required></label><button class="primary" type="submit">Notify staff & update selected computers</button><button type="button" id="computerCancel">Cancel pending rollout</button></form>`}<div id="computerRows"></div><p class="muted">Keep DESK, STORE OPS or OFFICE open and signed in to receive updates. Closed applications and offline computers remain pending until they reconnect. Computers need this desktop update installed once before they can appear here. Server upgrades remain in the server’s Updates tab, with its backup and active-user checks.</p>`);
- dialog.classList.add('computerDialog');let current=null,busy=false;const selected=new Set();
+ const dialog=flowModal(registration?'Registered computers':'Application updates',`${registration?'':officeWebUpdateMarkup()+'<h3 class="officeDesktopHeading">Desktop applications</h3>'}<div class="computerIntro"><p>${registration?'Register each computer once. Its identity stays the same when its IP address changes.':'Send one update request to all selected computers. Each application warns staff and waits for transactions and unsaved work to finish.'}</p><p class="muted">MAC addresses are reference information. Computers are matched by a persistent Windows identity, not by IP or MAC alone.</p></div><div class="actions"><button id="computerRefresh">Refresh computers</button><button id="computerCheck">Check for updates</button></div><p id="computerStatus" role="status"></p><div id="computerVersions" class="computerVersions"></div>${registration?'':`<div class="computerSelectionTools"><button id="computerSelectAll" type="button">Select all registered</button><button id="computerSelectNone" type="button">Clear selection</button><strong id="computerSelectionCount" aria-live="polite">0 selected</strong></div><form id="computerRollout"><label>Employee warning (seconds)<input name="seconds" type="number" min="30" max="3600" value="120" required></label><button class="primary" type="submit">Notify staff & update selected computers</button><button type="button" id="computerCancel">Cancel pending rollout</button></form>`}<div id="computerRows"></div><p class="muted">Keep DESK, STORE OPS or OFFICE open and signed in to receive updates. Closed applications and offline computers remain pending until they reconnect. Computers need this desktop update installed once before they can appear here. ${registration?'Open Application updates for the STORE OPS web app and shared server.':'Use the STORE OPS web app &amp; server section above for the shared website.'} Desktop selections only update the applications installed on those computers.</p>`);
+ dialog.classList.add('computerDialog');let current=null,busy=false;const selected=new Set();const webUpdates=registration?null:officeAttachWebUpdates(dialog);
  const selectionStatus=()=>{if(registration)return;$('computerSelectionCount').textContent=selected.size+' computer(s) selected';$('computerRollout').querySelector('[type=submit]').disabled=!selected.size;};
  const render=data=>{
-  current=data;for(const id of selected)if(!data.computers.some(pc=>pc.id===id&&pc.registered))selected.delete(id);const rel={ops:{},...data.releases};
-  $('computerVersions').innerHTML=['pos','office','ops'].map(app=>`<article><span>${app==='pos'?'DESK':app==='ops'?'STORE OPS':'OFFICE'}</span><strong>${esc(rel[app].checking?'Checking…':rel[app].error?'Check failed':rel[app].version||'Not checked')}</strong>${rel[app].error?`<small>${esc(rel[app].error)}</small>`:''}</article>`).join('');
-  $('computerRows').innerHTML=data.computers.map(pc=>`<article class="computerCard"><header><div><h3>${esc(pc.name||pc.hostname||'Unnamed computer')}</h3><p>${esc(pc.hostname)} · ${esc(pc.role)} · <strong>${pc.registered?'Registered':'Awaiting registration'}</strong></p></div>${!registration?`<label class="computerSelectLabel"><input type="checkbox" aria-label="Select ${esc(pc.name||pc.hostname)} for updates" data-select-computer="${pc.id}" ${pc.registered?'':'disabled'} ${selected.has(pc.id)?'checked':''}> ${pc.registered?'Include in update':'Register first'}</label>`:''}</header><p class="muted">Computer ID ${esc(pc.id.slice(0,12))}… · MAC ${esc(pc.macs.join(', ')||'Unavailable')}</p>${registration?`<form data-register-computer="${pc.id}" data-revision="${pc.revision}"><label>Display name<input name="name" maxlength="80" required value="${esc(pc.name||pc.hostname)}"></label><label>Computer role<select name="role">${[['pos','POS checkout'],['office','Office computer'],['server','Server computer'],['other','Other']].map(([v,t])=>`<option value="${v}" ${pc.role===v?'selected':''}>${t}</option>`).join('')}</select></label><button>${pc.registered?'Save registration':'Register computer'}</button></form>`:''}<div class="computerApps">${pc.apps.map(a=>`<div><strong>${a.app==='pos'?'DESK':a.app==='ops'?'STORE OPS':'OFFICE'} ${esc(a.version)}</strong><span class="computerBadge ${a.online?'online':''}">${a.online?'Connected':'Offline / closed'}</span><span>${a.complete?'Updated to target':a.target?`Target ${esc(a.target)} · ${esc(a.progress)}`:a.available?'Update available':rel[a.app].version?'Up to date':'Not checked'}</span><small>Last seen ${esc(new Date(a.seen*1000).toLocaleString())} · IP ${esc(a.ip)}</small></div>`).join('')}</div></article>`).join('')||'<div class="computerEmpty"><h3>No computers discovered yet</h3><p>Open the updated DESK, STORE OPS or OFFICE application and sign in on each computer. Then register it here.</p></div>';
+  if(!dialog.open||!dialog.isConnected||!data)return;current=data;for(const id of selected)if(!data.computers.some(pc=>pc.id===id&&pc.registered))selected.delete(id);const rel={ops:{},...data.releases};
+  $('computerVersions').innerHTML=['pos','office','ops'].map(app=>`<article><span>${app==='pos'?'DESK':app==='ops'?'STORE OPS desktop':'OFFICE'}</span><strong>${esc(rel[app].checking?'Checking…':rel[app].error?'Check failed':rel[app].version||'Not checked')}</strong>${rel[app].error?`<small>${esc(rel[app].error)}</small>`:''}</article>`).join('');
+  $('computerRows').innerHTML=data.computers.map(pc=>`<article class="computerCard"><header><div><h3>${esc(pc.name||pc.hostname||'Unnamed computer')}</h3><p>${esc(pc.hostname)} · ${esc(pc.role)} · <strong>${pc.registered?'Registered':'Awaiting registration'}</strong></p></div>${!registration?`<label class="computerSelectLabel"><input type="checkbox" aria-label="Select ${esc(pc.name||pc.hostname)} for updates" data-select-computer="${pc.id}" ${pc.registered?'':'disabled'} ${selected.has(pc.id)?'checked':''}> ${pc.registered?'Include in update':'Register first'}</label>`:''}</header><p class="muted">Computer ID ${esc(pc.id.slice(0,12))}… · MAC ${esc(pc.macs.join(', ')||'Unavailable')}</p>${registration?`<form data-register-computer="${pc.id}" data-revision="${pc.revision}"><label>Display name<input name="name" maxlength="80" required value="${esc(pc.name||pc.hostname)}"></label><label>Computer role<select name="role">${[['pos','POS checkout'],['office','Office computer'],['server','Server computer'],['other','Other']].map(([v,t])=>`<option value="${v}" ${pc.role===v?'selected':''}>${t}</option>`).join('')}</select></label><button>${pc.registered?'Save registration':'Register computer'}</button></form>`:''}<div class="computerApps">${pc.apps.map(a=>`<div><strong>${a.app==='pos'?'DESK':a.app==='ops'?'STORE OPS desktop':'OFFICE'} ${esc(a.version)}</strong><span class="computerBadge ${a.online?'online':''}">${a.online?'Connected':'Offline / closed'}</span><span>${a.complete?'Updated to target':a.target?`Target ${esc(a.target)} · ${esc(a.progress)}`:a.available?'Update available':rel[a.app].version?'Up to date':'Not checked'}</span><small>Last seen ${esc(new Date(a.seen*1000).toLocaleString())} · IP ${esc(a.ip)}</small></div>`).join('')}</div></article>`).join('')||'<div class="computerEmpty"><h3>No computers discovered yet</h3><p>Open the updated DESK, STORE OPS or OFFICE application and sign in on each computer. Then register it here.</p></div>';
   const pending=data.computers.flatMap(p=>p.apps).filter(a=>a.target&&!a.complete).length,complete=data.computers.flatMap(p=>p.apps).filter(a=>a.complete).length;
   selectionStatus();$('computerStatus').textContent=pending?`${pending} application update(s) pending · ${complete} verified complete`:complete?`Rollout complete: ${complete} application update(s) verified.`:`${data.computers.filter(p=>p.registered).length} registered computer(s).`;
  };
- const refresh=async()=>{if(busy||!dialog.open||[...changedForms].some(f=>dialog.contains(f)))return;busy=true;try{render(await api('computers/state'));}catch(e){$('computerStatus').textContent=e.message;}finally{busy=false;}};
- const act=async(path,body)=>{if(busy)return;busy=true;try{render(await api('computers/'+path,body));}catch(e){$('computerStatus').textContent=e.message;}finally{busy=false;}};
- $('computerRefresh').onclick=refresh;$('computerCheck').onclick=()=>act('check',{});
+ const refresh=async()=>{if(busy||!dialog.open||[...changedForms.keys()].some(f=>dialog.contains(f)))return;busy=true;try{render(await api('computers/state'));}catch(e){if(dialog.open&&dialog.isConnected)$('computerStatus').textContent=e.message;}finally{busy=false;}};
+ const act=async(path,body)=>{if(busy||!dialog.open)return;busy=true;try{render(await api('computers/'+path,body));}catch(e){if(dialog.open&&dialog.isConnected)$('computerStatus').textContent=e.message;}finally{busy=false;}};
+ $('computerRefresh').onclick=refresh;$('computerCheck').textContent=registration?'Check desktop updates':'Check all updates';$('computerCheck').onclick=()=>Promise.all([act('check',{}),webUpdates?.check()]);
  $('computerRows').onchange=e=>{if(e.target.dataset.selectComputer){if(e.target.checked)selected.add(e.target.dataset.selectComputer);else selected.delete(e.target.dataset.selectComputer);selectionStatus();}};
  $('computerRows').onsubmit=e=>{const form=e.target;if(!form.dataset.registerComputer)return;e.preventDefault();changedForms.delete(form);act('register',{id:form.dataset.registerComputer,revision:Number(form.dataset.revision),name:form.elements.name.value,role:form.elements.role.value});};
- if(!registration){$('computerSelectAll').onclick=()=>{current.computers.filter(pc=>pc.registered).forEach(pc=>selected.add(pc.id));render(current);};$('computerSelectNone').onclick=()=>{selected.clear();render(current);};$('computerRollout').onsubmit=e=>{e.preventDefault();changedForms.delete(e.target);act('start',{computers:[...selected],seconds:Number(e.target.elements.seconds.value)});};$('computerCancel').onclick=()=>{if(confirm('Cancel pending computer updates? Installers already running will finish.'))act('cancel',{});};}
+ if(!registration){$('computerSelectAll').onclick=()=>{current?.computers.filter(pc=>pc.registered).forEach(pc=>selected.add(pc.id));render(current);};$('computerSelectNone').onclick=()=>{selected.clear();render(current);};$('computerRollout').onsubmit=e=>{e.preventDefault();changedForms.delete(e.target);act('start',{computers:[...selected],seconds:Number(e.target.elements.seconds.value)});};$('computerCancel').onclick=()=>{if(confirm('Cancel pending computer updates? Installers already running will finish.'))act('cancel',{});};}
  if(computerPanelTimer)clearInterval(computerPanelTimer);computerPanelTimer=setInterval(refresh,5000);dialog.addEventListener('close',()=>{clearInterval(computerPanelTimer);computerPanelTimer=null;},{once:true});await refresh();
 };
 
 if(officeMode){
  const summary=document.createElement('section');summary.className='computerUpdateSummary';summary.hidden=true;summary.innerHTML='<div><strong>Application updates</strong><p>Checking registered computers…</p></div><button type="button">View updates</button>';$('officeTiles').before(summary);
  summary.querySelector('button').onclick=()=>officeAction('computer-updates');let running=false;
- const check=async()=>{summary.hidden=!user?.admin;if(!user?.admin||running)return;running=true;try{const state=await api('computers/state');const apps=state.computers.filter(p=>p.registered).flatMap(p=>p.apps);const count=apps.filter(a=>a.available).length,pending=apps.filter(a=>a.target&&!a.complete).length,done=apps.filter(a=>a.complete).length;summary.querySelector('p').textContent=pending?`${pending} application update(s) pending · ${done} verified complete`:count?`${count} application update(s) available`:!apps.length?'Register your computers to track installed versions.':Object.values(state.releases).some(r=>r.error)?'Unable to check for updates. Open updates for details.':Object.values(state.releases).some(r=>r.checking)?'Checking for updates…':'Registered applications are up to date.';summary.classList.toggle('hasUpdates',!!(count||pending));}catch(e){summary.querySelector('p').textContent=e.message;}finally{running=false;}};
+ const check=async()=>{summary.hidden=!user?.admin;if(!user?.admin||running)return;running=true;try{const state=await api('computers/state');const web=await api('connection-status');const apps=state.computers.filter(p=>p.registered).flatMap(p=>p.apps);const count=apps.filter(a=>a.available).length,pending=apps.filter(a=>a.target&&!a.complete).length,done=apps.filter(a=>a.complete).length;summary.querySelector('p').textContent=pending?`${pending} application update(s) pending · ${done} verified complete`:count?`${count} application update(s) available`:!apps.length?'Register your computers to track installed versions.':Object.values(state.releases).some(r=>r.error)?'Unable to check for updates. Open updates for details.':Object.values(state.releases).some(r=>r.checking)?'Checking for updates…':'Registered applications are up to date.';if(web.update_available)summary.querySelector('p').textContent='STORE OPS web app update available · '+summary.querySelector('p').textContent;summary.classList.toggle('hasUpdates',!!(count||pending||web.update_available));}catch(e){summary.querySelector('p').textContent=e.message;}finally{running=false;}};
  setInterval(check,30000);const bootBeforeComputerSummary=boot;boot=async function(){await bootBeforeComputerSummary();await check();};setTimeout(check,1000);
 }
 
@@ -912,7 +913,7 @@ function storesWeightDialog(product){
  f.onsubmit=async e=>{e.preventDefault();try{const result=await retailSave('add',{cart:posCurrent.id,revision:posCurrent.revision,product:product.id,quantity:1,weight:f.elements.weight.value});posCurrent=result.cart;changedForms.delete(f);thriftClose(d);await posLoad();}catch(e){thriftError(d,e);}};
 }
 async function storesDrawers(){
- const [data,config]=await Promise.all([api('pos/drawers'),api('pos/stores')]);const d=thriftModal('Cash-drawer reconciliation',`<p>${data.enabled?'Reconciliation is enabled.':'Disabled — enable it under Optional programs when ready.'}</p>${data.enabled?`<form id="drawerOpen" class="flowToolbar"><label>Register<select name="terminal">${config.terminals.filter(t=>t.enabled).map(t=>`<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}</select></label>${thriftField('Opening cash ($)','opening','','number','min="0" step="0.01" required')}<button>Open drawer</button></form>`:''}<div id="drawerRows">${data.drawers.map(r=>`<article><h3>${esc(r.terminal_name)} · ${esc(r.store)} · #${r.id}</h3><p>${esc(r.opened)} · ${r.closed?'Closed':'Open'}</p><p>Opening ${posMoney(r.opening)} · Cash sales ${posMoney(r.cash_sales)} · Cash refunds ${posMoney(r.cash_refunds)} · Cash movements ${signedMoney(r.movements)}</p><h3>Expected ${posMoney(r.expected)}${r.closed?' · Counted '+posMoney(r.counted)+' · Over / short '+signedMoney(r.variance):''}</h3>${r.closed?`<p>${esc(r.closed_by)} · ${esc(r.note)}</p>`:`<form data-move="${r.id}" class="flowToolbar"><select name="direction"><option value="out">Cash out / safe drop</option><option value="in">Cash in</option></select>${thriftField('Amount ($)','amount','','number','min="0.01" step="0.01" required')}${thriftField('Reason','reason','','text','required')}<button>Record movement</button></form><form data-close-drawer="${r.id}" class="flowToolbar">${thriftField('Counted cash ($)','counted','','number','min="0" step="0.01" required')}${thriftField('Count / discrepancy note','reason','','text','required')}<button>Close & reconcile</button></form>`}</article>`).join('')||'<p>No cash drawer sessions yet.</p>'}</div><button id="drawerPrint">Print / Save PDF</button>`);
+ const [data,config]=await Promise.all([api('pos/drawers'),api('pos/stores')]);const d=thriftModal('Cash-drawer reconciliation',`<p>${data.enabled?'Reconciliation is enabled.':'Disabled — enable it under Optional programs when ready.'}</p>${data.enabled?`<form id="drawerOpen" class="flowToolbar"><label>Register<select name="terminal">${config.terminals.filter(t=>t.enabled).map(t=>`<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}</select></label>${thriftField('Opening cash ($)','opening','','number','min="0" step="0.01" required')}<button>Open drawer</button></form>`:''}<div id="drawerRows">${data.drawers.map(r=>`<article><h3>${esc(r.terminal_name)} · ${esc(r.store)} · #${r.id}</h3><p>${esc(r.opened)} · ${r.closed?'Closed':'Open'}</p><p>Opening ${posMoney(r.opening)} · Cash sales ${posMoney(r.cash_sales)} · Cash refunds ${posMoney(r.cash_refunds)} · Cash movements ${signedMoney(r.movements)} (includes employee advances ${posMoney(r.advances||0)})</p><h3>Expected ${posMoney(r.expected)}${r.closed?' · Counted '+posMoney(r.counted)+' · Over / short '+signedMoney(r.variance):''}</h3>${r.closed?`<p>${esc(r.closed_by)} · ${esc(r.note)}</p>`:`<form data-move="${r.id}" class="flowToolbar"><select name="direction"><option value="out">Cash out / safe drop</option><option value="in">Cash in</option></select>${thriftField('Amount ($)','amount','','number','min="0.01" step="0.01" required')}${thriftField('Reason','reason','','text','required')}<button>Record movement</button></form><form data-close-drawer="${r.id}" class="flowToolbar">${thriftField('Counted cash ($)','counted','','number','min="0" step="0.01" required')}${thriftField('Count / discrepancy note','reason','','text','required')}<button>Close & reconcile</button></form>`}</article>`).join('')||'<p>No cash drawer sessions yet.</p>'}</div><button id="drawerPrint">Print / Save PDF</button>`);
  d.querySelector('#drawerPrint').onclick=()=>thriftPrint('Cash drawer reconciliation',d.querySelector('#drawerRows').innerHTML.replace(/<form[\s\S]*?<\/form>/g,''));
  if(d.querySelector('#drawerOpen'))d.querySelector('#drawerOpen').onsubmit=async e=>{e.preventDefault();const f=e.target.elements;await save(e.target,'drawer-open',{terminal:f.terminal.value,opening:posCents(f.opening.value)});};
  async function save(form,action,args){try{await retailSave(action,args);changedForms.delete(form);thriftClose(d);await storesDrawers();}catch(e){thriftError(d,e);}}
@@ -1156,6 +1157,269 @@ if(!document.body.dataset.retailTheme)document.body.dataset.retailTheme='glass-b
 
 officeCards.push({section:'sales',action:'surcharge-settings',title:'Surcharge rules',description:'Set general sale surcharge limits separately from discounts.',permission:'manage_pos',icon:'+'},{section:'sales',action:'card-future-settings',title:'Credit card settings (future)',description:'Card payments and card surcharges will be added in future updates.',permission:'manage_pos',icon:'▤'});
 const surchargeOfficeAction=officeAction;officeAction=async function(action){if(['surcharge-settings','card-future-settings'].includes(action)){await surchargeOfficeAction('cash-rules');if($('financeRules')){financeTab=action==='surcharge-settings'?'surcharges':'cards';$('financeRules').querySelector(`[data-finance-tab="${financeTab}"]`).click();}return;}return surchargeOfficeAction(action);};
+
+// BEGIN CASH ADVANCES
+// Employee cash payments use their own immutable ledger, separate from checkout.
+function cashAdvancePending(){try{return user?JSON.parse(sessionStorage.getItem('retail-save:'+user.name+':cash-advance')||'null'):null;}catch{return null;}}
+const cashAdvanceButton=document.createElement('button');cashAdvanceButton.id='cashAdvanceOpen';cashAdvanceButton.type='button';cashAdvanceButton.textContent='Cash Advance';cashAdvanceButton.hidden=true;$('creditOpen').after(cashAdvanceButton);
+function cashAdvanceVisibility(){cashAdvanceButton.hidden=officeMode||!can('use_pos')||(!can('issue_cash_advances')&&!cashAdvancePending());cashAdvanceButton.textContent=cashAdvancePending()?'Cash Advance · Check pending':'Cash Advance';}
+const beforeCashAdvanceRender=posRender;posRender=function(...args){beforeCashAdvanceRender(...args);cashAdvanceVisibility();};
+const beforeCashAdvanceBoot=boot;boot=async function(){await beforeCashAdvanceBoot();cashAdvanceVisibility();if(!user)$('cashAdvanceDialog')?.close();};
+const beforeCashAdvanceUnfinished=unfinished;unfinished=function(){return beforeCashAdvanceUnfinished()||!!cashAdvancePending();};
+cashAdvanceButton.onclick=async()=>{if(!navigationAllowed())return;if(writeCount||posBusy||posPending){posMessage('Finish or confirm the current payment before issuing an advance.');return;}try{await cashAdvanceOpen();}catch(e){posMessage(e.message);}};
+
+async function cashAdvanceOpen(){
+ if($('cashAdvanceDialog')?.open)return;
+ const d=thriftModal('Employee cash advance','<p role="status">Loading employee and drawer information…</p>');d.id='cashAdvanceDialog';
+ let busy=false,form=null;
+ const close=()=>{if(busy||writeCount)return;if(form&&changedForms.has(form)&&!cashAdvancePending()&&!confirm('Discard this unrecorded cash advance?'))return;thriftClose(d);cashAdvanceVisibility();};
+ d.querySelector('.flowClose').onclick=close;d.oncancel=e=>{e.preventDefault();close();};
+ const content=document.createElement('section');d.querySelector('p[role=status]').replaceWith(content);
+ const error=e=>{d.querySelector('.flowError').textContent=e.message;};
+ function receipt(advance,recovered=false){
+  if(form)changedForms.delete(form);
+  content.innerHTML=`<div class="advanceReceipt"><span class="eyebrow">EMPLOYEE CASH ADVANCE</span><h3>Advance #${advance.id} recorded</h3><strong class="advanceAmount">${posMoney(advance.amount)}</strong><dl><dt>Employee receiving cash</dt><dd>${esc(advance.employee_name)}</dd><dt>Issued by</dt><dd>${esc(advance.actor_name)}</dd><dt>Store / terminal</dt><dd>${esc(advance.store_name)} · ${esc(advance.terminal_name)}</dd><dt>Recorded</dt><dd>${esc(new Date(advance.at).toLocaleString())}</dd><dt>Drawer session</dt><dd>${advance.drawer?'#'+advance.drawer:'Reconciliation not enabled'}</dd><dt>Reason / reference</dt><dd>${esc(advance.reason)}</dd></dl><p>${recovered?'This advance was already recorded. Check whether the cash was handed over before paying; do not pay it twice.':'Give the recorded amount to this employee once. This payment is included in the cash drawer report.'}</p><p class="muted">Payroll recovery is handled separately.</p><div class="flowToolbar"><button id="advancePrint" type="button">Print record</button><button id="advanceDone" class="primary" type="button">Done</button></div></div>`;
+  content.querySelector('#advanceDone').onclick=close;
+  content.querySelector('#advancePrint').onclick=()=>{const copy=content.querySelector('.advanceReceipt').cloneNode(true);copy.querySelector('.flowToolbar').remove();thriftPrint('Employee cash advance #'+advance.id,copy.innerHTML);};
+  cashAdvanceVisibility();
+ }
+ try{
+  const pending=cashAdvancePending();
+  if(pending){
+   const result=await api('pos/cash-advance-status?request='+encodeURIComponent(pending.request));
+   if(result.advance){sessionStorage.removeItem('retail-save:'+user.name+':cash-advance');receipt(result.advance,true);return;}
+  }
+  const device=await retailDevice(),data=await api('pos/cash-advance-setup?device='+encodeURIComponent(device)),ctx=data.context;
+  const saved=pending?JSON.parse(pending.payload):null;
+  content.innerHTML=`<div class="advanceContext"><strong>${esc(ctx.store_name)}</strong><span>${esc(ctx.terminal_name)}${ctx.drawer_id?' · Drawer #'+ctx.drawer_id:''}</span></div><p>${ctx.drawers_enabled?(ctx.drawer_id?'Expected drawer cash: '+posMoney(ctx.expected):'Open this terminal’s cash drawer in OFFICE before issuing an advance.'):'Drawer reconciliation is off. This payment will still appear in cash and employee-advance reports.'}</p><form id="cashAdvanceForm"><label>Employee receiving cash<select name="employee" required><option value="">Select another employee</option>${data.employees.map(e=>`<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('')}</select></label><label>Amount ($)<input name="amount" type="number" inputmode="decimal" min="0.01" max="100000" step="0.01" required></label><label>Reason / reference<textarea name="reason" maxlength="300" rows="3" required></textarea></label><p>Confirm the employee and amount before handing over cash. This is a cash payment record; payroll recovery is handled separately.</p><button id="advanceSubmit" class="primary" type="submit">Record cash advance</button></form>`;
+  form=content.querySelector('form');const fields=form.elements;
+  if(saved){fields.employee.value=saved.employee;fields.amount.value=(saved.amount/100).toFixed(2);fields.reason.value=saved.reason;}
+  function frozen(){if(cashAdvancePending()){for(const field of [fields.employee,fields.amount,fields.reason])field.disabled=true;fields.namedItem('advanceSubmit').textContent='Retry / check this advance';}else {fields.namedItem('advanceSubmit').textContent='Record cash advance';fields.namedItem('advanceSubmit').disabled=ctx.drawers_enabled&&!ctx.drawer_id;}}
+  frozen();
+  form.onsubmit=async e=>{
+   e.preventDefault();if(busy)return;
+   try{
+    const retry=cashAdvancePending();const payload=retry?JSON.parse(retry.payload):{employee:fields.employee.value,amount:posCents(fields.amount.value),reason:fields.reason.value,terminal:ctx.terminal,store_id:ctx.store_id,drawer_id:ctx.drawer_id,confirmed:true};
+    if(!retry&&!confirm(`Record ${posMoney(payload.amount)} cash paid to ${fields.employee.selectedOptions[0]?.textContent} from ${ctx.store_name} / ${ctx.terminal_name}?`))return;
+    busy=true;d.querySelector('.flowError').textContent='';
+    const result=await retailSave('cash-advance',payload);receipt(result.advance,!!retry);
+   }catch(e){error(e);if(!cashAdvancePending())for(const field of [fields.employee,fields.amount,fields.reason])field.disabled=false;frozen();if(cashAdvancePending())d.querySelector('.flowError').textContent='Payment status is unconfirmed. Retry / check this same advance before handing over cash. '+e.message;}
+   finally{busy=false;cashAdvanceVisibility();}
+  };
+ }catch(e){content.textContent='Cash advances are unavailable. '+e.message;}
+}
+
+// END CASH ADVANCES
+// BEGIN OFFICE UPDATES
+// OFFICE manages desktop rollouts and the existing coordinated server/web updater.
+let officeWebRelease=null;
+function officeWebUpdateMarkup(){return `<section class="officeWebUpdate" aria-labelledby="officeWebHeading">
+ <div class="officeUpdateHeading"><div><span class="eyebrow">SHARED WEBSITE</span><h3 id="officeWebHeading">STORE OPS web app &amp; server</h3></div><span class="officeUpdateTag">One shared update</span></div>
+ <p>Updates operations.coastyfc.com and the shared server used by every application. The server briefly restarts; users will sign in again. The existing backup and recovery process protects saved data.</p>
+ <div class="computerVersions"><article><span>Installed version</span><strong id="officeWebCurrent">Loading…</strong></article><article><span>Latest release</span><strong id="officeWebLatest">Not checked</strong></article><article><span>Other active users</span><strong id="officeWebActive">Checking…</strong></article></div>
+ <p id="officeWebStatus" role="status">Loading server status…</p><p id="officeWebError" role="alert"></p>
+ <details><summary>Connections &amp; release notes</summary><div id="officeWebConnections"></div><pre id="officeWebNotes"></pre></details>
+ <div class="officeUpdateButtons"><button id="officeWebCheck" type="button">Check web app update</button><button id="officeWebNotify" class="primary" type="button" disabled>Notify users &amp; update when ready</button><button id="officeWebInstall" type="button" disabled>Install &amp; restart</button><button id="officeWebCancel" type="button" hidden>Cancel pending web update</button></div>
+ <p class="muted">Your current session and the background server are excluded. Install &amp; restart is available when no other users are active. Updates wait for active users to finish and acknowledge.</p>
+ </section>`;}
+
+function officeAttachWebUpdates(dialog){
+ const get=id=>dialog.querySelector('#'+id);
+ let installed=null,connections=null,pending=null,reading=false,acting=false,checking=false;
+ const alive=()=>dialog.isConnected&&dialog.open&&user?.admin;
+ function render(){
+  if(!alive())return;
+  const release=officeWebRelease,available=!!release?.available&&release.current===installed?.current;
+  get('officeWebCurrent').textContent=installed?.current||'Unavailable';
+  get('officeWebLatest').textContent=checking?'Checking…':release?.latest||'Not checked';
+  get('officeWebActive').textContent=connections?String(connections.other_connections):'Unavailable';
+  get('officeWebNotes').textContent=release?.notes||'Check for updates to view the latest release notes.';
+  get('officeWebConnections').replaceChildren();
+  for(const row of connections?.connections||[]){const p=document.createElement('p');p.textContent=row.name+(row.current?' · You (this session)':'')+' · '+row.kind+' · '+(row.status==='active'?'Active':'Inactive');get('officeWebConnections').append(p);}
+  if(connections&&!connections.connections.length)get('officeWebConnections').textContent='No other signed-in connections.';
+  const unavailable=!installed?.launcher,blocked=acting||checking||pending?.active||!available||unavailable||!connections;
+  get('officeWebCheck').disabled=acting||checking||!!pending?.active;
+  get('officeWebNotify').disabled=blocked;
+  get('officeWebInstall').disabled=blocked||connections.other_connections>0;
+  get('officeWebCancel').hidden=!pending?.active;
+  get('officeWebCancel').disabled=acting||pending?.phase!=='waiting';
+  get('officeWebStatus').textContent=pending?.active?`Web update ${pending.version}: ${pending.phase==='preparing'?'preparing update':pending.phase==='applying'?'installing and restarting':`waiting for ${pending.waiting} user(s)`}.`:unavailable?'Start the managed server to enable installation.':available?`Version ${release.latest} is available. ${connections?.other_connections?'Notify users so they can finish their work.':'Ready to update when your work is saved.'}`:release?.current===installed?.current?'The STORE OPS web app and server are up to date.':'Check for the latest STORE OPS web app and server release.';
+ }
+ async function refresh(){
+  if(!alive()||reading||acting)return;reading=true;
+  try{const values=await Promise.all([api('updates'),api('admin/update-connections'),api('update-flow')]);[installed,connections,pending]=values;}
+  catch(e){connections=null;if(alive())get('officeWebError').textContent='Could not verify server readiness: '+e.message;}
+  finally{reading=false;render();}
+ }
+ async function check(){
+  if(!alive()||checking||acting)return;checking=true;officeWebRelease=null;get('officeWebError').textContent='';render();
+  try{officeWebRelease=await api('update-check',{});}
+  catch(e){if(alive())get('officeWebError').textContent='Update check failed: '+e.message;}
+  finally{checking=false;await refresh();render();}
+ }
+ async function start(direct){
+  if(acting||checking||!alive())return;
+  if(unfinished()){get('officeWebError').textContent='Save or clear your unfinished entries before requesting a web app update.';return;}
+  await refresh();
+  if(!alive()||!connections||!installed?.launcher||!officeWebRelease?.available||officeWebRelease.current!==installed.current||pending?.active)return;
+  if(direct&&connections.other_connections){get('officeWebError').textContent='Other users are active. Choose Notify users & update when ready.';return;}
+  if(!confirm(direct?'Install the STORE OPS web app and server update? The server will restart and everyone will sign in again.':'Notify active users to finish their work, then update the STORE OPS web app and server? The server will restart after they are ready.'))return;
+  acting=true;get('officeWebError').textContent='';render();
+  try{
+   // Both entry points use the coordinator. A connection arriving after the check
+   // must still finish and acknowledge before the server can restart.
+   flow=await api('update-flow/start',{version:officeWebRelease.latest,ready:true});
+   if(flow.receipt)sessionStorage.setItem('yfc-pos-update-receipt',flow.receipt);
+   flowSeen=flow.id;flowMandatory=true;
+   dialog.close();dialog.remove();showFlow(true);
+  }catch(e){if(alive())get('officeWebError').textContent=e.message;}
+  finally{acting=false;render();}
+ }
+ get('officeWebCheck').onclick=check;
+ get('officeWebNotify').onclick=()=>start(false);get('officeWebInstall').onclick=()=>start(true);
+ get('officeWebCancel').onclick=async()=>{
+  if(acting||!pending?.active||!confirm('Cancel the pending STORE OPS web app and server update?'))return;
+  acting=true;render();try{await api('update-flow/cancel',{id:pending.id});get('officeWebError').textContent='';}catch(e){if(alive())get('officeWebError').textContent=e.message;}finally{acting=false;await refresh();}
+ };
+ const timer=setInterval(refresh,5000);dialog.addEventListener('close',()=>clearInterval(timer),{once:true});refresh();return {check};
+}
+
+if(officeMode){
+ const progress=document.createElement('p');progress.id='officeWebProgress';progress.setAttribute('role','status');$('updateText').after(progress);
+ const cancel=document.createElement('button');cancel.id='officeWebFlowCancel';cancel.type='button';cancel.textContent='Cancel pending web update';cancel.hidden=true;$('updateReady').after(cancel);
+ let cancelBusy=false;
+ const previousShowFlow=showFlow;
+ showFlow=function(mandatory=false){
+  previousShowFlow(mandatory);
+  const admin=!!user?.admin,active=!!flow?.active;
+  progress.hidden=!admin||!active;
+  if(admin&&active){
+   progress.textContent=flow.phase==='preparing'?'Preparing the STORE OPS web app and server update…':flow.phase==='applying'?'Installing the STORE OPS web app and server update. Reconnecting…':`Waiting for ${flow.waiting} active user(s) to finish and acknowledge.`;
+   if(flow.connections?.length)progress.textContent+=' '+flow.connections.map(p=>p.name+': '+p.status).join(' · ');
+   if(flow.requester){$('updateReady').hidden=true;$('updateText').textContent='Your update request is ready. Staff can finish their current work before the shared server restarts.';}
+  }
+  cancel.hidden=!admin||!active;cancel.disabled=cancelBusy||flow?.phase!=='waiting';
+ };
+ cancel.onclick=async()=>{
+  if(cancelBusy||!flow?.active||!confirm('Cancel the pending STORE OPS web app and server update?'))return;
+  cancelBusy=true;cancel.disabled=true;$('updateError').textContent='';
+  try{flow=await api('update-flow/cancel',{id:flow.id});showFlow(true);}catch(e){$('updateError').textContent=e.message;}finally{cancelBusy=false;showFlow(true);}
+ };
+}
+
+// END OFFICE UPDATES
+// BEGIN OFFICE SEARCH
+// Search navigation only: no customer records, form values, or settings are indexed.
+(()=>{
+ if(!officeMode)return;
+ const aliases={
+  'catalog':'items products open price priced weight pounds pickup slip barcode sku',
+  'product-tools':'items modifiers add ons options open price priced weight pounds pickup slip',
+  'sub-departments':'categories category groups subdepartment subdepartments',
+  'departments':'department hierarchy reporting',
+  'revenue-centers':'revenue centre centers centres accounting reporting',
+  'taxes':'tax taxable rates sales tax',
+  'printing-categories':'print category tickets',
+  'printing':'printer routes routing destinations preparation tickets',
+  'cash-rules':'pennies cash rounding change return window',
+  'discount-rules':'discount coupon markdown limits approvals returns',
+  'surcharge-settings':'surcharge fees limits',
+  'user-setup':'employee staff password reset pin passcode job work assignments profile',
+  'users':'employee staff add account',
+  'roles':'security access permissions roles',
+  'terminals':'register pc computer checkout device layout',
+  'computer-register':'register pc computer mac network device',
+  'computer-updates':'software install version notify staff update website web app ops server',
+  'receipt-design':'receipt logo address phone footer return policy branding',
+  'stores-profiles':'store binopoly thrift mart branding receipts price tax',
+  'stores-programs':'loyalty points rewards birthday gift certificates cash drawer',
+  'thrift-settings':'donation color tags markdown loyalty points rewards',
+  'reservation-messages':'gmail email confirmations reminders smtp',
+  'hr-onboarding':'human resources hire onboarding paperwork email help',
+  'timekeeping-manage':'time clock timecards punches payroll schedules availability requests work sites',
+  'login-security':'unlock lockouts login attempts',
+  'customer-display':'customer facing second screen monitor welcome',
+  'layouts':'pos buttons colors layout editor'
+ };
+ const host=document.createElement('div');host.id='officeSettingsSearch';host.hidden=true;host.setAttribute('role','search');
+ host.innerHTML='<div class="officeSearchField"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><input id="officeSearchInput" type="search" placeholder="Search settings…" aria-label="Search OFFICE settings" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-controls="officeSearchResults" aria-expanded="false" autocomplete="off" spellcheck="false" maxlength="120"><button type="button" id="officeSearchClear" aria-label="Clear settings search" hidden>×</button></div><div id="officeSearchPopup" hidden><p id="officeSearchSummary" role="status" aria-live="polite"></p><div id="officeSearchResults" role="listbox" aria-label="Matching OFFICE settings"></div><p class="officeSearchHint">↑ ↓ to choose · Enter to open · Esc to close</p></div>';
+ officeNav.after(host);
+ const input=$('officeSearchInput'),clear=$('officeSearchClear'),popup=$('officeSearchPopup'),results=$('officeSearchResults'),summary=$('officeSearchSummary');
+ let matches=[],active=-1,opening=false,sessionName=null,renderedMarkup='';
+ const normalize=value=>String(value).normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+ const entries=()=>[...officeAvailableCards(),{action:'office-appearance',title:'Appearance & themes',description:'Choose your color theme or the store default.',section:'system',keywords:'color colour liquid glass aero dark light gray grey'}];
+ function close(){popup.hidden=true;input.setAttribute('aria-expanded','false');input.removeAttribute('aria-activedescendant');}
+ function sync(){
+  host.hidden=!user||!$('auth').hidden||$('posRoot').hidden;
+  if(host.hidden||sessionName!==user?.name){input.value='';results.replaceChildren();renderedMarkup='';matches=[];clear.hidden=true;close();}
+  sessionName=user?.name;
+ }
+ function select(index){
+  active=index;
+  [...results.children].forEach((b,i)=>b.setAttribute('aria-selected',String(i===index)));
+  if(index<0)input.removeAttribute('aria-activedescendant');
+  else{input.setAttribute('aria-activedescendant','officeSearchResult'+index);results.children[index]?.scrollIntoView({block:'nearest'});}
+ }
+ function render(){
+  sync();if(host.hidden)return;
+  const query=normalize(input.value),words=query.split(' ').filter(Boolean);clear.hidden=!input.value;
+  matches=words.length?entries().map(entry=>{
+   const title=normalize(entry.title),section=officeSections.find(x=>x[0]===entry.section)?.[1]||'Settings';
+   const haystack=normalize([entry.title,entry.description,section,aliases[entry.action]||'',entry.keywords||''].join(' '));
+   return {...entry,sectionLabel:section,score:title===query?0:title.startsWith(query)?1:title.includes(query)?2:3,match:words.every(word=>haystack.includes(word))};
+  }).filter(entry=>entry.match).sort((a,b)=>a.score-b.score||a.title.localeCompare(b.title)):[];
+  const markup=matches.map((entry,i)=>'<button type="button" role="option" tabindex="-1" id="officeSearchResult'+i+'" data-office-action="'+esc(entry.action)+'" aria-selected="false"><span class="officeSearchPath">'+esc(entry.sectionLabel)+'</span><strong>'+esc(entry.title)+'</strong><small>'+esc(entry.description)+'</small></button>').join('');
+  // Preserve result nodes when a Save / Discard dialog returns focus here.
+  if(markup!==renderedMarkup){results.innerHTML=markup;renderedMarkup=markup;}
+  summary.textContent=!query?'Find a setting by name or keyword.':matches.length?matches.length+' matching '+(matches.length===1?'setting':'settings'):'No matching settings available for your role. Try another word.';
+  popup.hidden=false;input.setAttribute('aria-expanded','true');select(matches.length?0:-1);
+ }
+ input.addEventListener('input',render);input.addEventListener('focus',render);
+ input.addEventListener('keydown',e=>{
+  if(e.isComposing)return;
+  if(e.key==='Escape'){e.preventDefault();close();return;}
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+   e.preventDefault();if(popup.hidden)render();
+   if(matches.length)select((active+(e.key==='ArrowDown'?1:-1)+matches.length)%matches.length);
+  }else if(e.key==='Enter'){e.preventDefault();if(popup.hidden)render();else if(active>=0)results.children[active]?.click();}
+ });
+ clear.onclick=()=>{input.value='';input.focus();render();};
+ // Keep combobox focus while selecting with a mouse or touch pointer.
+ results.addEventListener('pointerdown',e=>{if(e.target.closest('[data-office-action]'))e.preventDefault();});
+ results.addEventListener('click',async e=>{
+  const button=e.target.closest('[data-office-action]');if(!button||opening)return;
+  const action=button.dataset.officeAction;
+  // Re-check access at activation; do not trust a previously rendered result.
+  if(!user||!entries().some(entry=>entry.action===action)){render();return;}
+  close();
+  if(!navigationAllowed())return;
+  if(unfinished()){posMessage('Save or discard the current form before opening another setting.');return;}
+  opening=true;
+  try{
+   if(action==='office-appearance')retailAppearanceButton.click();
+   else await officeAction(action);
+   input.value='';clear.hidden=true;
+   if(!document.querySelector('dialog[open]')){
+    const title=$('officeWork').hidden?$('officeHeading'):$('officeWorkTitle');
+    title.setAttribute('tabindex','-1');title.focus({preventScroll:true});
+   }
+  }catch(error){posMessage(error.message);}
+  finally{opening=false;}
+ });
+ document.addEventListener('pointerdown',e=>{if(!host.contains(e.target))close();});
+ host.addEventListener('focusout',()=>queueMicrotask(()=>{if(!host.contains(document.activeElement))close();}));
+ document.addEventListener('keydown',e=>{
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'&&!host.hidden&&!document.querySelector('dialog[open]')){e.preventDefault();input.focus();input.select();}
+ });
+ const oldRender=officeRender;officeRender=function(...args){const result=oldRender(...args);sync();return result;};
+ new MutationObserver(sync).observe($('auth'),{attributes:true,attributeFilter:['hidden']});
+ new MutationObserver(sync).observe($('posRoot'),{attributes:true,attributeFilter:['hidden']});
+ const bar=document.querySelector('.sidebar');
+ new ResizeObserver(()=>document.body.style.setProperty('--office-topbar-height',bar.offsetHeight+'px')).observe(bar);
+ sync();
+})();
+
+// END OFFICE SEARCH
 // BEGIN TERMINAL REGISTRATION
 // Shared native desktop registration; ordinary web browsers keep their current login flow.
 (()=>{

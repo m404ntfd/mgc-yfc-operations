@@ -23,7 +23,7 @@ class OfficeBridge:
   if not self._trusted():return {'error':'Open the configured OFFICE server.'}
   if not hasattr(self,'_updates'):
    self._store=KioskStore(Path(os.environ.get('APPDATA',str(Path.home())))/'CoastYouthRetailOffice'/'settings.json')
-   self._updates=PosUpdater(self,app='office',current='1.11.0')
+   self._updates=PosUpdater(self,app='office',current='1.12.0')
   from computer_identity import computer_info
   return {'computer':computer_info(),'device':self._store.data['device'],'version':self._updates.version,'updater':True}
  def office_update_status(self,ident=None):

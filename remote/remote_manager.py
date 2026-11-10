@@ -8,7 +8,7 @@ try:
 except ImportError:
     from client import Client
 NAME='MGC YFC Operations Remote Manager'
-VERSION='0.48.0'
+VERSION='0.53.0'
 CONFIG=Path(os.environ.get('APPDATA',Path.home()))/'ThriftMartDispatchRemoteManager'/'config.json'
 
 class App:
@@ -51,7 +51,7 @@ class App:
         for key,title,width in [('name','User / connection',260),('state','Status',130),('activity','Last interaction',170)]:self.connection_list.heading(key,text=title);self.connection_list.column(key,width=width)
         self.connection_list.pack(fill='x',pady=6)
         ttk.Button(connections,text='Refresh connections',command=self.refresh_connections).pack(anchor='w')
-        updates=ttk.LabelFrame(updates_container if updates_container is not None else frame,text='Operations server updates',padding=12);updates.pack(fill='x',pady=16)
+        updates=ttk.LabelFrame(updates_container if updates_container is not None else frame,text='STORE OPS web app & server updates',padding=12);updates.pack(fill='x',pady=16)
         row=ttk.Frame(updates);row.pack(fill='x');ttk.Button(row,text='Check for server updates',command=self.check).pack(side='left');self.install=ttk.Button(row,text='Install update & restart',command=self.install_update,state='disabled');self.install.pack(side='left',padx=8)
         flow_buttons=ttk.Frame(updates);flow_buttons.pack(fill='x',pady=8)
         self.notify=ttk.Button(flow_buttons,text='Notify users & update when ready',command=self.notify_update);self.notify.pack(side='left')
@@ -62,15 +62,7 @@ class App:
         self.notes=tk.Text(updates,height=5,wrap='word',font=('Segoe UI',10),state='disabled');self.notes.pack(fill='x',pady=8)
         ttk.Label(frame,text='Manage employees and login security in OFFICE. Closing this panel does not stop the server.',wraplength=690).pack(anchor='w')
         ttk.Button(updates_container if updates_container is not None else frame,text='Server / controller installer downloads',command=lambda:webbrowser.open('https://github.com/m404ntfd/mgc-yfc-operations/releases/latest')).pack(anchor='w',pady=(8,0))
-        self.client_update_notes={}
-        for kind,label in [('pos','DESK'),('office','OFFICE')]:
-            section=ttk.LabelFrame(updates_container if updates_container is not None else frame,text=label+' application updates',padding=12);section.pack(fill='x',pady=8)
-            line=ttk.Frame(section);line.pack(fill='x')
-            for text,action in [('Check for updates','check'),('Install and restart','install'),('Notify Users & Update when ready','notify')]:ttk.Button(line,text=text,command=lambda k=kind,a=action:self.client_update(k,a)).pack(side='left',padx=2)
-            line=ttk.Frame(section);line.pack(fill='x')
-            if self.local_control:ttk.Button(line,text='Force Update',command=lambda k=kind:self.client_update(k,'force')).pack(side='left')
-            ttk.Button(line,text='Cancel pending update',command=lambda k=kind:self.client_update(k,'cancel')).pack(side='left',padx=4)
-            value=tk.StringVar(value='Check for the latest release. Targets connected '+label+' applications.');self.client_update_notes[kind]=value;ttk.Label(section,textvariable=value,wraplength=700).pack(anchor='w',pady=6)
+        ttk.Label(updates_container if updates_container is not None else frame,text='Manage DESK, OFFICE and STORE OPS desktop updates in OFFICE → System → Application updates. OFFICE can also update the STORE OPS web app and shared server.',wraplength=700).pack(anchor='w',pady=16)
         root.after(100,self.deliver)
         root.after(2000,self.poll_connections)
         if local_control and session_path:
@@ -319,24 +311,6 @@ class App:
             if not flow.get('active'):raise ValueError('There is no pending update.')
             return client.request('update-flow/cancel',{'id':flow['id']})
         self.run(work,lambda r:self.status.set('Update request canceled.'))
-    def client_update(self,kind,action):
-        if not self.require():return
-        if action in ('install','notify','force'):
-            text='Force installation on connected applications? Saved sales remain on the server; in-progress writes must finish.' if action=='force' else 'Update connected applications after their work is saved?'
-            if not messagebox.askyesno(NAME,text,parent=self.root):return
-        route='start' if action in ('install','notify','force') else action
-        payload={'target':'all','mode':action} if route=='start' else {}
-        def done(data):
-            release=data.get('release',{});campaign=data.get('campaign')
-            self.client_update_notes[kind].set(release.get('error') or ('Checking…' if release.get('checking') else 'Latest: '+release.get('version','Not checked'))+(' · Update pending' if campaign else ''))
-            if release.get('checking'):self.root.after(2000,lambda:self.client_update_status(kind))
-        self.run(lambda:self.client.request(kind+'-update/'+route,payload),done)
-    def client_update_status(self,kind):
-        if not self.require():return
-        def done(data):
-            r=data.get('release',{});self.client_update_notes[kind].set(r.get('error') or ('Checking…' if r.get('checking') else 'Latest: '+r.get('version','Not checked'))+' · '+str(len(data.get('devices',[])))+' connected devices')
-            if r.get('checking'):self.root.after(2000,lambda:self.client_update_status(kind))
-        self.run(lambda:self.client.request(kind+'-update/state',activity=False),done,quiet=True)
     def restart(self):
         if not self.require():return
         if not messagebox.askyesno(NAME,'Restart the server? Ask employees to save their appointments first. Everyone will be signed out.'):return

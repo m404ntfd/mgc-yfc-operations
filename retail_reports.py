@@ -34,6 +34,11 @@ def retail_reports(c,u,q):
             gross,worked=work_hours(c,r['profile_id'],(start,end),int(time.time()))
             if gross:rows.append([r['name'],round(gross/3600,2),round((gross-worked)/3600,2),round(worked/3600,2)])
         return {'title':'Labor hours','columns':['Employee','Gross hours','Break hours','Worked hours'],'rows':rows,'note':'Actual recorded breaks are deducted. Open entries are calculated through now. Wage cost and labor percentage are unavailable until wage history is recorded.'}
+    if kind=='cash-advances':
+        thrift_require(u,'view_cash_advances')
+        store=q.get('store_id',[''])[0];name=stores_profile(c,store)['name'] if store else 'All stores'
+        entries=stores_advance_rows(c,start,end,store,q.get('employee',[''])[0].strip())
+        return dict(title='Employee cash advances · '+name,columns=['Advance','Date / time','Employee receiving cash','Issued by','Store','Terminal','Drawer','Amount','Reason / reference'],rows=[[r['id'],r['at'],r['employee_name'],r['actor_name'],r['store_name'],r['terminal_name'],r['drawer'] or 'Not tracked',f"{r['amount']/100:.2f}",r['reason']] for r in entries],summary=[['Advances',str(len(entries))],['Total cash paid out',f"${sum(r['amount'] for r in entries)/100:,.2f}"]],note='Cash paid to employees, recorded separately from sales and store credit. Names and store details reflect the payment date. Payroll recovery is handled separately.')
     if not has_permission(u,'view_pos_sales'):raise Problem('Sales report permission required.',403)
     report=retail_workflow_get(c,u,'sale-report',q);sales=report['sales'];refunds=report['refunds']
     def money(n):return f'{n/100:.2f}'
@@ -46,8 +51,8 @@ def retail_reports(c,u,q):
             d=stores_drawer(c,row[0])
             if q.get('store_id',[''])[0] and d['store']!=q['store_id'][0]:continue
             if not start<=retail_epoch(d['closed'] or d['opened'],'drawer date')<end:continue
-            rows.append([d['id'],d['store'],d['terminal_name'],d['opened'],d['closed'] or 'Open',money(d['opening']),money(d['expected']),money(d['counted']) if d['closed'] else '',money(d['variance']) if d['closed'] else '',d.get('note','')])
-        return table('Cash-drawer reconciliation',['Session','Store','Terminal','Opened','Closed','Opening','Expected','Counted','Over / short','Note'],rows,'Closed sessions use their closing date; open sessions use their opening date. Closed counts are immutable.')
+            rows.append([d['id'],d['store'],d['terminal_name'],d['opened'],d['closed'] or 'Open',money(d['opening']),money(d.get('advances',0)),money(d['expected']),money(d['counted']) if d['closed'] else '',money(d['variance']) if d['closed'] else '',d.get('note','')])
+        return table('Cash-drawer reconciliation',['Session','Store','Terminal','Opened','Closed','Opening','Employee advances','Expected','Counted','Over / short','Note'],rows,'Closed sessions use their closing date; open sessions use their opening date. Employee advances reduce expected cash through recorded cash movements. Closed counts are immutable.')
     if kind in ('donations','donations-employee'):
         groups={}
         if kind=='donations':groups={'All selected sales':sales}
@@ -134,7 +139,11 @@ def retail_reports(c,u,q):
                     if l.get('donation') or l.get('gift_certificate'):continue
                     key=(s['cashier'],stamp(s['at']).strftime('%Y-%m-%d' if end-start>172800 else '%Y-%m-%d %H:00')) if kind=='employee-time' else (l['name'],stamp(s['at']).strftime('%H:00')) if kind=='products-hour' else (stamp(s['at']).strftime('%Y-%m-%d'),stamp(s['at']).strftime('%H:00')) if kind=='seven-day' else (l['name'],l.get('reporting',{}).get('sub_department',l['category']))
                     v=groups.setdefault(key,[0,0]);v[0]+=sign*l['quantity'];v[1]+=sign*l['subtotal']
-    if kind in ('cash','drawer','shift'):return table({'cash':'Cash summary','drawer':'Drawer summary','shift':'Shift summary'}[kind],['Terminal','Employee','Net cash','Net store credit'],[[*k,money(v[0]),money(v[1])] for k,v in sorted(groups.items())],'Calculated from recorded payments and refunds. Physical counts and over / short appear in the separate Cash-drawer reconciliation report when enabled.')
+    if kind in ('cash','drawer','shift'):
+        advances={}
+        for r in stores_advance_rows(c,start,end,q.get('store_id',[''])[0]):
+            key=(r['terminal_name'],r['actor_name']);groups.setdefault(key,[0,0]);advances[key]=advances.get(key,0)+r['amount']
+        return table({'cash':'Cash summary','drawer':'Drawer summary','shift':'Shift summary'}[kind],['Terminal','Issuing / sales employee','Net cash from sales','Employee advances','Net cash after advances','Net store credit'],[[*k,money(v[0]),money(advances.get(k,0)),money(v[0]-advances.get(k,0)),money(v[1])] for k,v in sorted(groups.items())],'Cash from payments and refunds less employee cash advances issued in this period. Advances are cash paid out, not reduced sales revenue. Opening floats, other cash movements, physical counts and over / short appear in Cash-drawer reconciliation when enabled.')
     if kind not in ('employee-time','products-hour','seven-day','products'):raise Problem('Report not available.',404)
     columns={'employee-time':['Employee','Hour'],'products-hour':['Product','Hour'],'seven-day':['Day','Hour'],'products':['Product','Sub Department']}[kind]
     return table({'employee-time':'Employee sales by time','products-hour':'Products sold by hour','seven-day':'Revenue by day and hour','products':'Products sold'}[kind],columns+['Net quantity','Net sales'],[[*k,v[0],money(v[1])] for k,v in sorted(groups.items())],'Refunds use their posting date; totals exclude tax. Product names reflect saved receipts.')

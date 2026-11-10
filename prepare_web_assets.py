@@ -21,6 +21,9 @@ def prepare(root=None):
   if filename=='pos.js':content=re.sub(r'// BEGIN THRIFT UI.*?// END THRIFT UI',lambda _: '// BEGIN THRIFT UI\n'+(root/'static/thrift-retail.js').read_text(encoding='utf-8')+'\n// END THRIFT UI',content,flags=re.S)
   if filename=='pos.js':content=re.sub(r'// BEGIN OFFICE EXPANSION.*?// END OFFICE EXPANSION',lambda _: '// BEGIN OFFICE EXPANSION\n'+(root/'static/office-expansion.js').read_text(encoding='utf-8')+'\n// END OFFICE EXPANSION',content,flags=re.S)
   if filename=='pos.js':content=re.sub(r'// BEGIN CATALOG EDITOR.*?// END CATALOG EDITOR',lambda _: '// BEGIN CATALOG EDITOR\n'+(root/'static/catalog-editor.js').read_text(encoding='utf-8')+'\n// END CATALOG EDITOR',content,flags=re.S)
+  if filename=='pos.js':content=re.sub(r'\n*// BEGIN CASH ADVANCES.*?// END CASH ADVANCES\n*','\n',content,flags=re.S).rstrip()+'\n// BEGIN CASH ADVANCES\n'+(root/'static/cash-advances.js').read_text(encoding='utf-8')+'\n// END CASH ADVANCES\n'
+  if filename=='pos.js':content=re.sub(r'\n*// BEGIN OFFICE UPDATES.*?// END OFFICE UPDATES\n*','\n',content,flags=re.S).rstrip()+'\n// BEGIN OFFICE UPDATES\n'+(root/'static/office-updates.js').read_text(encoding='utf-8')+'\n// END OFFICE UPDATES\n'
+  if filename=='pos.js':content=re.sub(r'\n*// BEGIN OFFICE SEARCH.*?// END OFFICE SEARCH\n*','\n',content,flags=re.S).rstrip()+'\n// BEGIN OFFICE SEARCH\n'+(root/'static/office-search.js').read_text(encoding='utf-8')+'\n// END OFFICE SEARCH\n'
   content=re.sub(r'// BEGIN TERMINAL REGISTRATION.*?// END TERMINAL REGISTRATION','',content,flags=re.S).rstrip()+'\n// BEGIN TERMINAL REGISTRATION\n'+(root/'static/terminal-registration.js').read_text(encoding='utf-8')+'\n// END TERMINAL REGISTRATION\n'
   file.write_text(content,encoding='utf-8')
  for name in ('pos.css','style.css'):

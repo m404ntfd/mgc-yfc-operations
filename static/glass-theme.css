@@ -98,3 +98,46 @@ dialog.catalogSetup{width:min(940px,calc(100vw - 48px));max-width:calc(100vw - 4
 }
 
 @media screen {body[data-retail-theme] .thriftDialog .flowDialogHeading{background:var(--rt-surface,var(--panel,#fff));color:var(--rt-text,var(--text,#19334a))}}
+
+/* OFFICE settings search shares the top tab bar and remains readable in every palette. */
+@media screen {
+.retailOffice .sidebar{height:auto;min-height:82px;flex-wrap:wrap;position:relative;z-index:5}
+.retailOffice .workspace{height:calc(100vh - var(--office-topbar-height,82px))}
+.retailOffice #officeNav{min-width:0}
+.retailOffice #officeNav button{min-width:64px;padding:8px 10px}
+#officeSettingsSearch{position:relative;flex:0 1 240px;min-width:200px;margin-left:auto;color:var(--rt-text,#19334a)}
+.officeSearchField{position:relative;display:flex;align-items:center}
+.officeSearchField>svg{position:absolute;left:12px;width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:2;pointer-events:none;z-index:1}
+#officeSearchInput{width:100%;min-width:0;margin:0;padding:12px 34px 12px 38px;font-size:14px;background:var(--rt-surface,#fff);color:var(--rt-text,#19334a);border:1px solid var(--rt-border,#7897af);border-radius:10px}
+#officeSearchInput::-webkit-search-cancel-button{display:none}
+:root #officeSettingsSearch #officeSearchClear{position:absolute;right:4px;padding:4px;width:28px;height:30px;font-size:22px;line-height:1;background:var(--rt-surface,#fff)!important;color:var(--rt-text,#19334a)!important;border:0}
+#officeSearchPopup{position:absolute;top:calc(100% + 10px);right:0;width:460px;max-width:calc(100vw - 32px);background:var(--rt-surface,#fff);color:var(--rt-text,#19334a);border:1px solid var(--rt-border,#7897af);border-radius:12px;box-shadow:0 12px 36px #10283a40;overflow:hidden}
+#officeSearchSummary,#officeSearchPopup .officeSearchHint{padding:12px 16px;margin:0;font-size:13px;color:var(--rt-muted,#405b70)}
+#officeSearchResults{max-height:min(440px,55vh);overflow-y:auto;overscroll-behavior:contain}
+:root #officeSettingsSearch #officeSearchResults button{display:block;width:100%;padding:12px 16px;text-align:left;white-space:normal;border:0;border-top:1px solid var(--rt-border,#7897af);border-radius:0;background:var(--rt-surface,#fff)!important;color:var(--rt-text,#19334a)!important}
+#officeSearchResults strong,#officeSearchResults small,#officeSearchResults .officeSearchPath{display:block;color:inherit!important}
+#officeSearchResults strong{font-size:15px;margin:4px 0}
+#officeSearchResults small,#officeSearchResults .officeSearchPath{font-size:12px;line-height:1.45;font-weight:400}
+:root #officeSettingsSearch #officeSearchResults button:is([aria-selected=true],:hover){background:#dceaf7!important;color:#16354f!important;box-shadow:inset 4px 0 #245d89}
+#officeSearchResults button:focus-visible,#officeSearchInput:focus-visible{outline:3px solid #4a8ab5;outline-offset:-3px}
+@media(max-width:1200px){
+ .retailOffice .sidebar{gap:8px}
+ .retailOffice .sidebar .brand{min-width:170px;margin-right:8px}
+ .retailOffice #officeNav button{min-width:56px;padding:7px 6px;font-size:12px}
+ #officeSettingsSearch{flex-basis:100%;max-width:none}
+ #officeSearchPopup{width:520px}
+}
+@media(max-width:760px){.retailOffice #officeNav{overflow-x:auto;flex-basis:100%}.retailOffice .workspace{height:auto}}
+}
+@media print{#officeSettingsSearch{display:none!important}}
+
+/* OFFICE's shared web/server update is separate from desktop computer rollouts. */
+.officeWebUpdate{border:1px solid var(--rt-border,#7897af);border-left:5px solid #24875c;border-radius:12px;padding:20px;margin:8px 0 28px;color:var(--rt-text,#19334a);background:var(--rt-surface,#f5f8fc)}
+.officeUpdateHeading{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}.officeUpdateHeading h3{margin:6px 0}.officeUpdateTag{font-size:12px;border:1px solid currentColor;border-radius:20px;padding:7px 12px}
+.officeWebUpdate p{line-height:1.5}.officeWebUpdate details{margin:14px 0}.officeWebUpdate summary{cursor:pointer}.officeWebUpdate pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;font-size:13px;max-height:180px;overflow:auto}
+.officeUpdateButtons{display:flex;gap:8px;flex-wrap:wrap}.officeUpdateButtons button{min-height:42px}.officeDesktopHeading{border-top:1px solid var(--rt-border,#7897af);padding-top:22px}
+#officeWebError:empty{display:none}#officeWebError{font-weight:600}#officeWebProgress{white-space:pre-wrap;line-height:1.6}
+
+#cashAdvanceDialog{max-width:620px;width:calc(100% - 36px)}#cashAdvanceForm{display:grid;gap:14px}#cashAdvanceForm label{display:grid;gap:7px}#cashAdvanceForm :is(input,select,textarea){width:100%;box-sizing:border-box}.advanceContext{display:flex;flex-wrap:wrap;gap:8px 20px;padding:14px 0;border-bottom:1px solid var(--rt-border,#7897af)}.advanceReceipt .advanceAmount{display:block;font-size:32px;margin:18px 0}.advanceReceipt dl{display:grid;grid-template-columns:minmax(130px,1fr) 2fr;gap:12px}.advanceReceipt dd{margin:0;overflow-wrap:anywhere}.advanceReceipt dt{font-weight:600}
+
+:root .registerRail #cashAdvanceOpen{background:#24605e!important;color:#fff!important}#cashAdvanceForm textarea{font:inherit;padding:10px 12px;border:1px solid var(--rt-border,#7897af);border-radius:8px;background:var(--rt-surface,#fff);color:var(--rt-text,#19334a);resize:vertical}

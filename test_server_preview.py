@@ -20,7 +20,17 @@ with tempfile.TemporaryDirectory() as tmp,patch.object(server_desktop,'DATA',Pat
  def snap(name):
   for _ in range(8):root.update();time.sleep(.05)
   ImageGrab.grab(bbox=(root.winfo_rootx(),root.winfo_rooty(),root.winfo_rootx()+root.winfo_width(),root.winfo_rooty()+root.winfo_height())).save(out/name)
- app.manage();root.geometry('1000x900+20+20');app.tabs.select(app.updates_tab);snap('Next-Server-Updates.png')
+ app.manage();root.geometry('1000x900+20+20');app.tabs.select(app.updates_tab)
+ def labels(widget):
+  text=[]
+  if 'text' in widget.keys():text.append(str(widget.cget('text')))
+  for child in widget.winfo_children():text.extend(labels(child))
+  return text
+ texts=labels(app.updates_tab)
+ assert 'DESK application updates' not in texts and 'OFFICE application updates' not in texts
+ assert 'Check for server updates' in texts and 'Install update & restart' in texts
+ assert any('Manage DESK, OFFICE and STORE OPS desktop updates in OFFICE' in t for t in texts)
+ snap('Next-Server-Updates.png')
  app.tabs.select(app.settings_tab);snap('Next-Server-Settings.png')
  app.tabs.select(app.admin_tab)
  # Exercise the backup progress UI with a simulated verified response only.
