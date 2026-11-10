@@ -1,17 +1,17 @@
-# CoastYouth Retail STORE OPS 0.50.0 / DESK 1.12.0 / OFFICE 1.9.0
+# CoastYouth Retail STORE OPS Desktop 1.0.0 / Server 0.50.1
 
-- STORE OPS sign-in uses the green cart-and-wave icon and CoastYouth Retail STORE OPS wordmark on desktop and mobile.
-- OFFICE catalog setup includes configured category and printing-category lists, multiple taxes, open-price behavior, and a save/discard prompt when leaving an unfinished item. Discounts and surcharges have separate configuration areas; card processing remains a future update.
-- Glass appearance themes include color choices and improved dashboard contrast. OFFICE sign-in identifies CoastYouth Office.
-- Invitation-only employee onboarding is available through STORE OPS, with administrator-only HR permissions by default, configurable HR email, help messages, progress tracking, completion notifications and printable employee packets in OFFICE.
-- Browser completion uses original W-4 (2026), Mississippi withholding (Rev. 10/24), I-9 (01/20/25), and uploaded background-check pages. HR reviews and enables form versions. Existing signed versions are retained. Initial I-9 Sections 1 and 2 are supported; preparer/translator supplements require a separate signer workflow and are not enabled for browser signing in this release.
-- Employee details require an area code and SAVE & CONTINUE advances the workflow. Phone numbers use (XXX) XXX-XXXX; SSNs mask their first five digits after leaving a field; date fields have calendar controls and MM/DD/YYYY formatting. Signed documents retain the complete required information. One final whole-document acknowledgment replaces per-page checkboxes.
-- Encrypted form drafts, password-authenticated signatures, separate employer completion, immutable signature evidence, final completed-document downloads and HR review preserve the submitted record. Onboarding does not itself run a background check or replace required I-9 document examination.
+- Adds the installable STORE OPS Windows application with the green cart icon, shared server connection setup, existing sign-in and permissions, and the complete STORE OPS web interface.
+- Keeps operations.coastyfc.com available for mobile and remote browser use. Desktop and web use the same server records; the desktop client does not create a second business database.
+- Adds STORE OPS to Computer Setup as an optional component, selected for office computers and available through Custom selection on POS computers.
+- Protects unfinished work when closing the desktop window. Supports document downloads and desktop pickup-slip printing.
+- Improves glass-theme header and report-title contrast.
 
-## Installation and data preservation
+## Installation
 
-Use the full Server or Computer Setup installer for this release: browser forms require the included PDF runtime components. Install over the existing application using its existing data folder, then update DESK and OFFICE. The legacy in-app update contains application code but cannot add those runtime components to older installations.
+Install CoastYouth-Retail-STORE-OPS-Setup-v1.0.0.exe on the office or POS computer. Keep the default https://operations.coastyfc.com connection, or enter the existing store server address. Sign in with the existing account. The application requires access to that server and Microsoft Edge WebView2 Runtime.
 
-Existing timecards, open punches and breaks, reservations, attachments, sales, users, settings and account histories are retained through additive migrations. HR encryption keys are included in verified backups and must be retained with the database. No production records or credentials are included in release assets.
+Server 0.50.1 includes the matching desktop controls and printing adjustments. Update the existing server installation in place after creating a verified backup. Do not create a replacement server or change its data folder. DESK remains 1.12.0 and OFFICE remains 1.9.0.
 
-Create and verify a current backup before installation. Publishing provides downloads; it does not install updates on store computers or send employee invitations. Review HR form templates and employer settings before sending real invitations.
+## Data preservation
+
+No database schema changes or business-record rewrites are introduced by this release. Existing timecards, open punches and breaks, reservations, attachments, sales, users, account histories, HR records, encryption keys and settings remain on the existing server. Release checks include populated upgrade, backup and rollback verification. Publishing installers does not install them on store computers or interrupt the running website.

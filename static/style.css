@@ -554,6 +554,10 @@ body[data-section=signin]>header{border-top-color:#16834b}
 @media(max-width:740px){#loginBrand{gap:12px}#loginBrand img{width:50px;height:50px}#loginBrand .loginOpsWordmark span{font-size:17px}#loginBrand .loginOpsWordmark strong{font-size:20px}}
 
 
+
+
+
+
 /* BEGIN GLASS THEME */
 /* Readable report cards in every theme; printed pages remain white. */
 @media screen {
@@ -574,6 +578,12 @@ body[data-retail-theme^="glass-"] :is(input,button,select):focus-visible{outline
 @media(prefers-reduced-transparency:reduce){body[data-retail-theme^="glass-"] :is(.panel,dialog,header,.hrCard){background:#f4f8fc!important;backdrop-filter:none}}
 
 @media screen{body[data-retail-theme^="glass-"] :is(.sidebar,.brand,.brand strong,.navLabel,#officeNav button,#officeNav button span,.officeTile small,.officeTile strong){color:#19334a!important}body[data-retail-theme^="glass-"] #officeNav button[aria-current="page"]{background:#ffffffd9!important;color:#174e6c!important}}
+
+@media screen {
+body[data-retail-theme^="glass-"] > header :is(h1,h2,strong,span,small,p,a,summary,button,#connection,#sectionTitle),
+body[data-retail-theme^="glass-"] .rrDocumentHeader :is(p,strong,h2){color:#19334a!important}
+body[data-retail-theme^="glass-"] > header .opsProduct{color:#11633a!important}
+}
 
 /* END GLASS THEME */
 /* BEGIN REPORT DOCUMENT */

@@ -12,3 +12,5 @@ test-artifacts/
 output/
 
 /tmp/
+
+.desktop-deps/

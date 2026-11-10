@@ -3153,7 +3153,7 @@ window.addEventListener('hashchange',()=>{if(user&&(location.hash.startsWith('#p
 // Keep Operations inside the protected POS window when launched by its native shell.
 window.posKioskCanLeave=()=>!hasUnfinishedWork()&&guardUpdateNavigation();
 function installPosNativeToolbar(){
- if(!window.pywebview?.api||document.querySelector('.posNativeToolbar'))return;
+ if(typeof window.pywebview?.api?.request_exit!=='function'||document.querySelector('.posNativeToolbar'))return;
  const bar=document.createElement('div');bar.className='posNativeToolbar';bar.innerHTML='<strong>POS · Operations</strong><button id="returnNativePos">Return to POS</button><button id="exitNativePos">Exit POS</button><span id="nativePosError" role="status"></span>';document.body.append(bar);document.body.classList.add('insideNativePos');
  const dialog=document.createElement('dialog');dialog.innerHTML='<h2>Exit Point of Sale</h2><p>Save your Operations work before exiting.</p><form><label>Admin exit passcode<input type="password" inputmode="numeric" maxlength="12" required></label><p role="alert"></p><button>Exit POS</button><button type="button">Keep working</button></form>';document.body.append(dialog);
  const form=dialog.querySelector('form');form.addEventListener('input',()=>changedForms.delete(form));
@@ -3305,6 +3305,12 @@ function fulfillmentReceiptMarkup(s){
  return `<section>${r.logo?`<img alt="Store logo" style="max-width:160px" src="${e(r.logo)}">`:''}<h1>${e(s.settings.store)}</h1><p>${e(r.address)}<br>${e(r.phone)}</p><h2>Receipt #${s.id}</h2><p>${e(s.at)} · ${e(s.cashier)}</p><table><thead><tr><th>Item</th><th>Qty</th><th>Amount</th></tr></thead><tbody>${s.lines.map(l=>`<tr><td>${fulfillmentLine(l)}</td><td>${l.quantity}</td><td>${m(l.subtotal)}</td></tr>`).join('')}</tbody></table><p>Subtotal: ${m(s.subtotal)}<br>Tax: ${m(s.tax)}<br><strong>Total: ${m(s.total)}</strong><br>${s.store_credit?`Store credit: ${m(s.store_credit)} · ${e(s.credit_account)}<br>`:''}Cash received: ${m(s.tender)}<br>Change: ${m(s.change)}${s.cash_rounding?'<br>Cash rounding: '+m(s.cash_rounding):''}</p><p>${e(r.policy)}</p><p>${e(r.footer)}</p></section>`;
 }
 function fulfillmentPrint(title,html){
+ if(window.pywebview){
+  const frame=document.createElement('iframe');frame.title=title;frame.style.cssText='position:fixed;width:1px;height:1px;left:-10000px;border:0';
+  frame.onload=async()=>{try{await Promise.all([...frame.contentDocument.images].map(img=>img.decode().catch(()=>{})));frame.contentWindow.focus();frame.contentWindow.print();}catch(e){alert('Unable to print. Please try again.');}finally{setTimeout(()=>frame.remove(),60000);}};
+  frame.srcdoc='<!doctype html><html><head><title>'+fulfillmentEscape(title)+'</title><style>body{font:16px Arial;padding:24px;color:#111;background:white}table{border-collapse:collapse;width:100%}td,th{padding:8px;border-bottom:1px solid #ccc;text-align:left}.fulfillmentTicket+ .fulfillmentTicket{break-before:page}p{white-space:pre-line}</style></head><body>'+html+'</body></html>';
+  document.body.append(frame);return true;
+ }
  const w=window.open('','_blank');if(!w)return false;
  w.document.write('<!doctype html><html><head><title>'+fulfillmentEscape(title)+'</title><style>body{font:16px Arial;padding:24px;color:#111;background:white}table{border-collapse:collapse;width:100%}td,th{padding:8px;border-bottom:1px solid #ccc;text-align:left}.fulfillmentTicket+ .fulfillmentTicket{break-before:page}p{white-space:pre-line}</style></head><body>'+html+'</body></html>');w.document.close();w.focus();w.print();return true;
 }

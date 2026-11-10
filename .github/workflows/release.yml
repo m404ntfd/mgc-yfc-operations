@@ -94,6 +94,7 @@ jobs:
       - run: python -m pip install -r requirements-push.txt pyinstaller==6.22.3 pystray==0.19.5 Pillow pywebview==6.1
       - run: python test_pos_native.py
       - run: python test_retail_office_native.py
+      - run: python test_store_ops_native.py
       - run: python assets/create_icon.py
       - run: python -m PyInstaller --noconfirm --clean --onefile --windowed --icon assets/remote.ico --add-data "assets/remote.ico:assets" --name "MGC YFC Operations Remote Manager" remote/remote_manager.py
       - run: python -m PyInstaller --noconfirm --clean --onefile --windowed --icon assets/dispatch.ico --add-data "assets/dispatch.ico:assets" --add-data "assets/dispatch.png:assets" --hidden-import pystray._win32 --name "MGC YFC Operations Server" server_desktop.py
@@ -109,6 +110,7 @@ jobs:
           }
       - run: python -m PyInstaller --noconfirm --clean --onefile --windowed --icon assets/desk.ico --name "MGC YFC Point of Sale" pos_desktop.py
       - run: python -m PyInstaller --noconfirm --clean --onefile --windowed --icon assets/office.ico --name "CoastYouth Retail OFFICE" office_desktop.py
+      - run: python -m PyInstaller --noconfirm --clean --onefile --windowed --icon assets/store-ops.ico --name "CoastYouth Retail STORE OPS" store_ops_desktop.py
       - name: Verify OFFICE launcher
         shell: pwsh
         run: |
@@ -125,7 +127,7 @@ jobs:
         shell: pwsh
         run: |
           $baseline = Join-Path $env:RUNNER_TEMP 'retail-upgrade-baseline'
-          git clone --depth 1 --branch v0.49.0 https://github.com/m404ntfd/mgc-yfc-operations.git $baseline
+          git clone --depth 1 --branch v0.50.0 https://github.com/m404ntfd/mgc-yfc-operations.git $baseline
           if ($LASTEXITCODE -ne 0) { throw 'Baseline checkout failed' }
           $env:RETAIL_BASE_SOURCE = $baseline
           python test_retail_release_upgrade.py
@@ -142,6 +144,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "POS installer build failed" }
           & $compiler installer/office.iss
           if ($LASTEXITCODE -ne 0) { throw "OFFICE installer build failed" }
+          & $compiler installer/store_ops.iss
+          if ($LASTEXITCODE -ne 0) { throw "STORE OPS installer build failed" }
           & $compiler "/DAppVersion=$version" installer/suite.iss
           if ($LASTEXITCODE -ne 0) { throw "Computer setup installer build failed" }
           $officeInstall = Join-Path $env:RUNNER_TEMP 'OfficeInstallTest'
@@ -186,6 +190,7 @@ jobs:
             dist/MGC-YFC-POS-Setup-*.exe
             dist/Store-Dispatch-Update.zip
             dist/CoastYouth-Retail-OFFICE-Setup-*.exe
+            dist/CoastYouth-Retail-STORE-OPS-Setup-*.exe
             dist/CoastYouth-Retail-Computer-Setup-*.exe
           if-no-files-found: error
   release:
@@ -211,4 +216,4 @@ jobs:
             echo "Release already exists; leaving published assets unchanged."
             exit 0
           fi
-          gh release create "$tag" dist/*.exe dist/Store-Dispatch-Update.zip --target "$GITHUB_SHA" --title "CoastYouth Retail DESK 1.12.0 + OFFICE 1.9.0 + Operations $tag" --notes-file RELEASE-NOTES.md
+          gh release create "$tag" dist/*.exe dist/Store-Dispatch-Update.zip --target "$GITHUB_SHA" --title "CoastYouth Retail STORE OPS Desktop 1.0.0 + Server $tag" --notes-file RELEASE-NOTES.md
