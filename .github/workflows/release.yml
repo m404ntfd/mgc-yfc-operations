@@ -34,7 +34,7 @@ jobs:
           python-version: '3.13'
       - run: python -m pip install playwright -r requirements-push.txt
       - run: python -m playwright install --with-deps chromium webkit
-        timeout-minutes: 5
+        timeout-minutes: 15
       - run: python test_mobile.py
       - run: python test_purpose_ui.py
       - run: python test_revision28.py
