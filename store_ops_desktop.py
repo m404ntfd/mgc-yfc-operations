@@ -6,7 +6,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 TITLE = "CoastYouth Retail STORE OPS"
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 DEFAULT_SERVER = "https://operations.coastyfc.com"
 
 def server_url(value):

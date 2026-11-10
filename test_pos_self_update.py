@@ -6,7 +6,7 @@ import pos_updater
 
 def run(app="pos"):
  root=Path(__file__).parent
- version,name,prefix={'office':('1.10.0','CoastYouth Retail OFFICE.exe','CoastYouth-Retail-OFFICE-Setup-v'),'pos':('1.13.0','MGC YFC Point of Sale.exe','MGC-YFC-POS-Setup-v'),'ops':('1.1.0','CoastYouth Retail STORE OPS.exe','CoastYouth-Retail-STORE-OPS-Setup-v')}[app]
+ version,name,prefix={'office':('1.11.0','CoastYouth Retail OFFICE.exe','CoastYouth-Retail-OFFICE-Setup-v'),'pos':('1.14.0','MGC YFC Point of Sale.exe','MGC-YFC-POS-Setup-v'),'ops':('1.2.0','CoastYouth Retail STORE OPS.exe','CoastYouth-Retail-STORE-OPS-Setup-v')}[app]
  setup=root/'dist'/(prefix+version+'.exe')
  with tempfile.TemporaryDirectory() as tmp:
   target=Path(tmp)/'installed';target.mkdir();exe=target/name;shutil.copy2(root/'dist'/name,exe)

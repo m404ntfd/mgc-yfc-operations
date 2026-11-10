@@ -91,7 +91,7 @@ def thrift_post(c,u,path,d,finish):
         thrift_require(u,'manage_pos')
         tag=pos_text(d.get('tag'),'a tag color',40)
         if not any(t['name']==tag for t in thrift_settings(c)['tags']):raise Problem('Choose a configured tag color.')
-        item=dict(name=pos_text(d.get('name'),'an item name'),category=pos_text(d.get('category'),'a category',60),price=pos_int(d.get('price'),'price',1),taxable=d.get('taxable'))
+        item=dict(name=pos_text(d.get('name'),'an item name'),category=catalog_key(c,pos_text(d.get('category'),'a Sub Department',60)),price=pos_int(d.get('price'),'price',1),taxable=d.get('taxable'))
         if type(item['taxable']) is not bool:raise Problem('Choose tax status.')
         product=secrets.token_hex(16);c.execute('INSERT INTO pos_products VALUES(?,?)',(product,json.dumps(item)))
         ident=c.execute("INSERT INTO thrift_intake(product,received,tag,status,actor) VALUES(?,?,?,'available',?)",(product,dt.date.today().isoformat(),tag,u['name'])).lastrowid
@@ -129,10 +129,12 @@ def thrift_post(c,u,path,d,finish):
             start=thrift_date(tag.get('from'),'promotion start');end=thrift_date(tag.get('to'),'promotion end')
             if start and end and end<start:raise Problem('Promotion end must follow start.')
             cats=tag.get('categories',[])
-            if not isinstance(cats,list) or len(cats)>100:raise Problem('Invalid categories.')
+            if not isinstance(cats,list) or len(cats)>100:raise Problem('Invalid Sub Departments.')
             days=tag.get('days',list(range(7)))
             if not isinstance(days,list) or any(type(x) is not int or x not in range(7) for x in days):raise Problem('Invalid weekdays.')
-            body['tags'].append(dict(name=name,color=color,bps=pos_int(tag.get('bps'),'discount percent',0,10000),**{'from':start,'to':end},days=days,categories=[pos_text(x,'a category',60) for x in cats]))
+            body['tags'].append(dict(name=name,color=color,bps=pos_int(tag.get('bps'),'discount percent',0,10000),**{'from':start,'to':end},days=days,categories=[catalog_key(c,pos_text(x,'a Sub Department',60)) for x in cats]))
+        removed={t['name'] for t in old['tags']}-{t['name'] for t in body['tags']}
+        if removed and any(r[0] in removed for r in c.execute('SELECT DISTINCT tag FROM thrift_intake')):raise Problem('This color tag is attached to priced inventory. Keep its name or edit its discount settings.')
         c.execute('INSERT INTO thrift_settings VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,body=excluded.body',(old['revision']+1,json.dumps(body)))
         return finish({'settings':thrift_settings(c)},'Thrift settings saved')
     if path=='thrift-customer-save':
@@ -151,8 +153,8 @@ def thrift_post(c,u,path,d,finish):
         amount=pos_int(d.get('amount'),'voucher amount',1);expiry=thrift_date(d.get('expires'),'expiry date',False)
         if expiry<dt.date.today().isoformat():raise Problem('Expiry must not be in the past.')
         cats=d.get('categories',[])
-        if not isinstance(cats,list) or not cats:raise Problem('Specify eligible merchandise categories.')
-        body=dict(expires=expiry,categories=[pos_text(x,'a category',60) for x in cats],reason=reason)
+        if not isinstance(cats,list) or not cats:raise Problem('Specify eligible merchandise Sub Departments.')
+        body=dict(expires=expiry,categories=[catalog_key(c,pos_text(x,'a Sub Department',60)) for x in cats],reason=reason)
         ident=c.execute("INSERT INTO pos_credit_accounts(name,kind,contact) VALUES(?,'customer',?)",(name,'Assistance voucher')).lastrowid
         c.execute('INSERT INTO thrift_vouchers VALUES(?,?)',(ident,json.dumps(body)))
         c.execute('INSERT INTO pos_credit_ledger(account,amount,balance,at,actor,reason) VALUES(?,?,?,?,?,?)',(ident,amount,amount,dt.datetime.now().astimezone().isoformat(),u['name'],reason))
@@ -229,7 +231,7 @@ def thrift_voucher_check(c,account,cart,amount):
     if dt.date.today().isoformat()>rule['expires']:raise Problem('This assistance voucher has expired.')
     # Keep restricted voucher receipts homogeneous so partial refunds cannot
     # convert cash for excluded merchandise into restricted voucher credit.
-    if any(l.get('donation') or l['category'] not in rule['categories'] for l in cart['lines']):raise Problem('Use a separate sale for donations or items outside this voucher’s eligible categories.')
+    if any(l.get('donation') or l['category'] not in rule['categories'] for l in cart['lines']):raise Problem('Use a separate sale for donations or items outside this voucher’s eligible Sub Departments.')
     cart['voucher_paid']=amount
 
 def thrift_sale_prepare(c,cart,path):

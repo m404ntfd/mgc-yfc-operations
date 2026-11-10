@@ -76,3 +76,25 @@ body[data-retail-theme] #posManual {background:var(--rt-surface,#fff);color:var(
 @media screen and (max-width:600px) {
  header .headerMenu>div {left:0;right:auto;max-width:calc(100vw - 32px);min-width:min(215px,calc(100vw - 32px))}
 }
+
+@media screen {
+.catalogSetupNav{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}
+.catalogSetupNav [aria-pressed=true]{outline:2px solid currentColor;outline-offset:2px}
+.catalogHierarchyPath{display:flex;gap:12px;flex-wrap:wrap;font-weight:700;padding:14px 0;border-block:1px solid var(--border,#69839b)}
+.catalogSetupRow{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;padding:16px 0;border-bottom:1px solid var(--border,#69839b)}
+.catalogSetupRow label{display:flex;flex-direction:column;gap:8px}.catalogSetupRow input,.catalogSetupRow select{width:100%;box-sizing:border-box}
+.catalogAssignment{grid-column:1/-1;padding:10px 0;margin:0}
+}
+
+/* Reusable setup lists keep selection visible in every palette. */
+@media screen {
+dialog.catalogSetup{width:min(940px,calc(100vw - 48px));max-width:calc(100vw - 48px)}
+.setupEntryFields{border:1px solid var(--rt-border,var(--border,#7897af));border-radius:12px;padding:18px;margin:16px 0}
+.setupEntryHeading{font-weight:700;padding:0 8px}.setupFields{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:16px;margin-bottom:16px}
+.setupFields label{display:flex;flex-direction:column;gap:8px}.setupFields input,.setupFields select,.setupFields textarea{box-sizing:border-box;width:100%}.setupFields label:has(input[type=checkbox]){flex-direction:row;align-items:center}.setupFields input[type=checkbox]{width:auto}
+.setupListHeading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:24px}.setupActions{display:flex;gap:8px}.setupActions button{width:46px;height:44px;padding:10px;display:inline-flex;align-items:center;justify-content:center;font-weight:800}.setupActions svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.setupTableScroll{overflow:auto;max-height:360px;border:1px solid var(--rt-border,var(--border,#7897af));border-radius:10px}.setupTable{width:100%;border-collapse:collapse;text-align:left}.setupTable th,.setupTable td{padding:12px 14px;border-bottom:1px solid var(--rt-border,var(--border,#7897af))}.setupTable tr[data-setup-row]{cursor:pointer}.setupTable tr[data-setup-row]:focus-visible{outline:3px solid currentColor;outline-offset:-3px}.setupTable tr[aria-selected=true]{background:#dceaf7!important;color:#16354f!important;box-shadow:inset 4px 0 #245d89;font-weight:600}.setupTable tr[aria-selected=true] td{color:#16354f!important}.setupSelectedMark{width:20px;font-weight:800}.setupStatus{min-height:1.5em;margin:14px 0}.setupStatus.setupError{font-weight:700}.setupSrOnly{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@media(max-width:600px){dialog.catalogSetup{width:calc(100vw - 24px);max-width:calc(100vw - 24px);padding:16px}.setupFields{grid-template-columns:1fr}.setupListHeading{align-items:flex-start}.setupTable th,.setupTable td{padding:10px 8px}}
+}
+
+@media screen {body[data-retail-theme] .thriftDialog .flowDialogHeading{background:var(--rt-surface,var(--panel,#fff));color:var(--rt-text,var(--text,#19334a))}}

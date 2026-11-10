@@ -1,22 +1,26 @@
-# CoastYouth Retail terminal registration and computer updates
+# CoastYouth Retail catalog setup and reporting hierarchy
 
-Server 0.51.0 / DESK 1.13.0 / OFFICE 1.10.0 / STORE OPS desktop 1.1.0
+Server 0.52.0 / DESK 1.14.0 / OFFICE 1.11.0 / STORE OPS desktop 1.2.0
 
-- Adds visible selection checkboxes beside computers in OFFICE updates, plus Select all, Clear selection and a selected count. Nothing is selected by default.
-- Requires an administrator to complete first-time desktop registration after connecting to the shared server.
-- Displays the saved computer name and Registered status in DESK, OFFICE and STORE OPS terminal setup.
-- Keeps computer registration when the application restarts, is updated or changes IP address. Existing checkout assignments, layouts and store selections are retained.
-- Preserves OFFICE's device configuration when changing its server connection.
-- Includes STORE OPS in registered-computer application updates, with staff warnings, a countdown, verified installers and protection for unfinished work.
+- Separates Revenue Centers, Departments, Sub Departments, printing categories and taxes into their own OFFICE setup screens.
+- Replaces item category labels with Sub Department. Each Sub Department selects a Department, and each Department selects its reporting Revenue Center.
+- Adds a complete-entry form with an Add button, a highlighted saved-entry list, and delete, x2 copy and pencil edit controls. The same controls are used for printer routes and color-tag rules.
+- Saves each added, edited or deleted setup entry to the shared server. Copies receive a new identity after review and Add. Interrupted saves can be retried without creating duplicates.
+- Protects setup entries that are still assigned to products, child Departments, printing routes, assistance vouchers or priced inventory. Unsaved details require confirmation before discarding.
+- Adds sales reports by Sub Department, Department and Revenue Center. New sale lines record their reporting assignment; returns use the original assignment. Older sales without the hierarchy remain separate and are not reassigned retroactively.
+- Retains existing product and discount-rule links when a Sub Department is renamed. Existing categories appear as Sub Departments until their parent Departments are assigned.
+- Keeps the new lists readable in light, dark and glass palettes, including the selected row and action buttons.
 
 ## Installation
 
-Create a verified server backup and finish current work. Update the existing server in place to 0.51.0 first, keeping its existing data folder. Then update DESK, OFFICE and STORE OPS on each computer using Computer Setup or the individual installers. Older STORE OPS installations need this installer once before receiving coordinated desktop updates.
+Create a verified server backup and finish current work. Update the existing server in place to 0.52.0 first, retaining its current data folder. Then use Computer Setup or the individual installers to update OFFICE, DESK and STORE OPS. Keep each application connected to the same existing server. Existing terminal registrations and device settings are retained.
 
-Open each desktop application against the same server. If registration is required, sign in with an administrator account, confirm the computer name and role, and select Register terminal. DESK can use an existing unassigned checkout or create one; existing assigned checkouts are retained. Registration is shared by applications on the same Windows computer. In OFFICE, select computers under View updates before sending an update request. Closed applications and offline computers receive pending requests when they reopen and sign in.
+In OFFICE, configure Revenue Centers first, then Departments, then assign Sub Departments. Products retain their current Sub Department until an authorized user changes it. Taxes and printer destinations are configured separately.
 
-The STORE OPS web application remains available at its existing address. Publishing does not install updates on store computers or restart the live server.
+The STORE OPS web application remains available at its existing address. Publishing makes the installers available; it does not restart the live server or install software on store computers.
 
-## Existing data
+## Data preservation and verification
 
-No business records or database tables are reset or replaced. Timecards, open punches and breaks, reservations, attachments, sales, users, HR records, account histories and settings remain on the existing server. Release checks cover populated upgrades from 0.50.2, verified backups, repeat startup, rollback, installer data preservation and retained computer/checkout registrations using isolated sample data.
+This release does not reset or replace operational tables. Timecards, open punches and breaks, reservations and attachments, sales, refunds, store-credit ledgers, users, HR records and settings remain on the existing server. Completed receipts retain their recorded prices, taxes and reporting assignments.
+
+Release checks exercise a populated 0.51.0 upgrade, verified backup, repeated startup and rollback using isolated sample data. Installer checks retain existing data and device settings. Catalog checks cover permissions, conflicting edits, linked-entry deletion protection, tax removal followed by an original-sale refund, and interrupted-save retries. Browser checks exercise setup actions, checkout, receipts, reports and theme readability.

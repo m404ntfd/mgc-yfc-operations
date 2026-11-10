@@ -2,7 +2,7 @@
 UninstallDisplayIcon={app}\CoastYouth Retail STORE OPS.exe
 AppId={{A302D8B1-4C13-4DED-9B51-E64922F1A973}
 AppName=CoastYouth Retail STORE OPS
-AppVersion=1.1.0
+AppVersion=1.2.0
 AppPublisher=CoastYouth Retail
 DefaultDirName={localappdata}\Programs\CoastYouthRetailStoreOps
 DefaultGroupName=CoastYouth Retail
@@ -10,7 +10,7 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\dist
-OutputBaseFilename=CoastYouth-Retail-STORE-OPS-Setup-v1.1.0
+OutputBaseFilename=CoastYouth-Retail-STORE-OPS-Setup-v1.2.0
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern

@@ -63,11 +63,11 @@ def retail_reports(c,u,q):
         for s in sales:
             add(employees,s['cashier'],merchandise(s));add(buckets,stamp(s['at']).strftime('%Y-%m-%d' if end-start>172800 else '%Y-%m-%d %H:00'),merchandise(s))
             for l in s['lines']:
-                if not l.get('donation') and not l.get('gift_certificate'):add(items,l['name'],l['subtotal']);add(categories,l['category'],l['subtotal'])
+                if not l.get('donation') and not l.get('gift_certificate'):add(items,l['name'],l['subtotal']);add(categories,l.get('reporting',{}).get('sub_department',l['category']),l['subtotal'])
         for r in refunds:
             original=c.execute('SELECT body FROM pos_sales WHERE id=?',(r['sale'],)).fetchone();name=json.loads(original[0])['cashier'] if original else 'Unknown'
             add(employees,name,-r['subtotal']);add(buckets,stamp(r['at']).strftime('%Y-%m-%d' if end-start>172800 else '%Y-%m-%d %H:00'),-r['subtotal'])
-            for l in r['lines']:add(items,l['name'],-l['subtotal']);add(categories,l['category'],-l['subtotal'])
+            for l in r['lines']:add(items,l['name'],-l['subtotal']);add(categories,l.get('reporting',{}).get('sub_department',l['category']),-l['subtotal'])
         gross=sum(l.get('tag_original',l)['subtotal'] for s in sales for l in (s.get('reward_original') or s.get('original_lines') or s['lines']) if not l.get('donation') and not l.get('gift_certificate'))
         net=sum(merchandise(s) for s in sales)-sum(r['subtotal'] for r in refunds)
         working=[r[0] for r in c.execute('SELECT p.name FROM work_periods w LEFT JOIN receipt_profiles p ON p.profile_id=w.account WHERE w.end IS NULL')] if labor else None
@@ -77,7 +77,21 @@ def retail_reports(c,u,q):
         return dict(donations=stores_donations(sales),store=stores_profile(c,q['store_id'][0])['name'] if q.get('store_id',[''])[0] else 'All stores',gross=gross,net=net,transactions=len(sales),average=round(net/len(sales)) if sales else None,prior_net=prior_net,items=items,categories=categories,employees=employees,buckets=buckets,working=working,labor_percent=None,note='Net sales exclude gift certificate issuance, tax and voluntary donations and deduct refunds posted in this period. Comparison is the preceding equal-length period. Employee returns are attributed to the original cashier.')
     if kind=='pricing' or kind=='tax-assignment' or kind=='hierarchy':
         rows=[retail_product(c,r) for r in c.execute('SELECT * FROM pos_products ORDER BY rowid') if not q.get('store_id',[''])[0] or retail_rule(c,r['id']).get('store_id','thrift-mart')==q['store_id'][0]]
-        return table({'pricing':'Pricing','tax-assignment':'Tax assignment','hierarchy':'Reporting hierarchy'}[kind],['Product','Category','Price','Taxable','Active'],[[r['name'],r['category'],'Open price' if r.get('rules',{}).get('open_priced') else money(r['price']),r['taxable'],r.get('rules',{}).get('active',True)] for r in rows],'Current catalog configuration; not a reconstruction of historical prices.')
+        if kind=='hierarchy':return table('Reporting hierarchy',['Product','Store','Sub Department','Department','Revenue Center'],[[r['name'],stores_profile(c,r['rules'].get('store_id','thrift-mart'))['name'],r['reporting']['sub_department'],r['reporting']['department'],r['reporting']['revenue_center']] for r in rows],'Current product assignments. Unassigned Sub Departments can be linked to a Department in OFFICE; existing receipts are unchanged.')
+        return table({'pricing':'Pricing','tax-assignment':'Tax assignment'}[kind],['Product','Sub Department','Price','Taxable','Active'],[[r['name'],r['reporting']['sub_department'],'Open price' if r.get('rules',{}).get('open_priced') else money(r['price']),r['taxable'],r.get('rules',{}).get('active',True)] for r in rows],'Current catalog configuration; not a reconstruction of historical prices.')
+    if kind in ('sub-departments','departments','revenue-centers'):
+        grouped={}
+        fields={'sub-departments':['revenue_center','department','sub_department'],'departments':['revenue_center','department'],'revenue-centers':['revenue_center']}[kind]
+        for sign,records in ((1,sales),(-1,refunds)):
+            for sale in records:
+                for line in sale['lines']:
+                    if line.get('donation') or line.get('gift_certificate'):continue
+                    snapshot=line.get('reporting')
+                    labels=tuple(snapshot.get(field,'Unassigned') if snapshot else (line.get('category','Unassigned') if field=='sub_department' else 'Not recorded (historical sales)') for field in fields)
+                    identities=tuple(snapshot.get(field+'_id','') if snapshot else '' for field in fields)
+                    values=grouped.setdefault((identities,labels),[0,0]);values[0]+=sign*line['quantity'];values[1]+=sign*line['subtotal']
+        columns=[{'revenue_center':'Revenue Center','department':'Department','sub_department':'Sub Department'}[field] for field in fields]
+        return table({'sub-departments':'Sales by Sub Department','departments':'Sales by Department','revenue-centers':'Sales by Revenue Center'}[kind],columns+['Net quantity','Net sales'],[[*labels,values[0],money(values[1])] for (ids,labels),values in sorted(grouped.items(),key=lambda item:item[0][1])],'Uses the reporting assignment saved when each item was added to the sale. Returns retain the original assignment and use their posting date. Historical sales without a recorded hierarchy are shown separately; tax, donations and gift-certificate issuance are excluded.')
     if kind=='modifiers':
         rows=[]
         for sale in sales:
@@ -118,9 +132,9 @@ def retail_reports(c,u,q):
             else:
                 for l in s['lines']:
                     if l.get('donation') or l.get('gift_certificate'):continue
-                    key=(s['cashier'],stamp(s['at']).strftime('%Y-%m-%d' if end-start>172800 else '%Y-%m-%d %H:00')) if kind=='employee-time' else (l['name'],stamp(s['at']).strftime('%H:00')) if kind=='products-hour' else (stamp(s['at']).strftime('%Y-%m-%d'),stamp(s['at']).strftime('%H:00')) if kind=='seven-day' else (l['name'],l['category'])
+                    key=(s['cashier'],stamp(s['at']).strftime('%Y-%m-%d' if end-start>172800 else '%Y-%m-%d %H:00')) if kind=='employee-time' else (l['name'],stamp(s['at']).strftime('%H:00')) if kind=='products-hour' else (stamp(s['at']).strftime('%Y-%m-%d'),stamp(s['at']).strftime('%H:00')) if kind=='seven-day' else (l['name'],l.get('reporting',{}).get('sub_department',l['category']))
                     v=groups.setdefault(key,[0,0]);v[0]+=sign*l['quantity'];v[1]+=sign*l['subtotal']
     if kind in ('cash','drawer','shift'):return table({'cash':'Cash summary','drawer':'Drawer summary','shift':'Shift summary'}[kind],['Terminal','Employee','Net cash','Net store credit'],[[*k,money(v[0]),money(v[1])] for k,v in sorted(groups.items())],'Calculated from recorded payments and refunds. Physical counts and over / short appear in the separate Cash-drawer reconciliation report when enabled.')
     if kind not in ('employee-time','products-hour','seven-day','products'):raise Problem('Report not available.',404)
-    columns={'employee-time':['Employee','Hour'],'products-hour':['Product','Hour'],'seven-day':['Day','Hour'],'products':['Product','Category']}[kind]
+    columns={'employee-time':['Employee','Hour'],'products-hour':['Product','Hour'],'seven-day':['Day','Hour'],'products':['Product','Sub Department']}[kind]
     return table({'employee-time':'Employee sales by time','products-hour':'Products sold by hour','seven-day':'Revenue by day and hour','products':'Products sold'}[kind],columns+['Net quantity','Net sales'],[[*k,v[0],money(v[1])] for k,v in sorted(groups.items())],'Refunds use their posting date; totals exclude tax. Product names reflect saved receipts.')
