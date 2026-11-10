@@ -107,8 +107,11 @@ def customer_delivery_tick():
 
 def customer_worker():
     with LOCK,connect() as c:c.execute("UPDATE customer_delivery SET status='uncertain',error='Server restarted during delivery. Check Gmail Sent before retrying.' WHERE status='sending'")
+    with LOCK,connect() as c:c.execute("UPDATE hr_mail SET status='uncertain',error='Server restarted during delivery. Check Gmail Sent before replacing the invitation.' WHERE status='sending'")
     while not STOPPING:
-        try:customer_delivery_tick()
+        try:
+            customer_delivery_tick()
+            hr_mail_tick()
         except Exception:pass
         time.sleep(10)
 

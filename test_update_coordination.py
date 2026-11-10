@@ -7,7 +7,7 @@ import server
 class CoordinatorFixture:
  def __init__(self):
   self.tmp=tempfile.TemporaryDirectory();self.done=threading.Event();self.patches=[]
-  for module,name,value in [(server,'DATA',Path(self.tmp.name)),(server,'DB',Path(self.tmp.name)/'schedule.db'),(server.updater,'DATA',Path(self.tmp.name)),(server,'SESSIONS',{}),(server,'CLOCK_SESSIONS',{}),(server,'UPDATE_FLOW',None),(server,'RESTART',False),(server,'STOPPING',False)]:
+  for module,name,value in [(server,'DATA',Path(self.tmp.name)),(server,'DB',Path(self.tmp.name)/'schedule.db'),(server.updater,'DATA',Path(self.tmp.name)),(server,'SESSIONS',{}),(server,'HR_SESSIONS',{}),(server,'CLOCK_SESSIONS',{}),(server,'UPDATE_FLOW',None),(server,'RESTART',False),(server,'STOPPING',False)]:
    p=patch.object(module,name,value);p.start();self.patches.append(p)
   p=patch.dict(os.environ,{'OneDrive':'','OneDriveConsumer':'','OneDriveCommercial':'','DISPATCH_LAUNCHER':'1'});p.start();self.patches.append(p)
   p=patch.object(server.updater,'stage',return_value=None);self.stage=p.start();self.patches.append(p)

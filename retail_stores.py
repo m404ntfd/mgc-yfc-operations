@@ -269,7 +269,7 @@ def stores_cart_action(c,u,cart,path,d,finish):
         if amount<=0:raise Problem('Add eligible full-price merchandise before applying the birthday reward.')
         cart['reward_original']=json.loads(json.dumps(cart['lines']))
         for line,part in zip(targets,retail_allocate(amount,[l['subtotal'] for l in targets])):
-            line['subtotal']-=part;line['tax']=(line['subtotal']*cart['settings']['tax_bps']+5000)//10000 if line['taxable'] else 0
+            line['subtotal']-=part;line['tax']=catalog_tax(line,cart['settings']['tax_bps'])
         cart['reward']=dict(points=0,amount=amount,birthday=True,scope=scope,year=today.year,loyalty_scope=settings['loyalty_scope'])
     retail_save_cart(c,cart)
     retail_event(c,cart['id'],u['name'],path,{})

@@ -92,6 +92,81 @@ body[data-retail-theme] .cardNotice,body[data-retail-theme] .cardNotice p{color:
 .thriftDialog #thriftTagForm,.thriftDialog #thriftDonation{display:inline-block;vertical-align:top;width:calc(50% - 18px);margin-right:16px;padding:16px;border:1px solid #b8c8d6;border-radius:10px}
 .thriftDialog #thriftSettings>button.primary{margin-top:18px}
 @media(max-width:700px){.thriftDialog #thriftTagForm,.thriftDialog #thriftDonation{display:block;width:100%;margin:12px 0}.thriftTagGrid{grid-template-columns:1fr}}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* BEGIN GLASS THEME */
+/* Readable report cards in every theme; printed pages remain white. */
+@media screen {
+.rrCard,.rrCard h2,.rrCard h3,.rrCard strong,.rrCard p,.rrCard small,.rrCard span{color:#19334a!important}.rrCard{background:#f5f8fc!important;border-color:#c5d3e1!important}
+body[data-retail-theme^="glass-"]{--glass-tint:190,222,250;--glass-accent:#246391;background:radial-gradient(ellipse at top left,rgba(var(--glass-tint),.98),transparent 65%),linear-gradient(130deg,#e4edf6,#b2c6db);color:#132d42;--text:#132d42;--muted:#405b70;--panel:#edf4fa;--bg:#dbe8f4;--line:#9bb5ca;--border:#9bb5ca;--accent:var(--glass-accent);--rt-accent:var(--glass-accent);background-attachment:fixed}
+body[data-retail-theme="glass-teal"]{--glass-tint:170,235,220;--glass-accent:#14685f}
+body[data-retail-theme="glass-violet"]{--glass-tint:215,196,246;--glass-accent:#654599}
+body[data-retail-theme="glass-rose"]{--glass-tint:250,205,217;--glass-accent:#994969}
+body[data-retail-theme="glass-graphite"]{--glass-tint:190,201,214;--glass-accent:#3f5368}
+body[data-retail-theme^="glass-"] :is(.panel,.authCard,.officeCard,.rrCard,dialog,.flowDialog,.storeMenu,header,.posReceipt,.hrCard){background:rgba(250,253,255,.83)!important;color:#132d42!important;border:1px solid rgba(255,255,255,.95);border-radius:18px;box-shadow:0 12px 32px #304c6920,inset 0 1px 1px white;backdrop-filter:blur(20px) saturate(135%)}
+body[data-retail-theme^="glass-"] :is(h1,h2,h3,p,label,small,strong,summary){color:inherit}
+body[data-retail-theme^="glass-"] :is(button,select,input,textarea){color:#19334a;background:rgba(255,255,255,.9);border:1px solid #7897af;border-radius:9px}
+body[data-retail-theme^="glass-"] button.primary{background:var(--glass-accent)!important;color:white!important}
+body[data-retail-theme^="glass-"] button:hover{box-shadow:0 0 0 2px #ffffffa0}
+body[data-retail-theme^="glass-"] :is(input,button,select):focus-visible{outline:3px solid var(--glass-accent);outline-offset:2px}
+.taxDropdown{padding:10px;border:1px solid #7897af;border-radius:10px}.taxDropdown label{display:block;padding:5px}#flowFixedPrice input:disabled{background:#d6dde4;color:#344b60;opacity:1;font-weight:bold}
+}
+@media(prefers-reduced-transparency:reduce){body[data-retail-theme^="glass-"] :is(.panel,dialog,header,.hrCard){background:#f4f8fc!important;backdrop-filter:none}}
+
+@media screen{body[data-retail-theme^="glass-"] :is(.sidebar,.brand,.brand strong,.navLabel,#officeNav button,#officeNav button span,.officeTile small,.officeTile strong){color:#19334a!important}body[data-retail-theme^="glass-"] #officeNav button[aria-current="page"]{background:#ffffffd9!important;color:#174e6c!important}}
+
+/* END GLASS THEME */
 /* BEGIN REPORT DOCUMENT */
 /* Report documents use the same readable brand treatment on screen and paper. */
 .rrDocumentHeader{display:flex;align-items:center;gap:20px;padding:22px 24px;border-bottom:5px solid #168678;background:#16334d!important;color:#fff!important;margin:24px 0 0;border-radius:12px 12px 0 0}

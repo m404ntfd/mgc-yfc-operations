@@ -1,1 +1,8 @@
 pywebpush==2.5.0
+
+pypdf==7.0.0
+reportlab==5.1.0
+pypdfium2==5.15.2
+tzdata==2026.2
+
+fonttools==4.68.0

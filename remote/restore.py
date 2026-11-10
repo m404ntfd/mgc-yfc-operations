@@ -1,7 +1,7 @@
 """Offline restore for complete Thrift Mart Dispatch backups."""
-import contextlib,json,os,shutil,sqlite3,tempfile,time,zipfile
+import hashlib,contextlib,json,os,shutil,sqlite3,tempfile,time,zipfile
 from pathlib import Path
-ALLOWED={'schedule.db','updates.json','backup-settings.json','manifest.json'}
+ALLOWED={'schedule.db','updates.json','backup-settings.json','manifest.json','hr-encryption.key'}
 @contextlib.contextmanager
 def data_lock(data):
     data=Path(data);data.mkdir(parents=True,exist_ok=True)
@@ -26,6 +26,7 @@ def restore_backup(source,data):
             if sum(i.file_size for i in z.infolist())>512*1024*1024:raise ValueError('Backup is too large for this restore tool.')
             manifest=json.loads(z.read('manifest.json'))
             if manifest.get('application')!='thrift-mart-dispatch' or manifest.get('format')!=1:raise ValueError('Unrecognized backup format.')
+            if manifest.get('hr_key_sha256') and ('hr-encryption.key' not in names or hashlib.sha256(z.read('hr-encryption.key')).hexdigest()!=manifest['hr_key_sha256']):raise ValueError('Backup HR encryption key failed verification.')
             for n in names:
                 if n!='manifest.json':(temp/n).write_bytes(z.read(n))
         for n in ('updates.json','backup-settings.json'):
@@ -33,6 +34,9 @@ def restore_backup(source,data):
         with contextlib.closing(sqlite3.connect(temp/'schedule.db')) as c:
             if c.execute('PRAGMA integrity_check').fetchone()[0]!='ok':raise ValueError('The backup database failed its integrity check.')
             tables={r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            if 'hr_documents' in tables:
+                has_hr=c.execute('SELECT 1 FROM hr_enrollments UNION ALL SELECT 1 FROM hr_templates UNION ALL SELECT 1 FROM hr_credentials LIMIT 1').fetchone()
+                if has_hr and not (temp/'hr-encryption.key').exists():raise ValueError('This backup is missing the HR encryption key. Do not restore incomplete HR data.')
             if not {'jobs','vehicles','users','audit'}<=tables:raise ValueError('The backup is not a dispatch database.')
         # A replacement PC may not have the original OneDrive location. Keep it as a
         # hint, but require deliberate reconnection before writing new cloud backups.
@@ -40,7 +44,7 @@ def restore_backup(source,data):
         if settings.exists():
             cfg=json.loads(settings.read_text());cfg['enabled']=False;settings.write_text(json.dumps(cfg))
         before=data/'restore-safety'/str(time.time_ns());before.mkdir(parents=True)
-        names=('schedule.db','updates.json','backup-settings.json')
+        names=('schedule.db','updates.json','backup-settings.json','hr-encryption.key')
         existed={n:(data/n).exists() for n in names}
         for n in names:
             if existed[n]:shutil.copy2(data/n,before/n)

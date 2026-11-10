@@ -76,6 +76,7 @@ def apply():
         target=backup/name;target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(ROOT/name,target)
     if (DATA/'schedule.db').exists():
         with closing(sqlite3.connect(DATA/'schedule.db')) as src, closing(sqlite3.connect(backup/'schedule.db')) as dst: src.backup(dst)
+    if (DATA/'hr-encryption.key').exists():shutil.copy2(DATA/'hr-encryption.key',backup/'hr-encryption.key')
     try:
         for name,content in contents.items():
             target=ROOT/name; temp=target.with_name(target.name+'.update');temp.write_bytes(content);os.replace(temp,target)

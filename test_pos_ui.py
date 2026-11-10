@@ -7,6 +7,7 @@ from test_update_coordination import CoordinatorFixture
 def run():
  f=CoordinatorFixture()
  try:
+  code,result=f.call('pos/catalog-options-save',dict(request='f'*32,revision=0,categories=['Clothing'],printing=[],taxes=[]));assert code==200,result
   with sync_playwright() as pw:
    b=pw.chromium.launch(**({'executable_path':os.environ['TEST_CHROMIUM']} if os.environ.get('TEST_CHROMIUM') else {}))
    p=b.new_page(viewport={'width':1440,'height':1100},reduced_motion='reduce');errors=[];p.on('pageerror',lambda e:errors.append(str(e)))
@@ -15,7 +16,7 @@ def run():
    expect(p.locator('#officeHub')).to_be_visible();p.locator('[data-office-action=receipt]').click();form=p.locator('#storeProfileForm')
    form.locator('[name=name]').fill('MGC Test Store');form.locator('[name=tax]').fill('7.25');form.locator('[name=confirmed]').check();form.locator('button').first.click()
    expect(p.locator('#storeProfileForm [name=name]')).to_have_value('MGC Test Store');p.locator('dialog[open] .flowClose').click();p.locator('[data-office-action=catalog]').click()
-   product=p.locator('#flowProductForm');product.locator('[name=name]').fill('Catalog shirt');product.locator('[name=category]').fill('Clothing');product.locator('[name=price]').fill('3.99');product.locator('button.primary').click()
+   product=p.locator('#flowProductForm');product.locator('[name=name]').fill('Catalog shirt');product.locator('[name=category]').select_option('Clothing');product.locator('[name=price]').fill('3.99');product.locator('button.primary').click()
    expect(p.locator('#flowProductStatus')).to_contain_text('Product saved');p.goto(origin+'/pos');p.locator('#posNew').click();expect(p.locator('#posCart')).to_contain_text('Saved on server')
    p.locator('[data-pos-product]').click();expect(p.locator('#posCart')).to_contain_text('$4.28')
    p.locator('summary').filter(has_text='Manual item').click();form=p.locator('#posManual')

@@ -1,15 +1,17 @@
-# CoastYouth Retail STORE OPS 0.49.0 / DESK 1.11.0 / OFFICE 1.8.0
+# CoastYouth Retail STORE OPS 0.50.0 / DESK 1.12.0 / OFFICE 1.9.0
 
-- Thrift Mart and Binopoly have separate store profiles, terminal assignments, sales, item pricing, tax settings and receipt branding. Existing records remain associated with Thrift Mart without rewriting historical data.
-- Sold-by-weight items prompt for manually entered pounds and calculate the pre-tax amount before Add to Sale. Digital scale integration remains a future hardware setup task.
-- Optional cash-drawer reconciliation, gift certificates, scannable membership cards and birthday rewards are available in OFFICE and remain off by default. Loyalty can earn and redeem collectively or separately per store, with source tracking and refund protection.
-- STORE OPS and OFFICE include donation performance and employee donation reports.
-- OFFICE products can be marked “May require a pickup slip.” After successful payment, DESK offers the saved pickup/sold ticket set, then optional delivery scheduling. The split delivery window reuses the existing appointment form and calendar, starts with appointments minimized, and includes receipt/slip reprinting, loading pages and return to POS. Follow-ups can be resumed; retrying a saved delivery does not duplicate it.
-- User and role administration is available within OFFICE, including shared role permissions, individual access, work assignments, profiles, PINs and login security. These configuration menus are removed from STORE OPS. Existing accounts and permissions remain shared; staff self-service stays available.
-- Reports have branded headers with the configured store logo/name, report title, date range, scope, section bars and alternating detail rows. Print/PDF layout supports repeated table headings and wide reports. Combined reports identify All stores; labor reports identify the shared staff directory.
+- STORE OPS sign-in uses the green cart-and-wave icon and CoastYouth Retail STORE OPS wordmark on desktop and mobile.
+- OFFICE catalog setup includes configured category and printing-category lists, multiple taxes, open-price behavior, and a save/discard prompt when leaving an unfinished item. Discounts and surcharges have separate configuration areas; card processing remains a future update.
+- Glass appearance themes include color choices and improved dashboard contrast. OFFICE sign-in identifies CoastYouth Office.
+- Invitation-only employee onboarding is available through STORE OPS, with administrator-only HR permissions by default, configurable HR email, help messages, progress tracking, completion notifications and printable employee packets in OFFICE.
+- Browser completion uses original W-4 (2026), Mississippi withholding (Rev. 10/24), I-9 (01/20/25), and uploaded background-check pages. HR reviews and enables form versions. Existing signed versions are retained. Initial I-9 Sections 1 and 2 are supported; preparer/translator supplements require a separate signer workflow and are not enabled for browser signing in this release.
+- Employee details require an area code and SAVE & CONTINUE advances the workflow. Phone numbers use (XXX) XXX-XXXX; SSNs mask their first five digits after leaving a field; date fields have calendar controls and MM/DD/YYYY formatting. Signed documents retain the complete required information. One final whole-document acknowledgment replaces per-page checkboxes.
+- Encrypted form drafts, password-authenticated signatures, separate employer completion, immutable signature evidence, final completed-document downloads and HR review preserve the submitted record. Onboarding does not itself run a background check or replace required I-9 document examination.
 
-Update the existing server first, then DESK and OFFICE. The Computer Setup installer includes all three applications and lets you choose the computer's role. Existing installation IDs and data locations are unchanged. Credit cards will be added in future updates.
+## Installation and data preservation
 
-Existing timecards, open punches and breaks, reservations, attachments, sales, users, settings and account histories are retained. Database changes are additive and historical sales remain immutable. Release validation covers populated upgrade, backup, repeated startup, rollback and Windows installer preservation checks.
+Use the full Server or Computer Setup installer for this release: browser forms require the included PDF runtime components. Install over the existing application using its existing data folder, then update DESK and OFFICE. The legacy in-app update contains application code but cannot add those runtime components to older installations.
 
-Create and verify a current backup before installing. Keep the existing installation and data folders. Publishing makes the downloads available; it does not install updates on store computers.
+Existing timecards, open punches and breaks, reservations, attachments, sales, users, settings and account histories are retained through additive migrations. HR encryption keys are included in verified backups and must be retained with the database. No production records or credentials are included in release assets.
+
+Create and verify a current backup before installation. Publishing provides downloads; it does not install updates on store computers or send employee invitations. Review HR form templates and employer settings before sending real invitations.

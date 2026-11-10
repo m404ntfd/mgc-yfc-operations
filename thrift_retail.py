@@ -187,7 +187,7 @@ def thrift_tag(c,cart,d):
         eligible=not tag['categories'] or line['category'] in tag['categories']
         rate=tag['bps'] if active and eligible and not line.get('promotion') else 0
         original=json.loads(json.dumps(line));discount=(line['subtotal']*rate+5000)//10000
-        line['subtotal']-=discount;line['tax']=(line['subtotal']*cart['settings']['tax_bps']+5000)//10000 if line['taxable'] else 0
+        line['subtotal']-=discount;line['tax']=catalog_tax(line,cart['settings']['tax_bps'])
         line['tag']=dict(name=tag['name'],color=tag['color'],discount=discount,bps=rate);line['tag_original']=original
 
 def thrift_cart_action(c,u,cart,path,d,finish):
@@ -217,7 +217,7 @@ def thrift_cart_action(c,u,cart,path,d,finish):
             if amount<=0:raise Problem('No eligible merchandise for this reward.')
             cart['reward_original']=json.loads(json.dumps(cart['lines']))
             for l,part in zip(targets,retail_allocate(amount,[l['subtotal'] for l in targets])):
-                l['subtotal']-=part;l['tax']=(l['subtotal']*cart['settings']['tax_bps']+5000)//10000 if l['taxable'] else 0
+                l['subtotal']-=part;l['tax']=catalog_tax(l,cart['settings']['tax_bps'])
             cart['reward']=dict(points=settings['reward_points'],amount=amount,loyalty_scope=stores_programs(c)['loyalty_scope'])
     retail_save_cart(c,cart);retail_event(c,cart['id'],u['name'],path,{k:v for k,v in d.items() if k not in ('request',)})
     return finish({'cart':cart},'Thrift sale updated')
