@@ -8,7 +8,7 @@ Saving a statement captures the current donor, organization, message, gifts and 
 
 Permissions: `view_giving` plus the applicable `manage_donors`, `record_gifts`, `adjust_gifts`, `manage_giving_plans`, `giving_statements`, or `giving_settings` grant. OFFICE access also uses its existing `use_pos` permission. Administrators retain access. All endpoints enforce permissions on the server.
 
-This is a development preview. Clover payments, secure payment-method enrollment, recurring billing, donor self-service, automatic monthly/January emails, statement delivery history, and processor reconciliation are not connected. Draft monthly commitments cannot be activated. Never put payment credentials, card numbers, or security codes in donor fields. Statements are previews, not delivery confirmations. Configure the organization identity and review wording and goods/services details before issuing statements.
+This is a development preview. Clover payments, secure payment-method enrollment, recurring billing, donor self-service, automatic monthly/January emails, and processor reconciliation are not connected. Draft monthly commitments cannot be activated. Never put payment credentials, card numbers, or security codes in donor fields. Statements are previews, not delivery confirmations. Configure the organization identity and review wording and goods/services details before issuing statements.
 
 Next integration: confirm Clover ecommerce/recurring eligibility and rates; add hosted card capture and token storage, consent records, signed webhook reconciliation and duplicate-charge prevention; then implement scheduled delivery, retry history, and approved monthly/annual templates.
 
@@ -22,7 +22,7 @@ Printed previews and saved copies retain their status labels and saved reference
 
 `GET /api/giving/donor_history?donor=...` requires both view_giving and manage_donors. Each successful new profile or edit records immutable before/after values, staff name, timestamp and revision in the same transaction as the profile and retry receipt. A retry does not add history twice. Invalid revisions and unknown edit IDs are rejected. Concurrent donor saves are serialized before checking the revision. Existing donors are unchanged during migration; their first subsequent edit captures the prior profile, without inventing earlier history. No profile deletion or merge is introduced.
 
-These endpoints are backend groundwork; the OFFICE interface does not yet display the directory or change history. The existing profile editor remains compatible. Validate with `python -m unittest test_giving_donors` in addition to the checks above.
+OFFICE now offers Profile history for staff with donor-management permission, showing before/after values, actor, timestamp and revision. It handles legacy empty histories, retryable failures and late responses after navigation. The existing profile editor remains compatible. Validate with `python -m unittest test_giving_donors` in addition to the checks above.
 
 ## Gift ledger corrections
 
@@ -35,3 +35,11 @@ The overview includes `replaces` and `replacement` gift IDs when linked. Current
 `POST /api/giving/plan` records each draft creation, edit or cancellation with its before and after values, revision, staff name and timestamp. The draft, history and retry receipt commit together. Retrying a save returns the original result. Edits require an existing draft ID and its current revision. Existing drafts keep their saved values and revisions, and the first subsequent edit captures the prior values.
 
 `GET /api/giving/plan_history?id=...` returns newest changes first and requires both `view_giving` and `manage_giving_plans`. The existing OFFICE editor can continue creating, editing and cancelling drafts. OFFICE monthly drafts include a View history action for staff with plan-management permission. It shows newest changes first with before/after values, revision, staff and timestamp. Donor names reflect current profiles and IDs retain the recorded association. Older drafts with no history are labelled explicitly. History loading supports retry and ignores responses after navigation or closing. Run `python -m unittest test_giving_plan_history_ui -v` for isolated browser coverage; run `python prepare_web_assets.py` to regenerate bundled application assets before running or packaging the application. Drafts carry no payment authorization.
+
+## Staff review and delivery preparation
+
+OFFICE donor rows include Giving history for staff with view_giving. History filters by year and exact fund, pages 25 entries at a time, and optionally includes voided entries. Received totals cover all matching pages and exclude voided gifts. Original/replacement references remain visible. Filters are read-only; this is not a public donor portal. Requests returning after a newer filter, navigation or closing are ignored.
+
+Saved statements include Review delivery preparation for staff with giving_statements and giving_delivery. Preparing delivery freezes the saved recipient; cancellation requires a reason and retains history. Duplicate preparation is prevented. Cancelled preparations cannot be reused; create a new saved copy if needed. Email sending remains disabled, and prepared/cancelled records are explicitly marked not sent.
+
+Review checks: python -m unittest test_giving_donor_review_ui test_giving_delivery_ui -v. The Giving workflow includes these alongside backend, full workflow, OFFICE navigation and populated upgrade/backup/rollback checks. Visual review of rendered production screens and live payment/email integration remain release gates for the complete donor platform.

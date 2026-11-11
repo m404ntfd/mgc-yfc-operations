@@ -23,7 +23,7 @@ async function givingOpen(){
   viewVersion++;
   root.innerHTML=`<p><strong>Clover: not connected.</strong> Live payments and automatic statement delivery are not enabled.</p><div class="flowToolbar">${tabs.map(([id,label])=>`<button type="button" data-tab="${id}" ${tab===id?'class="primary" aria-current="page"':''}>${label}</button>`).join('')}</div><div id="givingContent"></div>`;
   const area=root.querySelector('#givingContent');
-  if(tab==='donors')area.innerHTML=`${can('manage_donors')?'<button data-new="donor" type="button">Add donor</button>':''}`+table(['Donor','Email','Delivery',''],data.donors.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.email)}</td><td>${esc(x.delivery)}</td><td>${can('manage_donors')?`<button data-edit-donor="${x.id}">Edit</button>`:''}</td></tr>`));
+  if(tab==='donors')area.innerHTML=`${can('manage_donors')?'<button data-new="donor" type="button">Add donor</button>':''}`+table(['Donor','Email','Delivery',''],data.donors.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.email)}</td><td>${esc(x.delivery)}</td><td>${can('manage_donors')?`<button data-edit-donor="${x.id}">Edit</button> <button type="button" data-donor-history="${esc(x.id)}">Profile history</button>`:''} <button type="button" data-donor-gifts="${esc(x.id)}">Giving history</button></td></tr>`));
   if(tab==='gifts')area.innerHTML=`<p>Record gifts already received. This does not charge a card or update a store cash drawer.</p>${can('record_gifts')?'<button data-new="gift" type="button">Record received gift</button>':''}`+table(['Date','Donor','Fund','Amount','Reference','Status / history'],data.gifts.map(x=>`<tr tabindex="-1" data-gift-row="${esc(x.id)}"><td>${esc(x.day)}</td><td>${esc(x.donor_name)}</td><td>${esc(x.fund)}</td><td>${posMoney(x.amount)}</td><td>${esc(x.reference)}</td><td><p><small>Gift ID: ${esc(x.id)}</small></p>${x.replaces?`<p>Replaces <button type="button" data-gift-link="${esc(x.replaces)}">${esc(x.replaces)}</button></p>`:''}${x.replacement?`<p>Replaced by <button type="button" data-gift-link="${esc(x.replacement)}">${esc(x.replacement)}</button></p>`:''}<p>Recorded by ${esc(x.actor)}<br>${esc(x.at)}</p>${x.voided?`<strong>Voided</strong><p>${esc(x.correction.reason)}<br>By ${esc(x.correction.actor)}<br>${esc(x.correction.at)}</p>`:can('adjust_gifts')?`<button data-void="${x.id}">Void incorrect record</button>${can('record_gifts')?` <button type="button" data-correct-gift="${esc(x.id)}">Correct gift</button>`:''}`:'Recorded'}</td></tr>`));
   if(tab==='plans')area.innerHTML=`<p>Draft monthly commitments only. Saving a draft does not enroll or charge a donor. Secure donor authorization will be required when Clover is connected.</p>${can('manage_giving_plans')?'<button data-new="plan" type="button">Add monthly draft</button>':''}`+table(['Donor','Monthly amount','Billing day','Status',''],data.plans.map(x=>`<tr><td>${esc(donorName(x.donor))}</td><td>${posMoney(x.amount)}</td><td>${x.billing_day}</td><td>${esc(x.status)}</td><td>${can('manage_giving_plans')?`<button data-edit-plan="${x.id}">Edit draft</button> <button type="button" data-plan-history="${esc(x.id)}">View history</button>`:''}</td></tr>`));
   if(tab==='statements'){
@@ -90,6 +90,57 @@ async function givingOpen(){
    area.querySelector('#givingRetryDelivery').onclick=reload;
   }
  }
+
+ async function showDonorHistory(id){
+  if(!can('manage_donors'))return;
+  const version=++viewVersion,area=root.querySelector('#givingContent');
+  const heading=`<h3>Donor profile history</h3><p>${esc(donorName(id))}<br><small>Donor ID: ${esc(id)}</small></p><button type="button" data-cancel>Back to donors</button>`;
+  area.innerHTML=heading+'<p role="status">Loading profile history...</p>';
+  try{
+   const result=await api('giving/donor_history?donor='+encodeURIComponent(id));
+   if(version!==viewVersion||!d.isConnected)return;
+   const fields=[['name','Name'],['email','Email'],['address','Mailing address'],['delivery','Statement preference']];
+   area.innerHTML=heading+'<p>Newest changes first. These are the details recorded at each save.</p>'+(!result.history.length?'<p>No recorded changes yet. This profile may predate history tracking; its next saved change will record the prior values.</p>':result.history.map(entry=>
+    `<section class="givingDonorHistoryEntry"><h4>${entry.before?'Updated':'Created'} | Revision ${esc(String(entry.revision))}</h4><p>By ${esc(entry.actor)}<br>${esc(entry.at)}</p>`+
+    table(['Field','Before','After'],fields.map(([key,label])=>`<tr><th scope="row">${label}</th><td>${entry.before?esc(String(entry.before[key]??'')):'-'}</td><td>${esc(String(entry.after[key]??''))}</td></tr>`))+'</section>'
+   ).join(''));
+  }catch(e){
+   if(version!==viewVersion||!d.isConnected)return;
+   area.innerHTML=heading+`<p role="alert">${esc(e.message)}</p><button type="button" data-donor-history="${esc(id)}">Retry profile history</button>`;
+  }
+ }
+ function showDonorGifts(id){
+  const version=++viewVersion,area=root.querySelector('#givingContent');
+  let request=0,offset=0,filters={year:'',fund:'',include_voided:'false'};
+  const current=()=>version===viewVersion&&d.isConnected;
+  area.innerHTML=`<h3>Donor giving history</h3><p>${esc(donorName(id))}<br><small>Donor ID: ${esc(id)}</small></p><button type="button" data-cancel>Back to donors</button>
+   <form id="givingHistoryFilters"><label>Year (blank for all)<input name="year" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" placeholder="All years"></label>
+   <label>Exact fund / ministry (blank for all)<input name="fund" maxlength="100" placeholder="All funds"></label>
+   <label><input type="checkbox" name="include_voided"> Include voided entries</label><button type="submit">Apply filters</button></form>
+   <div id="givingGiftHistoryResults" aria-live="polite"></div>`;
+  const form=area.querySelector('form'),target=area.querySelector('#givingGiftHistoryResults');
+  const load=async()=>{
+   const ticket=++request;
+   target.innerHTML='<p role="status">Loading giving history...</p>';
+   try{
+    const query=new URLSearchParams({donor:id,...filters,limit:'25',offset:String(offset)});
+    const result=await api('giving/gift_history?'+query);
+    if(!current()||ticket!==request)return;
+    target.innerHTML=`<p><strong>${esc(String(result.total))} matching entries | Received total: ${posMoney(result.amount)}</strong><br>Totals cover all matching pages and exclude voided amounts.</p>`+
+     table(['Date','Fund','Amount','Reference','Status / links'],result.gifts.map(g=>`<tr><td>${esc(g.day)}</td><td>${esc(g.fund)}</td><td>${posMoney(g.amount)}</td><td>${esc(g.reference)}</td><td>${g.voided?'Voided - excluded from total':'Recorded'}<br><small>Gift ID: ${esc(g.id)}</small>${g.replaces?`<p>Replaces: ${esc(g.replaces)}</p>`:''}${g.replacement?`<p>Replaced by: ${esc(g.replacement)}</p>`:''}</td></tr>`))+
+     `<p>${result.total&&result.gifts.length?`Showing ${offset+1}-${offset+result.gifts.length} of ${result.total}`:'No matching gifts on this page.'}</p><button type="button" id="givingHistoryPrevious" ${offset===0?'disabled':''}>Previous page</button> <button type="button" id="givingHistoryNext" ${result.has_more?'':'disabled'}>Next page</button>`;
+    target.querySelector('#givingHistoryPrevious').onclick=()=>{offset=Math.max(0,offset-25);load();};
+    target.querySelector('#givingHistoryNext').onclick=()=>{offset+=25;load();};
+   }catch(e){
+    if(!current()||ticket!==request)return;
+    target.innerHTML=`<p role="alert">${esc(e.message)}</p><button type="button" id="givingHistoryRetry">Retry giving history</button>`;
+    target.querySelector('#givingHistoryRetry').onclick=load;
+   }
+  };
+  form.onsubmit=e=>{e.preventDefault();filters={year:form.elements.year.value.trim(),fund:form.elements.fund.value.trim(),include_voided:String(form.elements.include_voided.checked)};offset=0;changedForms.delete(form);load();};
+  load();
+ }
+
  async function showPlanHistory(id){
   if(!can('manage_giving_plans'))return;
   const version=++viewVersion,area=root.querySelector('#givingContent');
@@ -138,6 +189,8 @@ async function givingOpen(){
  root.onclick=async e=>{const b=e.target.closest('button');if(!b||busy)return;try{
   if(b.dataset.tab||b.hasAttribute('data-cancel')){if(pending)throw Error('Retry the pending save first.');const f=root.querySelector('form');if(f&&changedForms.has(f)&&!confirm('Discard unsaved changes?'))return;if(f)changedForms.delete(f);tab=b.dataset.tab||tab;render();}
   if(b.dataset.new){if(b.dataset.new!=='donor'&&!data.donors.length)throw Error('Add a donor first.');edit(b.dataset.new);}
+  if(b.dataset.donorHistory)await showDonorHistory(b.dataset.donorHistory);
+  if(b.dataset.donorGifts)showDonorGifts(b.dataset.donorGifts);
   if(b.dataset.editDonor)edit('donor',data.donors.find(x=>x.id===b.dataset.editDonor));
   if(b.dataset.correctGift)edit('replace_gift',data.gifts.find(x=>x.id===b.dataset.correctGift));
   if(b.dataset.giftLink){const row=[...root.querySelectorAll('[data-gift-row]')].find(x=>x.dataset.giftRow===b.dataset.giftLink);if(row){row.scrollIntoView({block:'center'});row.focus();}}
