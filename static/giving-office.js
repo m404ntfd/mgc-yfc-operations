@@ -32,19 +32,24 @@ async function givingOpen(){
    let statementRequest=0,historyRequest=0;
    const current=()=>version===viewVersion&&d.isConnected&&form.isConnected;
    const show=s=>{
+    form.hidden=!!s.saved;
+    const missing=['organization','ein','address'].filter(key=>!String(s.settings[key]||'').trim());
+    const setupNotice=missing.length?'<p role="note"><strong>Organization setup incomplete.</strong> Complete the organization name, EIN and mailing address in Giving Settings before issuing statements. Saved copies keep their original details; save a new copy after completing setup.</p>':'';
     const body=`<h2>${esc(s.settings.organization)}</h2><p>${esc(s.settings.address)}<br>EIN: ${esc(s.settings.ein||'Not configured')}</p><h3>Giving statement - ${esc(s.period)}</h3><p>${esc(s.donor.name)}<br>${esc(s.donor.address)}</p><p style="white-space:pre-wrap">${esc(s.message)}</p>`+table(['Date','Fund','Received','Goods/services value'],s.gifts.map(g=>`<tr><td>${esc(g.day)}</td><td>${esc(g.fund)}</td><td>${posMoney(g.amount)}</td><td>${posMoney(g.benefit_value)}</td></tr>`))+`<p><strong>Period received: ${posMoney(s.total)} | Year to date: ${posMoney(s.ytd)}</strong></p>`+s.gifts.map(g=>`<p>${esc(g.day)}: ${g.benefit?`${esc(g.benefit)} - estimated value ${posMoney(g.benefit_value)}.`:'No goods or services were provided in exchange for this contribution.'}</p>`).join('');
     const preview=area.querySelector('#givingStatementPreview');
     const status=(s.saved?`<p><strong>Saved statement - not sent</strong><br>Saved ${esc(s.created_at)} by ${esc(s.actor)}<br>Reference: ${esc(s.id)}</p>`:'<p><strong>Statement preview - not saved or sent</strong></p>');
-    preview.innerHTML=status+body+'<button type="button" id="givingPrint">Print / Save PDF</button>'+(s.saved?'':'<button type="button" id="givingSaveStatement">Save current statement copy</button>');
-    preview.querySelector('#givingPrint').onclick=()=>thriftPrint('Giving statement '+s.period,status+body);
+    preview.innerHTML=status+setupNotice+'<div class="flowToolbar" id="givingStatementActions"><button type="button" id="givingPrint">Print / Save PDF</button>'+(s.saved?'<button type="button" id="givingNewStatement">New statement preview</button>':'<button type="button" id="givingSaveStatement">Save current statement copy</button>')+'</div>'+body;
+    const newStatement=preview.querySelector('#givingNewStatement');
+    if(newStatement)newStatement.onclick=()=>{if(busy||pending)return;statementRequest++;preview.innerHTML='';form.hidden=false;form.elements.period.focus();};
+    preview.querySelector('#givingPrint').onclick=()=>thriftPrint('Giving statement '+s.period,status+setupNotice+body);
     if(s.saved&&can('giving_delivery')){
      const delivery=document.createElement('button');delivery.type='button';delivery.id='givingDelivery';delivery.textContent='Review delivery preparation';
-     delivery.onclick=()=>{if(busy||pending)return;if(changedForms.has(form)&&!confirm('Discard unsaved changes?'))return;changedForms.delete(form);showDelivery(s);};preview.append(delivery);
+     delivery.onclick=()=>{if(busy||pending)return;if(changedForms.has(form)&&!confirm('Discard unsaved changes?'))return;changedForms.delete(form);showDelivery(s);};preview.querySelector('#givingStatementActions').append(delivery);
     }
     const button=preview.querySelector('#givingSaveStatement');
     if(button)button.onclick=async()=>{try{const result=await save('statement_snapshot',{donor:s.donor.id,period:s.period});const fresh=root.querySelector('#givingStatement');fresh.elements.donor.value=s.donor.id;fresh.elements.period.value=s.period;await fresh.loadHistory();await fresh.showSaved(result.id);}catch(e){error(e);}};
    };
-   form.showSaved=async id=>{const request=++statementRequest,donor=form.elements.donor.value;const s=await api('giving/statement_snapshot?id='+encodeURIComponent(id));if(current()&&request===statementRequest&&form.elements.donor.value===donor)show(s);};
+   form.showSaved=async id=>{if(busy||pending)return;if(changedForms.has(form)&&!confirm('Discard unsaved statement criteria and view the saved copy?'))return;const request=++statementRequest,donor=form.elements.donor.value;const s=await api('giving/statement_snapshot?id='+encodeURIComponent(id));if(current()&&request===statementRequest&&form.elements.donor.value===donor){changedForms.delete(form);show(s);}};
    form.loadHistory=async()=>{
     const id=form.elements.donor.value,request=++historyRequest;
     if(!id){area.querySelector('#givingStatementHistory').textContent='Add a donor to create statements.';return;}
@@ -54,6 +59,7 @@ async function givingOpen(){
     target.innerHTML=table(['Period','Saved','Saved by','Total',''],history.statements.map(x=>`<tr><td>${esc(x.period)}</td><td>${esc(x.created_at)}</td><td>${esc(x.actor)}</td><td>${posMoney(x.total)}</td><td><button type="button" data-snapshot="${esc(x.id)}">View saved copy</button></td></tr>`));
     target.querySelectorAll('[data-snapshot]').forEach(b=>b.onclick=()=>form.showSaved(b.dataset.snapshot).catch(error));
    };
+   form.elements.period.oninput=()=>{statementRequest++;area.querySelector('#givingStatementPreview').innerHTML='';};
    form.elements.donor.onchange=()=>{statementRequest++;area.querySelector('#givingStatementPreview').innerHTML='';form.loadHistory().catch(error);};
    form.onsubmit=async e=>{e.preventDefault();const request=++statementRequest;try{const f=form.elements,s=await api('giving/statement?donor='+encodeURIComponent(f.donor.value)+'&period='+encodeURIComponent(f.period.value));if(current()&&request===statementRequest){show(s);changedForms.delete(form);}}catch(e){if(current()&&request===statementRequest)error(e);}};
    form.loadHistory().catch(error);
