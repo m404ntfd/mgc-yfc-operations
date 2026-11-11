@@ -12,6 +12,31 @@ class GivingTests(unittest.TestCase):
  def gift(self,**extra):
   data=dict(donor=self.d,day='2025-12-15',amount=5000,method='check',reference='Sample check',fund='Ministry',benefit='',benefit_value=0);data.update(extra)
   return self.post('gift',**data)
+
+ def test_statement_delivery_queue(self):
+  self.assertEqual(self.post('donor',id=self.d,revision=1,name='Sample Donor',email='donor@example.test',address='Test address',delivery='email')[0],200)
+  code,snapshot=self.post('statement_snapshot',donor=self.d,period='2025')
+  self.assertEqual(code,200)
+  request=uuid.uuid4().hex
+  code,queued=self.post('queue_statement',statement=snapshot['id'],request=request)
+  self.assertEqual(code,200)
+  self.assertEqual(self.post('queue_statement',statement=snapshot['id'],request=request),(200,queued))
+  self.assertEqual(self.post('queue_statement',statement=snapshot['id'])[0],409)
+  path='giving/statement_deliveries?statement='+snapshot['id']
+  code,history=self.f.call(path)
+  self.assertEqual(code,200)
+  self.assertFalse(history['sending_enabled'])
+  self.assertEqual(history['deliveries'][0]['recipient'],'donor@example.test')
+  self.assertEqual(history['deliveries'][0]['status'],'prepared')
+  employee=self.f.client('e')
+  self.f.call('login',dict(name='Employee',password='testpassword'),employee)
+  self.f.call('admin/permissions',dict(name='Employee',grants={'view_giving':True,'giving_statements':True},can_create=False,see_requests=False))
+  self.assertEqual(self.f.call(path,client=employee)[0],403)
+  self.assertEqual(self.f.call('giving/cancel_statement_delivery',dict(delivery=queued['id'],reason='No permission',request=uuid.uuid4().hex),employee)[0],403)
+  self.assertEqual(self.post('cancel_statement_delivery',delivery=queued['id'],reason='Wrong copy')[0],200)
+  self.assertEqual(self.f.call(path)[1]['deliveries'][0]['status'],'cancelled')
+  self.assertEqual(self.f.call('giving/statement_snapshot?id='+snapshot['id'])[1]['delivery'],'not_sent')
+
  def test_ledger_idempotency_void_and_statement_boundaries(self):
   request=uuid.uuid4().hex
   code,g=self.gift(request=request);self.assertEqual(code,200)

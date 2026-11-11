@@ -3598,6 +3598,7 @@ GIVING_PERMISSIONS = {
  'adjust_gifts':'Void or correct incorrect gift records',
  'manage_giving_plans':'Manage monthly giving drafts',
  'giving_statements':'Preview and print donor statements',
+ 'giving_delivery':'Prepare and cancel statement email deliveries',
  'giving_settings':'Manage giving and statement settings',
 }
 
@@ -3632,6 +3633,23 @@ CREATE TABLE IF NOT EXISTS giving_settings(id INTEGER PRIMARY KEY CHECK(id=1),re
 CREATE TABLE IF NOT EXISTS giving_requests(id TEXT PRIMARY KEY,actor TEXT NOT NULL,payload TEXT NOT NULL,result TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS giving_statements(id TEXT PRIMARY KEY,donor TEXT NOT NULL,period TEXT NOT NULL,created_at TEXT NOT NULL,actor TEXT NOT NULL,body TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS giving_statements_donor ON giving_statements(donor,created_at);
+CREATE TABLE IF NOT EXISTS giving_statement_deliveries(
+    id TEXT PRIMARY KEY,
+    statement TEXT NOT NULL UNIQUE REFERENCES giving_statements(id),
+    recipient TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    actor TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS giving_statement_delivery_cancellations(
+    delivery TEXT PRIMARY KEY REFERENCES giving_statement_deliveries(id),
+    reason TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    at TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS giving_deliveries_no_update BEFORE UPDATE ON giving_statement_deliveries BEGIN SELECT RAISE(ABORT,'Delivery preparation is immutable'); END;
+CREATE TRIGGER IF NOT EXISTS giving_deliveries_no_delete BEFORE DELETE ON giving_statement_deliveries BEGIN SELECT RAISE(ABORT,'Delivery preparation is immutable'); END;
+CREATE TRIGGER IF NOT EXISTS giving_delivery_cancellations_no_update BEFORE UPDATE ON giving_statement_delivery_cancellations BEGIN SELECT RAISE(ABORT,'Delivery cancellation is immutable'); END;
+CREATE TRIGGER IF NOT EXISTS giving_delivery_cancellations_no_delete BEFORE DELETE ON giving_statement_delivery_cancellations BEGIN SELECT RAISE(ABORT,'Delivery cancellation is immutable'); END;
 CREATE TRIGGER IF NOT EXISTS giving_statements_no_update BEFORE UPDATE ON giving_statements BEGIN SELECT RAISE(ABORT,'Saved statements are immutable'); END;
 CREATE TRIGGER IF NOT EXISTS giving_statements_no_delete BEFORE DELETE ON giving_statements BEGIN SELECT RAISE(ABORT,'Saved statements are immutable'); END;
 CREATE TRIGGER IF NOT EXISTS giving_gifts_no_update BEFORE UPDATE ON giving_gifts BEGIN SELECT RAISE(ABORT,'Gift history is immutable'); END;
@@ -3678,6 +3696,22 @@ def giving_config(c):
 
 def giving_get(c,u,path,q):
     giving_require(u)
+    if path=='statement_deliveries':
+        giving_require(u,'giving_statements')
+        giving_require(u,'giving_delivery')
+        statement=q.get('statement',[''])[0]
+        if not c.execute('SELECT 1 FROM giving_statements WHERE id=?',(statement,)).fetchone():
+            raise Problem('Saved statement not found.',404)
+        rows=c.execute('''SELECT d.*,x.reason,x.actor AS cancelled_by,x.at AS cancelled_at
+            FROM giving_statement_deliveries d
+            LEFT JOIN giving_statement_delivery_cancellations x ON x.delivery=d.id
+            WHERE d.statement=? ORDER BY d.created_at,d.id''',(statement,))
+        return {'sending_enabled':False,'deliveries':[
+            dict(id=r['id'],statement=r['statement'],recipient=r['recipient'],
+                 created_at=r['created_at'],actor=r['actor'],
+                 status='cancelled' if r['cancelled_at'] else 'prepared',
+                 cancellation={'reason':r['reason'],'actor':r['cancelled_by'],'at':r['cancelled_at']} if r['cancelled_at'] else None)
+            for r in rows]}
     if path=='donor':
         return {'donor':giving_profile(c,q.get('id',[''])[0])}
     if path=='donor_history':
@@ -3761,12 +3795,16 @@ def giving_void(c,u,ident,reason,now):
 
 def giving_post(c,u,path,d):
     permissions={'donor':'manage_donors','gift':'record_gifts','void':'adjust_gifts','replace_gift':'adjust_gifts','plan':'manage_giving_plans','settings':'giving_settings','statement_snapshot':'giving_statements'}
+    permissions.update(queue_statement='giving_delivery',cancel_statement_delivery='giving_delivery')
     if path not in permissions:raise Problem('Giving endpoint not found.',404)
     giving_require(u,permissions[path])
     if path=='replace_gift':giving_require(u,'record_gifts')
+    if path in ('queue_statement','cancel_statement_delivery'):giving_require(u,'giving_statements')
     allowed={'donor':{'id','revision','name','email','address','delivery'},'gift':{'donor','day','amount','method','reference','fund','benefit','benefit_value'},'void':{'gift','reason'},'plan':{'id','revision','donor','amount','start','billing_day','fund','status'},'settings':{'revision','organization','ein','address','monthly_message','annual_message'}}
     allowed['replace_gift']=allowed['gift']|allowed['void']
     allowed['statement_snapshot']={'donor','period'}
+    allowed['queue_statement']={'statement'}
+    allowed['cancel_statement_delivery']={'delivery','reason'}
     if set(d)-allowed[path]-{'request'}:raise Problem('Unsupported fields. Do not enter card data here.')
     request=giving_text(d,'request',32,True)
     if not re.fullmatch('[0-9a-f]{32}',request):raise Problem('A unique request is required.')
@@ -3779,7 +3817,30 @@ def giving_post(c,u,path,d):
         return json.loads(old['result'])
     now=dt.datetime.now().astimezone().isoformat(timespec='seconds');ident=giving_text(d,'id',32) or secrets.token_hex(16)
     if not re.fullmatch('[0-9a-f]{32}',ident):raise Problem('Invalid record identifier.')
-    if path=='statement_snapshot':
+    if path=='queue_statement':
+        statement=giving_text(d,'statement',32,True)
+        row=c.execute('SELECT body FROM giving_statements WHERE id=?',(statement,)).fetchone()
+        if not row:raise Problem('Saved statement not found.',404)
+        snapshot=json.loads(row['body'])
+        if snapshot['donor']['delivery']!='email':
+            raise Problem('This saved statement has a print preference. Save a new copy with email delivery selected.')
+        recipient=snapshot['donor']['email']
+        if not recipient or '\r' in recipient or '\n' in recipient:
+            raise Problem('The saved statement needs a valid recipient email address.')
+        customer_email(recipient)
+        previous=c.execute('SELECT id FROM giving_statement_deliveries WHERE statement=?',(statement,)).fetchone()
+        if previous:
+            raise Problem('This saved statement already has a delivery record. Use its existing record or save a new statement copy.',409)
+        c.execute('INSERT INTO giving_statement_deliveries VALUES(?,?,?,?,?)',(ident,statement,recipient,now,u['name']))
+    elif path=='cancel_statement_delivery':
+        ident=giving_text(d,'delivery',32,True)
+        reason=giving_text(d,'reason',500,True)
+        if not c.execute('SELECT 1 FROM giving_statement_deliveries WHERE id=?',(ident,)).fetchone():
+            raise Problem('Statement delivery not found.',404)
+        if c.execute('SELECT 1 FROM giving_statement_delivery_cancellations WHERE delivery=?',(ident,)).fetchone():
+            raise Problem('Statement delivery is already cancelled.',409)
+        c.execute('INSERT INTO giving_statement_delivery_cancellations VALUES(?,?,?,?)',(ident,reason,u['name'],now))
+    elif path=='statement_snapshot':
         donor=giving_text(d,'donor',32,True);period=giving_text(d,'period',7,True)
         body=giving_get(c,u,'statement',{'donor':[donor],'period':[period]})
         body.update(id=ident,created_at=now,actor=u['name'],preview=False,saved=True,delivery='not_sent')
@@ -3845,6 +3906,7 @@ def giving_post(c,u,path,d):
     c.execute('INSERT INTO audit VALUES(?,?,?,?)',(now,u['name'],'Giving '+path, str(ident)))
     c.commit()
     return result
+
 
 # END GIVING
 
