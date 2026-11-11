@@ -27,6 +27,37 @@ class GivingTests(unittest.TestCase):
   with server.connect() as c:
    self.assertEqual(c.execute('SELECT COUNT(*) FROM giving_gifts').fetchone()[0],2)
    with self.assertRaises(sqlite3.IntegrityError):c.execute('DELETE FROM giving_gifts')
+ def test_replace_gift_is_atomic_and_preserves_saved_statements(self):
+  original=self.gift()[1]['id']
+  saved=self.post('statement_snapshot',donor=self.d,period='2025')[1]['id']
+  request=uuid.uuid4().hex
+  data=dict(gift=original,reason='Wrong amount',donor=self.d,day='2025-12-15',amount=6000,
+            method='check',reference='Sample check',fund='Ministry',benefit='',benefit_value=0)
+  ledger=lambda:{g['id']:g for g in self.f.call('giving/overview')[1]['gifts']}
+  self.assertEqual(self.post('replace_gift',**dict(data,amount=0))[0],400)
+  self.assertEqual(self.post('replace_gift',**dict(data,reason=''))[0],400)
+  self.assertFalse(ledger()[original]['voided'])
+  employee=self.f.client('e')
+  self.f.call('login',dict(name='Employee',password='testpassword'),employee)
+  for grant in ('adjust_gifts','record_gifts'):
+   self.f.call('admin/permissions',dict(name='Employee',grants={'view_giving':True,grant:True},can_create=False,see_requests=False))
+   self.assertEqual(self.f.call('giving/replace_gift',dict(data,request=request),employee)[0],403)
+  code,replacement=self.post('replace_gift',request=request,**data)
+  self.assertEqual(code,200)
+  self.assertEqual(self.post('replace_gift',request=request,**data)[1],replacement)
+  self.assertEqual(self.post('replace_gift',**data)[0],409)
+  self.assertEqual(self.post('void',gift=original,reason='Already corrected')[0],409)
+  gifts=ledger()
+  self.assertEqual(len(gifts),2)
+  self.assertEqual(gifts[original]['amount'],5000)
+  self.assertEqual(gifts[original]['replacement'],replacement['id'])
+  self.assertEqual(gifts[original]['correction']['reason'],'Wrong amount')
+  self.assertEqual(gifts[replacement['id']]['replaces'],original)
+  self.assertEqual(self.f.call('giving/statement?donor='+self.d+'&period=2025-12')[1]['total'],6000)
+  self.assertEqual(self.f.call('giving/statement_snapshot?id='+saved)[1]['total'],5000)
+  with server.connect() as c:
+   with self.assertRaises(sqlite3.IntegrityError):c.execute('DELETE FROM giving_gift_replacements')
+
  def test_permissions_and_validation(self):
   e=self.f.client('e');self.f.call('login',dict(name='Employee',password='testpassword'),e)
   self.assertEqual(self.f.call('giving/overview',client=e)[0],403)
