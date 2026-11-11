@@ -23,3 +23,9 @@ Printed previews and saved copies retain their status labels and saved reference
 `GET /api/giving/donor_history?donor=...` requires both view_giving and manage_donors. Each successful new profile or edit records immutable before/after values, staff name, timestamp and revision in the same transaction as the profile and retry receipt. A retry does not add history twice. Invalid revisions and unknown edit IDs are rejected. Concurrent donor saves are serialized before checking the revision. Existing donors are unchanged during migration; their first subsequent edit captures the prior profile, without inventing earlier history. No profile deletion or merge is introduced.
 
 These endpoints are backend groundwork; the OFFICE interface does not yet display the directory or change history. The existing profile editor remains compatible. Validate with `python -m unittest test_giving_donors` in addition to the checks above.
+
+## Gift ledger corrections
+
+`POST /api/giving/replace_gift` takes the same fields as a received gift plus the original gift ID (`gift`) and a correction `reason`. It requires `view_giving`, `record_gifts`, and `adjust_gifts`. The original entry, its void, the replacement and the link between them are preserved in the ledger. The void, replacement, audit entry and retry receipt commit together. A repeated request returns the same replacement ID. An original that is already voided returns a conflict. Use `POST /api/giving/void` for a correction that requires no replacement.
+
+The overview includes `replaces` and `replacement` gift IDs when linked. Current statements include the replacement according to its donor and gift date. Saved statement copies retain the original entries and totals. The replacement endpoint is ready for an OFFICE correction form.

@@ -3595,7 +3595,7 @@ GIVING_PERMISSIONS = {
  'view_giving':'View donors and giving history',
  'manage_donors':'Create and edit donor profiles',
  'record_gifts':'Record gifts received outside this application',
- 'adjust_gifts':'Void incorrect gift records',
+ 'adjust_gifts':'Void or correct incorrect gift records',
  'manage_giving_plans':'Manage monthly giving drafts',
  'giving_statements':'Preview and print donor statements',
  'giving_settings':'Manage giving and statement settings',
@@ -3610,6 +3610,13 @@ CREATE TRIGGER IF NOT EXISTS giving_donor_history_no_delete BEFORE DELETE ON giv
 CREATE TABLE IF NOT EXISTS giving_gifts(id TEXT PRIMARY KEY,donor TEXT NOT NULL,day TEXT NOT NULL,amount INTEGER NOT NULL CHECK(amount>0),body TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS giving_gifts_donor_day ON giving_gifts(donor,day);
 CREATE TABLE IF NOT EXISTS giving_voids(gift TEXT PRIMARY KEY,reason TEXT NOT NULL,actor TEXT NOT NULL,at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS giving_gift_replacements(
+    original TEXT PRIMARY KEY NOT NULL REFERENCES giving_voids(gift),
+    replacement TEXT UNIQUE NOT NULL REFERENCES giving_gifts(id),
+    CHECK(original<>replacement)
+);
+CREATE TRIGGER IF NOT EXISTS giving_gift_replacements_no_update BEFORE UPDATE ON giving_gift_replacements BEGIN SELECT RAISE(ABORT,'Gift replacement history is immutable'); END;
+CREATE TRIGGER IF NOT EXISTS giving_gift_replacements_no_delete BEFORE DELETE ON giving_gift_replacements BEGIN SELECT RAISE(ABORT,'Gift replacement history is immutable'); END;
 CREATE TABLE IF NOT EXISTS giving_plans(id TEXT PRIMARY KEY,revision INTEGER NOT NULL,body TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS giving_settings(id INTEGER PRIMARY KEY CHECK(id=1),revision INTEGER NOT NULL,body TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS giving_requests(id TEXT PRIMARY KEY,actor TEXT NOT NULL,payload TEXT NOT NULL,result TEXT NOT NULL);
@@ -3691,8 +3698,15 @@ def giving_get(c,u,path,q):
     if path=='overview':
         donors=[dict(json.loads(r['body']),id=r['id'],revision=r['revision']) for r in c.execute('SELECT * FROM giving_donors')]
         gifts=[dict(json.loads(r['body']),id=r['id'],voided=bool(r['voided']),
+          replaces=r['original'],replacement=r['replacement'],
           correction={'reason':r['void_reason'],'actor':r['void_actor'],'at':r['void_at']} if r['voided'] else None)
-          for r in c.execute('SELECT g.*,v.gift AS voided,v.reason AS void_reason,v.actor AS void_actor,v.at AS void_at FROM giving_gifts g LEFT JOIN giving_voids v ON v.gift=g.id ORDER BY g.day DESC,g.id')]
+          for r in c.execute('''SELECT g.*,v.gift AS voided,v.reason AS void_reason,v.actor AS void_actor,v.at AS void_at,
+              outgoing.replacement,incoming.original
+          FROM giving_gifts g
+          LEFT JOIN giving_voids v ON v.gift=g.id
+          LEFT JOIN giving_gift_replacements outgoing ON outgoing.original=g.id
+          LEFT JOIN giving_gift_replacements incoming ON incoming.replacement=g.id
+          ORDER BY g.day DESC,g.id''')]
         plans=[dict(json.loads(r['body']),id=r['id'],revision=r['revision']) for r in c.execute('SELECT * FROM giving_plans')]
         return {'donors':sorted(donors,key=lambda x:x['name'].casefold()),'gifts':gifts,'plans':plans,
           'processing':'not_connected','delivery':'not_configured','settings':giving_config(c) if has_permission(u,'giving_settings') else None}
@@ -3704,27 +3718,42 @@ def giving_get(c,u,path,q):
             start=dt.date.fromisoformat(period+'-01' if len(period)==7 else period+'-01-01')
             end=dt.date(start.year+1,1,1) if len(period)==4 or start.month==12 else dt.date(start.year,start.month+1,1)
         except ValueError:raise Problem('Choose a valid statement period.')
-        rows=c.execute('SELECT g.* FROM giving_gifts g LEFT JOIN giving_voids v ON v.gift=g.id WHERE g.donor=? AND g.day>=? AND g.day<? AND v.gift IS NULL ORDER BY g.day,g.id',(donor['id'],start.isoformat(),end.isoformat())).fetchall()
-        gifts=[dict(json.loads(r['body']),id=r['id']) for r in rows]
-        ytd=c.execute('SELECT COALESCE(SUM(g.amount),0) FROM giving_gifts g LEFT JOIN giving_voids v ON v.gift=g.id WHERE g.donor=? AND g.day>=? AND g.day<? AND v.gift IS NULL',(donor['id'],f'{start.year}-01-01',end.isoformat())).fetchone()[0]
+        rows=c.execute("""
+            SELECT g.* FROM giving_gifts g LEFT JOIN giving_voids v ON v.gift=g.id
+            WHERE g.donor=? AND g.day>=? AND g.day<? AND v.gift IS NULL
+            ORDER BY g.day,g.id
+        """,(donor['id'],f'{start.year:04d}-01-01',end.isoformat())).fetchall()
+        first_day=start.isoformat()
+        gifts=[dict(json.loads(r['body']),id=r['id']) for r in rows if r['day']>=first_day]
+        ytd=sum(r['amount'] for r in rows)
         settings=giving_config(c)
         return {'donor':donor,'period':period,'gifts':gifts,'total':sum(g['amount'] for g in gifts),'ytd':ytd,'settings':settings,'message':settings['monthly_message' if len(period)==7 else 'annual_message'],'preview':True}
     raise Problem('Giving endpoint not found.',404)
 
+def giving_void(c,u,ident,reason,now):
+    if not c.execute('SELECT 1 FROM giving_gifts WHERE id=?',(ident,)).fetchone():
+        raise Problem('Gift not found.',404)
+    if c.execute('SELECT 1 FROM giving_voids WHERE gift=?',(ident,)).fetchone():
+        raise Problem('Gift already voided.',409)
+    c.execute('INSERT INTO giving_voids VALUES(?,?,?,?)',(ident,reason,u['name'],now))
+
 def giving_post(c,u,path,d):
-    permissions={'donor':'manage_donors','gift':'record_gifts','void':'adjust_gifts','plan':'manage_giving_plans','settings':'giving_settings','statement_snapshot':'giving_statements'}
+    permissions={'donor':'manage_donors','gift':'record_gifts','void':'adjust_gifts','replace_gift':'adjust_gifts','plan':'manage_giving_plans','settings':'giving_settings','statement_snapshot':'giving_statements'}
     if path not in permissions:raise Problem('Giving endpoint not found.',404)
     giving_require(u,permissions[path])
+    if path=='replace_gift':giving_require(u,'record_gifts')
     allowed={'donor':{'id','revision','name','email','address','delivery'},'gift':{'donor','day','amount','method','reference','fund','benefit','benefit_value'},'void':{'gift','reason'},'plan':{'id','revision','donor','amount','start','billing_day','fund','status'},'settings':{'revision','organization','ein','address','monthly_message','annual_message'}}
+    allowed['replace_gift']=allowed['gift']|allowed['void']
     allowed['statement_snapshot']={'donor','period'}
     if set(d)-allowed[path]-{'request'}:raise Problem('Unsupported fields. Do not enter card data here.')
     request=giving_text(d,'request',32,True)
     if not re.fullmatch('[0-9a-f]{32}',request):raise Problem('A unique request is required.')
     actor=u.get('receipt_owner') or u['name'];payload=json.dumps([path,d],sort_keys=True)
-    if path in ('statement_snapshot','donor'):c.execute('BEGIN IMMEDIATE')
+    c.execute('BEGIN IMMEDIATE')
     old=c.execute('SELECT * FROM giving_requests WHERE id=?',(request,)).fetchone()
     if old:
         if old['actor']!=actor or old['payload']!=payload:raise Problem('Request already used for another action.',409)
+        c.commit()
         return json.loads(old['result'])
     now=dt.datetime.now().astimezone().isoformat(timespec='seconds');ident=giving_text(d,'id',32) or secrets.token_hex(16)
     if not re.fullmatch('[0-9a-f]{32}',ident):raise Problem('Invalid record identifier.')
@@ -3750,7 +3779,7 @@ def giving_post(c,u,path,d):
     elif path=='settings':
         body={k:giving_text(d,k,limit,k=='organization') for k,limit in [('organization',200),('ein',20),('address',500),('monthly_message',2000),('annual_message',2000)]}
         table='giving_settings';ident=1
-    elif path=='gift':
+    elif path in ('gift','replace_gift'):
         donor=giving_profile(c,giving_text(d,'donor',32,True));amount=giving_amount(d);day=giving_day(d,'day')
         if day>dt.date.today().isoformat():raise Problem('Received gifts cannot have a future date.')
         method=giving_text(d,'method',30,True)
@@ -3759,11 +3788,14 @@ def giving_post(c,u,path,d):
         if value>amount or (value>0 and not benefit):raise Problem('Describe goods or services and enter a value no greater than the payment.')
         body={'donor':donor['id'],'donor_name':donor['name'],'day':day,'amount':amount,'method':method,'reference':giving_text(d,'reference',200,True),'fund':giving_text(d,'fund',100,True),'benefit':benefit,'benefit_value':value,'actor':u['name'],'at':now}
         c.execute('INSERT INTO giving_gifts VALUES(?,?,?,?,?)',(ident,donor['id'],day,amount,json.dumps(body)))
+        if path=='replace_gift':
+            original=giving_text(d,'gift',32,True)
+            reason=giving_text(d,'reason',500,True)
+            giving_void(c,u,original,reason,now)
+            c.execute('INSERT INTO giving_gift_replacements VALUES(?,?)',(original,ident))
     else:
-        ident=giving_text(d,'gift',32,True);reason=giving_text(d,'reason',500,True)
-        if not c.execute('SELECT 1 FROM giving_gifts WHERE id=?',(ident,)).fetchone():raise Problem('Gift not found.',404)
-        if c.execute('SELECT 1 FROM giving_voids WHERE gift=?',(ident,)).fetchone():raise Problem('Gift already voided.',409)
-        c.execute('INSERT INTO giving_voids VALUES(?,?,?,?)',(ident,reason,u['name'],now))
+        ident=giving_text(d,'gift',32,True)
+        giving_void(c,u,ident,giving_text(d,'reason',500,True),now)
     if path in ('donor','plan','settings'):
         old=c.execute('SELECT revision FROM '+table+' WHERE id=?',(ident,)).fetchone();revision=old['revision'] if old else 0
         if d.get('revision',0)!=revision:raise Problem('This record changed. Reload before saving.',409)
