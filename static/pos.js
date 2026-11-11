@@ -1670,7 +1670,7 @@ if (officeMode) (() => {
  style.textContent = `
  .retailOffice{--office-status-height:26px}
  .retailOffice .workspace{height:calc(100vh - var(--office-topbar-height,82px) - var(--office-status-height))}
- #officeStatusBar{box-sizing:border-box;position:fixed;inset:auto 0 0;z-index:100;height:var(--office-status-height);display:flex;align-items:center;gap:18px;padding:0 12px;background:var(--rt-panel,#edf2f7);color:var(--rt-text,#223248);border-top:1px solid var(--rt-border,#bccadb);font:12px/1.3 "Segoe UI",sans-serif;white-space:nowrap}
+ #officeStatusBar{box-sizing:border-box;position:fixed;inset:auto 0 0;z-index:100;height:var(--office-status-height);display:flex;align-items:center;gap:18px;padding:0 12px;background:var(--rt-surface,#edf2f7);color:var(--rt-text,#223248);border-top:1px solid var(--rt-border,#bccadb);font:12px/1.3 "Segoe UI",sans-serif;white-space:nowrap}
  #officeStatusBar .statusIdentity{overflow:hidden;text-overflow:ellipsis;min-width:40px;flex:1}
  #officeStatusBar .statusConnection::before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;background:#9a6700;margin-right:6px}
  #officeStatusBar[data-state=connected] .statusConnection::before{background:#18804b}
