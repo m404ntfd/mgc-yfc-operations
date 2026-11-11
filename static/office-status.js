@@ -38,7 +38,7 @@ if (officeMode) (() => {
  }
  const observer=new MutationObserver(refresh);
  const existing=document.getElementById('connection');if(existing)observer.observe(existing,{childList:true,subtree:true,characterData:true});
- window.addEventListener('offline',refresh);window.addEventListener('online',refresh);
+ window.addEventListener('offline',refresh);window.addEventListener('online',()=>{if(existing)existing.textContent='Connecting…';refresh();});
  window.addEventListener('pywebviewready',readNative);
  refresh();readNative();setInterval(refresh,1000);
 })();

@@ -29,6 +29,8 @@ class OfficeStatusTests(unittest.TestCase):
    page.wait_for_function("(first)=>document.querySelector('#officeStatusBar time').dateTime!==first",arg=first)
    page.evaluate("document.getElementById('connection').textContent='Connection interrupted'")
    expect(bar).to_have_attribute('data-state','disconnected')
+   page.evaluate("window.dispatchEvent(new Event('online'))")
+   expect(bar).to_have_attribute('data-state','connecting')
    page.evaluate("user=null;document.getElementById('connection').textContent='Connected to Operations'")
    expect(bar).to_contain_text('Not signed in')
    expect(bar).to_have_attribute('data-state','connected')
