@@ -1,0 +1,40 @@
+name: OFFICE Giving preview checks
+on:
+  pull_request:
+    paths:
+      - 'giving.py'
+      - 'server.py'
+      - 'static/**'
+      - 'prepare_web_assets.py'
+      - 'test_giving*'
+      - '.github/workflows/giving-preview.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  giving:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -r requirements-push.txt cryptography playwright
+      - run: python -m playwright install --with-deps chromium
+      - run: python prepare_web_assets.py
+      - run: node --check static/pos.js
+      - run: python -m unittest test_giving test_giving_storage test_data_integrity test_startup_updates
+      - run: python test_giving_ui.py
+      - run: python test_office_navigation_ui.py
+      - uses: actions/checkout@v4
+        with:
+          ref: 25e37aeba8bd9081b8bd525366d4715e45f938a4
+          path: .giving-upgrade-baseline
+      - name: Verify populated upgrade, backup and rollback
+        run: |
+          RETAIL_BASE_SOURCE="$GITHUB_WORKSPACE/.giving-upgrade-baseline" python test_giving_upgrade.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: office-giving-previews
+          path: output/preview/OFFICE-Giving-*.png

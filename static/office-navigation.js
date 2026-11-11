@@ -4,11 +4,13 @@ const officeNavigationSections=[
  ['products','Products','▦','Items, pricing, donation intake and product organization.'],
  ['sales','Sales','＄','Payment rules, transactions, refunds and cash drawers.'],
  ['accounts','Customers','◎','Customer accounts, rewards and customer communications.'],
+ ['giving','Giving','♥','Donors, received gifts, monthly giving and statements.'],
  ['staff','Staff','♙','Users, permissions, onboarding and timekeeping.'],
  ['reports','Reports','▥','Sales, store activity and labor reports.'],
  ['system','System','⚙','Stores, checkout screens, printers, computers and updates.']
 ];
 const officeNavigationGroups=[
+ {section:"giving",id:"giving",title:"Donor management",description:"Keep ministry giving separate from store sales.",actions:["giving-workspace"]},
  {section:'products',id:'items',title:'Items & pricing',description:'Create products, manage prices and receive donated stock.',actions:['catalog','bundles','availability','bulk-catalog','thrift-intake']},
  {section:'products',id:'organization',title:'Product organization',description:'Revenue Centers → Departments → Sub Departments.',actions:['revenue-centers','departments','sub-departments']},
  {section:'sales',id:'policies',title:'Taxes & payment rules',description:'Keep taxes, discounts, surcharges and cash settings separate.',actions:['taxes','cash-rules','discount-rules','surcharge-settings','card-future-settings']},

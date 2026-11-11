@@ -23,6 +23,7 @@ def prepare(root=None):
   if filename=='pos.js':content=re.sub(r'// BEGIN CATALOG EDITOR.*?// END CATALOG EDITOR',lambda _: '// BEGIN CATALOG EDITOR\n'+(root/'static/catalog-editor.js').read_text(encoding='utf-8')+'\n// END CATALOG EDITOR',content,flags=re.S)
   if filename=='pos.js':content=re.sub(r'\n*// BEGIN CASH ADVANCES.*?// END CASH ADVANCES\n*','\n',content,flags=re.S).rstrip()+'\n// BEGIN CASH ADVANCES\n'+(root/'static/cash-advances.js').read_text(encoding='utf-8')+'\n// END CASH ADVANCES\n'
   if filename=='pos.js':content=re.sub(r'\n*// BEGIN OFFICE UPDATES.*?// END OFFICE UPDATES\n*','\n',content,flags=re.S).rstrip()+'\n// BEGIN OFFICE UPDATES\n'+(root/'static/office-updates.js').read_text(encoding='utf-8')+'\n// END OFFICE UPDATES\n'
+  if filename=='pos.js':content=re.sub(r'\n*// BEGIN GIVING UI.*?// END GIVING UI\n*','\n',content,flags=re.S).rstrip()+'\n// BEGIN GIVING UI\n'+(root/'static/giving-office.js').read_text(encoding='utf-8')+'\n// END GIVING UI\n'
   if filename=='pos.js':content=re.sub(r'\n*// BEGIN OFFICE NAVIGATION.*?// END OFFICE NAVIGATION\n*','\n',content,flags=re.S).rstrip()+'\n// BEGIN OFFICE NAVIGATION\n'+(root/'static/office-navigation.js').read_text(encoding='utf-8')+'\n// END OFFICE NAVIGATION\n'
   if filename=='pos.js':content=re.sub(r'\n*// BEGIN OFFICE SEARCH.*?// END OFFICE SEARCH\n*','\n',content,flags=re.S).rstrip()+'\n// BEGIN OFFICE SEARCH\n'+(root/'static/office-search.js').read_text(encoding='utf-8')+'\n// END OFFICE SEARCH\n'
   if filename=='pos.js':content=re.sub(r'\n*// BEGIN DESK TOUCH.*?// END DESK TOUCH\n*','\n',content,flags=re.S).rstrip()+'\n// BEGIN DESK TOUCH\n'+(root/'static/desk-touch.js').read_text(encoding='utf-8-sig')+'\n// END DESK TOUCH\n'
@@ -49,5 +50,6 @@ def prepare(root=None):
  source=re.sub(r'^HR_REFERENCE_FORMS=.* # prepared HR reference forms$',lambda _: 'HR_REFERENCE_FORMS='+repr([item for item in json.loads((root/'assets/hr-reference-forms.json').read_text(encoding='utf-8')) if item['kind']=='deposit'])+' # prepared HR reference forms',source,flags=re.M)
  source=re.sub(r'# BEGIN HR BROWSER.*?# END HR BROWSER',lambda _: '# BEGIN HR BROWSER\n'+(root/'hr_browser.py').read_text(encoding='utf-8')+'\n# END HR BROWSER',source,flags=re.S)
  source=re.sub(r'^HR_SOURCE_FORMS=.* # prepared HR source forms$',lambda _: 'HR_SOURCE_FORMS='+repr(json.loads((root/'assets/hr-source-forms.json').read_text(encoding='utf-8')))+' # prepared HR source forms',source,flags=re.M)
+ source=re.sub(r'# BEGIN GIVING.*?# END GIVING',lambda _: '# BEGIN GIVING\n'+(root/'giving.py').read_text(encoding='utf-8')+'\n# END GIVING',source,flags=re.S)
  path.write_text(source,encoding='utf-8')
 if __name__=='__main__':prepare()
