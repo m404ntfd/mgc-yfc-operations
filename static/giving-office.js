@@ -1,5 +1,5 @@
 // Giving is separate from retail sales, inventory intake and store credit.
-officeCards.push({section:'giving',action:'giving-workspace',title:'Donors & gifts',description:'Donor records, received gifts, monthly drafts and statement previews.',icon:'♥',permission:'view_giving'});
+officeCards.push({section:'giving',action:'giving-workspace',title:'Donors & gifts',description:'Donor records, received gifts, monthly drafts and statement previews.',icon:'',permission:'view_giving'});
 const beforeGivingAction=officeAction;
 officeAction=async function(action){
  if(action!=='giving-workspace')return beforeGivingAction(action);
@@ -9,7 +9,7 @@ officeAction=async function(action){
 async function givingOpen(){
  const data=await api('giving/overview');
  const d=thriftModal('Giving','<section id="givingWorkspace"></section>');d.id='givingDialog';
- const root=d.querySelector('#givingWorkspace');let tab='donors',busy=false,pending=null;
+ const root=d.querySelector('#givingWorkspace');let tab='donors',busy=false,pending=null,viewVersion=0;
  const close=()=>{if(busy)return;if(pending){error(Error('Retry the pending save before closing.'));return;}if(root.querySelector('form')&&changedForms.has(root.querySelector('form'))&&!confirm('Discard unsaved giving changes?'))return;root.querySelectorAll('form').forEach(f=>changedForms.delete(f));thriftClose(d);};
  d.querySelector('.flowClose').onclick=close;d.oncancel=e=>{e.preventDefault();close();};
  const error=e=>d.querySelector('.flowError').textContent=e.message;
@@ -20,18 +20,19 @@ async function givingOpen(){
  const donorName=id=>data.donors.find(x=>x.id===id)?.name||'Unknown donor';
  const tabs=[['donors','Donors'],['gifts','Received gifts'],['plans','Monthly giving'],...(can('giving_statements')?[['statements','Statements']]:[]),...(can('giving_settings')?[['settings','Settings']]:[])];
  function render(){
+  viewVersion++;
   root.innerHTML=`<p><strong>Clover: not connected.</strong> Live payments and automatic statement delivery are not enabled.</p><div class="flowToolbar">${tabs.map(([id,label])=>`<button type="button" data-tab="${id}" ${tab===id?'class="primary" aria-current="page"':''}>${label}</button>`).join('')}</div><div id="givingContent"></div>`;
   const area=root.querySelector('#givingContent');
   if(tab==='donors')area.innerHTML=`${can('manage_donors')?'<button data-new="donor" type="button">Add donor</button>':''}`+table(['Donor','Email','Delivery',''],data.donors.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.email)}</td><td>${esc(x.delivery)}</td><td>${can('manage_donors')?`<button data-edit-donor="${x.id}">Edit</button>`:''}</td></tr>`));
   if(tab==='gifts')area.innerHTML=`<p>Record gifts already received. This does not charge a card or update a store cash drawer.</p>${can('record_gifts')?'<button data-new="gift" type="button">Record received gift</button>':''}`+table(['Date','Donor','Fund','Amount','Reference','Status / history'],data.gifts.map(x=>`<tr><td>${esc(x.day)}</td><td>${esc(x.donor_name)}</td><td>${esc(x.fund)}</td><td>${posMoney(x.amount)}</td><td>${esc(x.reference)}</td><td><p>Recorded by ${esc(x.actor)}<br>${esc(x.at)}</p>${x.voided?`<strong>Voided</strong><p>${esc(x.correction.reason)}<br>By ${esc(x.correction.actor)}<br>${esc(x.correction.at)}</p>`:can('adjust_gifts')?`<button data-void="${x.id}">Void incorrect record</button>`:'Recorded'}</td></tr>`));
-  if(tab==='plans')area.innerHTML=`<p>Draft monthly commitments only. Saving a draft does not enroll or charge a donor. Secure donor authorization will be required when Clover is connected.</p>${can('manage_giving_plans')?'<button data-new="plan" type="button">Add monthly draft</button>':''}`+table(['Donor','Monthly amount','Billing day','Status',''],data.plans.map(x=>`<tr><td>${esc(donorName(x.donor))}</td><td>${posMoney(x.amount)}</td><td>${x.billing_day}</td><td>${esc(x.status)}</td><td>${can('manage_giving_plans')?`<button data-edit-plan="${x.id}">Edit draft</button>`:''}</td></tr>`));
+  if(tab==='plans')area.innerHTML=`<p>Draft monthly commitments only. Saving a draft does not enroll or charge a donor. Secure donor authorization will be required when Clover is connected.</p>${can('manage_giving_plans')?'<button data-new="plan" type="button">Add monthly draft</button>':''}`+table(['Donor','Monthly amount','Billing day','Status',''],data.plans.map(x=>`<tr><td>${esc(donorName(x.donor))}</td><td>${posMoney(x.amount)}</td><td>${x.billing_day}</td><td>${esc(x.status)}</td><td>${can('manage_giving_plans')?`<button data-edit-plan="${x.id}">Edit draft</button> <button type="button" data-plan-history="${esc(x.id)}">View history</button>`:''}</td></tr>`));
   if(tab==='statements'){
    area.innerHTML=`<p>Preview current gifts or save a permanent copy for your records. Saved copies keep the donor details, gifts and message as they were when saved. No email will be sent.</p><form id="givingStatement">${select('donor','Donor',donors())}${input('period','Period (YYYY-MM or YYYY)',new Date().getFullYear().toString())}<button type="submit">Preview statement</button></form><div id="givingStatementPreview"></div><h3>Saved statement history</h3><div id="givingStatementHistory"></div>`;
    const form=area.querySelector('form');
    const show=s=>{
-    const body=`<h2>${esc(s.settings.organization)}</h2><p>${esc(s.settings.address)}<br>EIN: ${esc(s.settings.ein||'Not configured')}</p><h3>Giving statement — ${esc(s.period)}</h3><p>${esc(s.donor.name)}<br>${esc(s.donor.address)}</p><p style="white-space:pre-wrap">${esc(s.message)}</p>`+table(['Date','Fund','Received','Goods/services value'],s.gifts.map(g=>`<tr><td>${esc(g.day)}</td><td>${esc(g.fund)}</td><td>${posMoney(g.amount)}</td><td>${posMoney(g.benefit_value)}</td></tr>`))+`<p><strong>Period received: ${posMoney(s.total)} · Year to date: ${posMoney(s.ytd)}</strong></p>`+s.gifts.map(g=>`<p>${esc(g.day)}: ${g.benefit?`${esc(g.benefit)} — estimated value ${posMoney(g.benefit_value)}.`:'No goods or services were provided in exchange for this contribution.'}</p>`).join('');
+    const body=`<h2>${esc(s.settings.organization)}</h2><p>${esc(s.settings.address)}<br>EIN: ${esc(s.settings.ein||'Not configured')}</p><h3>Giving statement - ${esc(s.period)}</h3><p>${esc(s.donor.name)}<br>${esc(s.donor.address)}</p><p style="white-space:pre-wrap">${esc(s.message)}</p>`+table(['Date','Fund','Received','Goods/services value'],s.gifts.map(g=>`<tr><td>${esc(g.day)}</td><td>${esc(g.fund)}</td><td>${posMoney(g.amount)}</td><td>${posMoney(g.benefit_value)}</td></tr>`))+`<p><strong>Period received: ${posMoney(s.total)} � Year to date: ${posMoney(s.ytd)}</strong></p>`+s.gifts.map(g=>`<p>${esc(g.day)}: ${g.benefit?`${esc(g.benefit)} - estimated value ${posMoney(g.benefit_value)}.`:'No goods or services were provided in exchange for this contribution.'}</p>`).join('');
     const preview=area.querySelector('#givingStatementPreview');
-    const status=(s.saved?`<p><strong>Saved statement — not sent</strong><br>Saved ${esc(s.created_at)} by ${esc(s.actor)}<br>Reference: ${esc(s.id)}</p>`:'<p><strong>Statement preview — not saved or sent</strong></p>');
+    const status=(s.saved?`<p><strong>Saved statement - not sent</strong><br>Saved ${esc(s.created_at)} by ${esc(s.actor)}<br>Reference: ${esc(s.id)}</p>`:'<p><strong>Statement preview - not saved or sent</strong></p>');
     preview.innerHTML=status+body+'<button type="button" id="givingPrint">Print / Save PDF</button>'+(s.saved?'':'<button type="button" id="givingSaveStatement">Save current statement copy</button>');
     preview.querySelector('#givingPrint').onclick=()=>thriftPrint('Giving statement '+s.period,status+body);
     const button=preview.querySelector('#givingSaveStatement');
@@ -53,11 +54,37 @@ async function givingOpen(){
   }
   if(tab==='settings')edit('settings',data.settings);
  }
+ async function showPlanHistory(id){
+  if(!can('manage_giving_plans'))return;
+  const version=++viewVersion,area=root.querySelector('#givingContent');
+  const heading='<h3>Monthly draft history</h3><p>Draft changes only. These records do not authorize or confirm payments.</p><button type="button" data-cancel>Back to monthly giving</button>';
+  area.innerHTML=heading+'<p role="status">Loading history.</p>';
+  try{
+   const result=await api('giving/plan_history?id='+encodeURIComponent(id));
+   if(version!==viewVersion||!d.isConnected)return;
+   const fields=[['donor','Donor'],['amount','Monthly amount'],['start','Proposed start'],['billing_day','Billing day'],['fund','Fund / ministry'],['status','Status']];
+   const value=(record,key)=>{
+    if(!record)return '-';
+    if(key==='donor')return `${esc(donorName(record.donor))}<br><small>Donor ID: ${esc(record.donor)}</small>`;
+    if(key==='amount')return posMoney(record.amount);
+    if(key==='status')return record.status==='draft'?'Draft - no charges':record.status==='cancelled'?'Cancelled draft':esc(String(record.status));
+    return esc(String(record[key]??''));
+   };
+   area.innerHTML=heading+'<p>Newest changes first. Donor names reflect current profiles; donor IDs preserve the recorded association.</p>'+(!result.history.length?'<p>No recorded changes yet. This draft may predate history tracking; its next saved change will record the prior values.</p>':result.history.map(entry=>{
+    const action=!entry.before?'Created':entry.after.status==='cancelled'&&entry.before.status!=='cancelled'?'Cancelled':'Updated';
+    return `<section class="givingPlanHistoryEntry"><h4>${action} � Revision ${esc(String(entry.revision))}</h4><p>By ${esc(entry.actor)}<br>${esc(entry.at)}</p>`+table(['Field','Before','After'],fields.map(([key,label])=>`<tr><th scope="row">${label}</th><td>${value(entry.before,key)}</td><td>${value(entry.after,key)}</td></tr>`))+'</section>';
+   }).join(''));
+  }catch(e){
+   if(version!==viewVersion||!d.isConnected)return;
+   area.innerHTML=heading+`<p role="alert">${esc(e.message)}</p><button type="button" data-plan-history="${esc(id)}">Retry history</button>`;
+  }
+ }
  function edit(kind,item={}){
+  viewVersion++;
   const area=root.querySelector('#givingContent');let fields='';
   if(kind==='donor')fields=input('name','Donor name',item.name||'')+input('email','Email',item.email||'','email').replace(' required','')+input('address','Mailing address',item.address||'').replace(' required','')+select('delivery','Statement preference',[['email','Email'],['print','Print']],item.delivery||'print');
   if(kind==='gift')fields=select('donor','Donor',donors())+input('day','Date received',new Date().toLocaleDateString('en-CA'),'date')+input('amount','Amount ($)','','number')+select('method','Already received by',[['cash','Cash'],['check','Check'],['external_card','Card processed elsewhere'],['external_bank','Bank transfer processed elsewhere']])+input('reference','Receipt / deposit reference')+input('fund','Fund / ministry','General Ministry')+input('benefit','Goods/services description (leave blank if none)').replace(' required','')+input('benefit_value','Goods/services value ($)',0,'number');
-  if(kind==='plan')fields=select('donor','Donor',donors(),item.donor)+input('amount','Monthly amount ($)',item.amount?item.amount/100:'','number')+input('start','Proposed start',item.start||new Date().toLocaleDateString('en-CA'),'date')+input('billing_day','Billing day (1–28)',item.billing_day||1,'number')+input('fund','Fund / ministry',item.fund||'General Ministry')+select('status','Status',[['draft','Draft — no charges'],['cancelled','Cancelled draft']],item.status||'draft');
+  if(kind==='plan')fields=select('donor','Donor',donors(),item.donor)+input('amount','Monthly amount ($)',item.amount?item.amount/100:'','number')+input('start','Proposed start',item.start||new Date().toLocaleDateString('en-CA'),'date')+input('billing_day','Billing day (1-28)',item.billing_day||1,'number')+input('fund','Fund / ministry',item.fund||'General Ministry')+select('status','Status',[['draft','Draft - no charges'],['cancelled','Cancelled draft']],item.status||'draft');
   if(kind==='settings')fields=input('organization','Organization',item.organization)+input('ein','EIN',item.ein).replace(' required','')+input('address','Organization mailing address',item.address).replace(' required','')+['monthly_message','annual_message'].map(k=>`<label>${k==='monthly_message'?'Monthly':'Annual'} statement message<textarea name="${k}" rows="4">${esc(item[k])}</textarea></label>`).join('')+'<p>Scheduled email delivery and payment credentials will be configured in a later integration step.</p>';
   area.innerHTML=`<form id="givingEdit"><h3>${kind==='gift'?'Record received gift':kind==='plan'?'Monthly giving draft':kind==='settings'?'Giving settings':'Donor profile'}</h3>${fields}<p>Do not enter card numbers or security codes in these fields.</p><button type="submit" class="primary">Save ${kind==='plan'?'draft':'record'}</button><button type="button" data-cancel>Cancel</button></form>`;
   const form=area.querySelector('form');form.querySelectorAll('input[name=amount],input[name=benefit_value]').forEach(x=>{x.step='0.01';x.min=x.name==='amount'?'0.01':'0';});
@@ -75,6 +102,7 @@ async function givingOpen(){
   if(b.dataset.new){if(b.dataset.new!=='donor'&&!data.donors.length)throw Error('Add a donor first.');edit(b.dataset.new);}
   if(b.dataset.editDonor)edit('donor',data.donors.find(x=>x.id===b.dataset.editDonor));
   if(b.dataset.editPlan)edit('plan',data.plans.find(x=>x.id===b.dataset.editPlan));
+  if(b.dataset.planHistory)await showPlanHistory(b.dataset.planHistory);
   if(b.dataset.void){const reason=prompt('Why is this gift record incorrect? This records a void; it does not refund a payment.');if(reason)await save('void',{gift:b.dataset.void,reason});}
  }catch(e){error(e);}};
  render();
