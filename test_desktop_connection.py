@@ -1,5 +1,7 @@
 import json
 import ssl
+import subprocess
+import sys
 import tempfile
 import threading
 import unittest
@@ -71,6 +73,12 @@ class ConnectionTests(unittest.TestCase):
     def test_remote_admin_identifies_requests(self):
         self.assertEqual(Client(self.address).probe()['application'], 'thrift-mart-dispatch')
         self.assertEqual(self.requests[0][2]['User-Agent'], connection.USER_AGENT)
+
+    def test_remote_helper_imports_without_the_project_on_python_path(self):
+        folder = Path(__file__).resolve().parent / 'remote'
+        command = "import sys;sys.path.insert(0," + repr(str(folder)) + ");from client import Client,USER_AGENT;assert USER_AGENT==" + repr(connection.USER_AGENT)
+        result = subprocess.run([sys.executable, '-I', '-c', command], capture_output=True, text=True, timeout=15)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_native_kiosk_approval_identifies_requests(self):
         with tempfile.TemporaryDirectory() as tmp:

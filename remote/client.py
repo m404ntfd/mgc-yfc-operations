@@ -1,6 +1,7 @@
 """HTTP client for MGC YFC Operations Remote Manager; credentials stay in memory."""
 import http.cookiejar,json,secrets,urllib.request,urllib.error,urllib.parse
-from desktop_connection import USER_AGENT
+# Keep this helper usable by standalone administration and installer tools.
+USER_AGENT = 'CoastYouth-Retail-Desktop/0.57.0'
 
 def normalize_address(value):
     value=value.strip()
