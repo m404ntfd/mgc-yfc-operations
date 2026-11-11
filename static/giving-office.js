@@ -39,7 +39,7 @@ async function givingOpen(){
     preview.querySelector('#givingPrint').onclick=()=>thriftPrint('Giving statement '+s.period,status+body);
     if(s.saved&&can('giving_delivery')){
      const delivery=document.createElement('button');delivery.type='button';delivery.id='givingDelivery';delivery.textContent='Review delivery preparation';
-     delivery.onclick=()=>{if(!busy&&!pending)showDelivery(s);};preview.append(delivery);
+     delivery.onclick=()=>{if(busy||pending)return;if(changedForms.has(form)&&!confirm('Discard unsaved changes?'))return;changedForms.delete(form);showDelivery(s);};preview.append(delivery);
     }
     const button=preview.querySelector('#givingSaveStatement');
     if(button)button.onclick=async()=>{try{const result=await save('statement_snapshot',{donor:s.donor.id,period:s.period});const fresh=root.querySelector('#givingStatement');fresh.elements.donor.value=s.donor.id;fresh.elements.period.value=s.period;await fresh.loadHistory();await fresh.showSaved(result.id);}catch(e){error(e);}};
