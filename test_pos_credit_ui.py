@@ -1,3 +1,4 @@
+from test_ui_helpers import office_setting
 from test_ui_helpers import password_login_page
 import os
 from pathlib import Path
@@ -20,7 +21,7 @@ def run():
   with sync_playwright() as pw:
    b=pw.chromium.launch(**({'executable_path':os.environ['TEST_CHROMIUM']} if os.environ.get('TEST_CHROMIUM') else {}));p=b.new_page(viewport={'width':1366,'height':900});errors=[];p.on('pageerror',lambda e:errors.append(str(e)))
    p.goto(f'http://127.0.0.1:{f.port}/office');password_login_page(p).locator('#login [name=name]').fill('Admin');p.locator('#login [name=password]').fill('testpassword');p.locator('#login button').click()
-   expect(p.locator('#officeHub')).to_be_visible();p.locator('[data-office-action=accounts]').click();p.locator('[data-credit="1"]').click();expect(p.locator('.creditBalance')).to_contain_text('$50.00')
+   expect(p.locator('#officeHub')).to_be_visible();office_setting(p,'accounts').click();p.locator('[data-credit="1"]').click();expect(p.locator('.creditBalance')).to_contain_text('$50.00')
    p.locator('#creditAdjust [name=amount]').fill('5');p.locator('#creditAdjust [name=reason]').fill('Customer service adjustment — example')
    assert p.evaluate('unfinished()')
    p.locator('#creditAdjust button').first.click();expect(p.locator('.creditBalance')).to_contain_text('$55.00');expect(p.locator('#creditHistory tr')).to_have_count(2)
@@ -35,7 +36,7 @@ def run():
    p.locator('#creditRetry').click();expect(p.locator('#creditDialog')).not_to_be_visible();expect(p.locator('#posReceipt')).to_contain_text('Store credit: $20.00');expect(p.locator('#posReceipt')).to_contain_text('Change: $0.07')
    assert len(f.call('pos/sales')[1]['sales'])==1
    p.locator('#creditOpen').click();expect(p.locator('.creditBalance')).to_contain_text('$35.00');expect(p.locator('#creditHistory tr')).to_have_count(3)
-   p.locator('#creditClose').click();p.goto(f'http://127.0.0.1:{f.port}/office');p.locator('[data-office-action=accounts]').click();p.locator('#creditCreateDetails summary').click();p.locator('#creditCreate [name=name]').fill('New sample account');p.locator('#creditCreate button').first.click();expect(p.locator('#creditSummary')).to_contain_text('New sample account')
+   p.locator('#creditClose').click();p.goto(f'http://127.0.0.1:{f.port}/office');office_setting(p,'accounts').click();p.locator('#creditCreateDetails summary').click();p.locator('#creditCreate [name=name]').fill('New sample account');p.locator('#creditCreate button').first.click();expect(p.locator('#creditSummary')).to_contain_text('New sample account')
    for width,height in [(1366,768),(1024,768)]:
     p.set_viewport_size({'width':width,'height':height});assert p.evaluate('document.documentElement.scrollWidth<=innerWidth')
    assert not errors,errors;b.close()

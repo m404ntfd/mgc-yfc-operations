@@ -1,3 +1,4 @@
+from test_ui_helpers import office_setting
 from test_ui_helpers import password_login_page
 import os
 from pathlib import Path
@@ -18,9 +19,9 @@ def run():
   with sync_playwright() as pw:
    b=pw.chromium.launch(**({'executable_path':os.environ['TEST_CHROMIUM']} if os.environ.get('TEST_CHROMIUM') else {}));context=b.new_context(viewport={'width':1366,'height':900});p=context.new_page();errors=[];p.on('pageerror',lambda e:errors.append(str(e)));origin=f'http://127.0.0.1:{f.port}'
    p.goto(origin+'/office');password_login_page(p).locator('#login [name=name]').fill('Admin');p.locator('#login [name=password]').fill('testpassword');p.locator('#login button').click();expect(p.locator('#officeTiles')).to_be_visible()
-   for action in ('users','roles','catalog','history','thrift-intake','thrift-settings','thrift-customers','thrift-vouchers','thrift-pickups','thrift-reports'):expect(p.locator('[data-office-action='+action+']')).to_be_visible()
+   for action in ('users','roles','catalog','history','thrift-intake','thrift-settings','thrift-customers','thrift-vouchers','thrift-pickups','thrift-reports'):expect(office_setting(p,action)).to_be_visible()
    out=Path(os.environ.get('TEST_ARTIFACTS','test-artifacts'));out.mkdir(parents=True,exist_ok=True);p.screenshot(path=str(out/'CoastYouth-Retail-OFFICE-Preview.png'))
-   p.locator('[data-office-action=users]').click();form=p.locator('#officeAddUser');form.locator('[name=name]').fill('Office sample staff');form.locator('[name=password]').fill('testpassword');form.locator('[name=confirm]').fill('testpassword');assert p.evaluate('unfinished()')
+   office_setting(p,'users').click();form=p.locator('#officeAddUser');form.locator('[name=name]').fill('Office sample staff');form.locator('[name=password]').fill('testpassword');form.locator('[name=confirm]').fill('testpassword');assert p.evaluate('unfinished()')
    form.locator('button').first.click();expect(p.locator('#officeUserRows')).to_contain_text('Office sample staff');assert not p.evaluate('changedForms.has(document.querySelector("#officeAddUser"))')
    p.locator('#officeRoleUser').select_option(label='Office sample staff');p.locator('#officeRoleChoice').select_option(label='Retail staff');p.locator('#officeUserRole button').first.click();expect(p.locator('#officeUserRows')).to_contain_text('Retail staff')
    p.screenshot(path=str(out/'CoastYouth-Retail-OFFICE-Users-Preview.png'))
@@ -30,14 +31,14 @@ def run():
    with server.connect() as c:
     assert c.execute("SELECT COUNT(*) FROM users WHERE name='office sample staff'").fetchone()[0]==1
     assert c.execute("SELECT COUNT(*) FROM receipt_profiles WHERE name='office sample staff'").fetchone()[0]==1
-   p.locator('#officeBack').click();p.locator('[data-office-action=catalog]').click();p.locator('#flowProductForm [name=name]').fill('OFFICE sample item');p.locator('#flowProductForm [name=category]').select_option('Home');p.locator('#flowProductForm [name=price]').fill('6.50');p.locator('#flowProductForm button.primary').first.click();expect(p.locator('#flowProductStatus')).to_contain_text('Product saved')
+   p.locator('#officeBack').click();office_setting(p,'catalog').click();p.locator('#flowProductForm [name=name]').fill('OFFICE sample item');p.locator('#flowProductForm [name=category]').select_option('Home');p.locator('#flowProductForm [name=price]').fill('6.50');p.locator('#flowProductForm button.primary').first.click();expect(p.locator('#flowProductStatus')).to_contain_text('Product saved')
    desk=context.new_page();desk.goto(origin+'/pos');expect(desk.locator('#posCatalog')).to_contain_text('OFFICE sample item');expect(desk.locator('#posSetup')).to_be_hidden();expect(desk.locator('#posAdmin')).to_be_hidden();expect(desk.locator('#posSetupShortcut')).to_be_hidden();expect(desk.locator('#navSetup')).to_be_hidden();desk.locator('#posNew').click();expect(desk.locator('#posCart')).to_contain_text('Saved on server');desk.locator('#posCatalog button').filter(has_text='Adult shirt').click();desk.locator('#posCatalog button').filter(has_text='Table lamp').click();expect(desk.locator('#posCart')).to_contain_text('$20.31');desk.screenshot(path=str(out/'CoastYouth-Retail-DESK-Preview.png'))
    desk.locator('#posPayNow').click();desk.locator('#posCash [name=tender]').fill('25');desk.locator('#posCash button.primary').click();expect(desk.locator('#posReceipt')).to_contain_text('Change: $4.69')
-   p.locator('#officeBack').click();p.locator('[data-office-action=history]').click();p.locator('#posSaleList button').first.click();expect(p.locator('#officeReceipt')).to_be_visible();expect(p.locator('#posReceipt')).to_contain_text('Change: $4.69');p.emulate_media(media='print');expect(p.locator('#posReceipt')).to_be_visible();p.emulate_media(media='screen');p.locator('.receiptBack').click();p.locator('[data-office-action=roles]').click()
+   p.locator('#officeBack').click();office_setting(p,'history').click();p.locator('#posSaleList button').first.click();expect(p.locator('#officeReceipt')).to_be_visible();expect(p.locator('#posReceipt')).to_contain_text('Change: $4.69');p.emulate_media(media='print');expect(p.locator('#posReceipt')).to_be_visible();p.emulate_media(media='screen');p.locator('.receiptBack').click();office_setting(p,'roles').click()
    # A user-management role can open OFFICE without checkout permission.
    f.call('admin/permissions',dict(name='Employee',grants={'manage_users':True},can_create=False,see_requests=False))
-   restricted=b.new_page();restricted.goto(origin+'/office');password_login_page(restricted).locator('#login [name=name]').fill('Employee');restricted.locator('#login [name=password]').fill('testpassword');restricted.locator('#login button').click();expect(restricted.locator('[data-office-action=users]')).to_be_visible();expect(restricted.locator('[data-office-action=catalog]')).to_have_count(0)
-   restricted.locator('[data-office-action=users]').click();expect(restricted.locator('#officeUserRows')).to_contain_text('Office sample staff')
+   restricted=b.new_page();restricted.goto(origin+'/office');password_login_page(restricted).locator('#login [name=name]').fill('Employee');restricted.locator('#login [name=password]').fill('testpassword');restricted.locator('#login button').click();expect(office_setting(restricted,'users')).to_be_visible();expect(office_setting(restricted,'catalog')).to_have_count(0)
+   office_setting(restricted,'users').click();expect(restricted.locator('#officeUserRows')).to_contain_text('Office sample staff')
    noaccess=b.new_page();noaccess.goto(origin+'/office');password_login_page(noaccess).locator('#login [name=name]').fill('Office sample staff');noaccess.locator('#login [name=password]').fill('testpassword');noaccess.locator('#login button').click();expect(noaccess.locator('#authError')).to_contain_text('OFFICE requires');expect(noaccess.locator('#posRoot')).to_be_hidden()
    for width,height in [(1366,768),(1024,768)]:
     p.set_viewport_size({'width':width,'height':height});assert p.evaluate('document.documentElement.scrollWidth<=innerWidth')

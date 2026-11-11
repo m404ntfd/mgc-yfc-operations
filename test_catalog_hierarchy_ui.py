@@ -1,3 +1,4 @@
+from test_ui_helpers import office_setting
 """Real browser coverage for setup add/select/copy/edit/delete and readable themes."""
 import os,time,uuid
 from pathlib import Path
@@ -15,9 +16,9 @@ try:
  with sync_playwright() as pw:
   b=pw.chromium.launch(executable_path=os.environ.get('TEST_CHROMIUM'));p=b.new_page(viewport={'width':1440,'height':1050});errors=[];p.on('pageerror',lambda e:errors.append(str(e)));p.on('dialog',lambda d:d.accept())
   p.goto(f'http://127.0.0.1:{f.port}/office');p.locator('#login [name=name]').fill('Admin');p.locator('#login [name=password]').fill('testpassword');p.locator('#login button').click();expect(p.locator('#officeTiles')).to_be_visible()
-  for action in ['revenue-centers','departments','sub-departments','printing-categories','taxes']:expect(p.locator('[data-office-action='+action+']')).to_be_visible()
-  assert p.locator('[data-office-action=catalog-options]').count()==0
-  p.locator('[data-office-action=revenue-centers]').click();form=p.locator('#catalogOptionsForm')
+  for action in ['revenue-centers','departments','sub-departments','printing-categories','taxes']:expect(office_setting(p,action)).to_be_visible()
+  assert office_setting(p,'catalog-options').count()==0
+  office_setting(p,'revenue-centers').click();form=p.locator('#catalogOptionsForm')
   for action in ['copy','delete','edit']:expect(p.locator('[data-setup-action='+action+']')).to_be_disabled()
   form.locator('[name=entry_name]').fill('Retail sales');form.locator('[type=submit]').click();expect(p.locator('#catalogSaved')).to_have_text('Revenue Center added.');expect(p.locator('[aria-selected=true]')).to_contain_text('Retail sales')
   p.screenshot(path=str(out/'OFFICE-Revenue-Centers.png'))
@@ -41,7 +42,7 @@ try:
    if section=='departments':
     p.evaluate("document.body.dataset.retailTheme='midnight';document.documentElement.dataset.theme='dark'");p.screenshot(path=str(out/'OFFICE-Departments-Dark.png'))
   p.evaluate("document.body.dataset.retailTheme='classic-gray';document.documentElement.dataset.theme='light'")
-  p.locator('dialog[open] .flowClose').click();p.locator('[data-office-action=catalog]').click();p.locator('#flowProductChoice').select_option(product['id']);expect(p.locator('#flowProductForm [name=category]')).to_have_value('Furniture');expect(p.locator('.catalogAssignment')).to_contain_text('Home & furniture');p.screenshot(path=str(out/'OFFICE-Item-Department-Assignment.png'))
+  p.locator('dialog[open] .flowClose').click();office_setting(p,'catalog').click();p.locator('#flowProductChoice').select_option(product['id']);expect(p.locator('#flowProductForm [name=category]')).to_have_value('Furniture');expect(p.locator('.catalogAssignment')).to_contain_text('Home & furniture');p.screenshot(path=str(out/'OFFICE-Item-Department-Assignment.png'))
   assert not errors,errors;b.close()
  print('PASS setup add, selection, editing, copy, safe deletion, keyboard selection, hierarchy assignments and 100 theme/mode checks. Screens use sample data.')
 finally:f.close()

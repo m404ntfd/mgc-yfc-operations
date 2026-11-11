@@ -1,3 +1,4 @@
+from test_ui_helpers import office_setting
 """Setup list retries, copy isolation, deletion confirmation, routes and color tags."""
 import os,time,uuid
 from pathlib import Path
@@ -19,7 +20,7 @@ try:
    if accept[0]:d.accept()
    else:d.dismiss()
   p.on('dialog',dialog);p.goto(f'http://127.0.0.1:{f.port}/office');p.locator('#login [name=name]').fill('Admin');p.locator('#login [name=password]').fill('testpassword');p.locator('#login button').click();expect(p.locator('#officeTiles')).to_be_visible()
-  p.locator('[data-office-action=revenue-centers]').click();form=p.locator('#catalogOptionsForm');form.locator('[name=entry_name]').fill('RETRY SAMPLE')
+  office_setting(p,'revenue-centers').click();form=p.locator('#catalogOptionsForm');form.locator('[name=entry_name]').fill('RETRY SAMPLE')
   captured=[]
   def lost_response(route):
    captured.append(route.request.post_data_json);response=route.fetch();assert response.status==200;route.abort()
@@ -28,10 +29,10 @@ try:
   form.locator('[type=submit]').click();expect(p.locator('#catalogSaved')).to_have_text('Revenue Center added.');assert len(f.call('pos/catalog-options')[1]['revenue_centers'])==1
   p.locator('[data-setup-action=copy]:visible').click();expect(form.locator('[name=entry_name]')).to_have_value('RETRY SAMPLE (copy)');accept[0]=False;p.locator('[data-catalog-section=taxes]').click();expect(form.locator('[name=entry_name]')).to_have_value('RETRY SAMPLE (copy)');assert 'Discard' in dialogs[-1]
   accept[0]=True;form.locator('.setupCancel').click();accept[0]=False;p.locator('[data-setup-action=delete]:visible').click();expect(p.locator('[data-setup-row]:visible')).to_have_count(1);accept[0]=True;p.locator('[data-setup-action=delete]:visible').click();expect(p.locator('[data-setup-row]:visible')).to_have_count(0);p.locator('dialog[open] .flowClose').click()
-  p.locator('[data-office-action=printing]').click();routeForm=p.locator('#flowRoutes');routeForm.locator('[name=route_category]').select_option('Counter');routeForm.locator('[name=route_printer]').fill('Receipt printer');routeForm.locator('[type=submit]').click();expect(p.locator('#flowRouteStatus')).to_have_text('printer route added.')
+  office_setting(p,'printing').click();routeForm=p.locator('#flowRoutes');routeForm.locator('[name=route_category]').select_option('Counter');routeForm.locator('[name=route_printer]').fill('Receipt printer');routeForm.locator('[type=submit]').click();expect(p.locator('#flowRouteStatus')).to_have_text('printer route added.')
   p.locator('[data-setup-action=copy]:visible').click();expect(routeForm.locator('[name=route_printer]')).to_have_value('Receipt printer');routeForm.locator('[name=route_category]').select_option('Warehouse');routeForm.locator('[type=submit]').click();expect(p.locator('[data-setup-row]:visible')).to_have_count(2)
   p.locator('[data-setup-action=edit]:visible').click();routeForm.locator('[name=route_printer]').fill('Warehouse printer');routeForm.locator('[type=submit]').click();expect(p.locator('#flowRouteStatus')).to_have_text('printer route updated.');p.screenshot(path=str(out/'OFFICE-Printer-Route-List.png'))
-  p.locator('[data-setup-action=delete]:visible').click();expect(p.locator('[data-setup-row]:visible')).to_have_count(1);p.locator('#officeBack').click();p.locator('[data-office-action=thrift-settings]').click()
+  p.locator('[data-setup-action=delete]:visible').click();expect(p.locator('[data-setup-row]:visible')).to_have_count(1);p.locator('#officeBack').click();office_setting(p,'thrift-settings').click()
   tagForm=p.locator('#thriftTagSetupForm');tagForm.locator('[name=tag_name]').fill('SAMPLE Blue');tagForm.locator('[name=percent]').fill('25');tagForm.locator('[type=submit]').click();expect(p.locator('#thriftTagStatus')).to_have_text('color tag added.')
   p.locator('[data-setup-action=copy]:visible').click();expect(tagForm.locator('[name=percent]')).to_have_value('25');tagForm.locator('[name=tag_name]').fill('SAMPLE Green');tagForm.locator('[name=color]').fill('#227744');tagForm.locator('[type=submit]').click();expect(p.locator('[data-setup-row]:visible')).to_have_count(2)
   p.locator('[data-setup-action=edit]:visible').click();tagForm.locator('[name=percent]').fill('50');tagForm.locator('[type=submit]').click();expect(p.locator('[aria-selected=true]:visible')).to_contain_text('50%');p.screenshot(path=str(out/'OFFICE-Color-Tag-List.png'))

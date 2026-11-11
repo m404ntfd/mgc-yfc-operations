@@ -1,3 +1,4 @@
+from test_ui_helpers import office_setting
 import os,uuid,datetime as dt,json,time
 from pathlib import Path
 from playwright.sync_api import sync_playwright,expect
@@ -18,12 +19,12 @@ try:
   c.execute('INSERT INTO work_periods VALUES(?,?,?,?,?,?)',(123,account,time.time()-7200,None,'Store',None))
  with sync_playwright() as pw:
   b=pw.chromium.launch(**({'executable_path':os.environ['TEST_CHROMIUM']} if os.environ.get('TEST_CHROMIUM') else {}));ctx=b.new_context(viewport={'width':1440,'height':1000});p=ctx.new_page();errors=[];p.on('pageerror',lambda e:errors.append(str(e)));url=f'http://127.0.0.1:{f.port}'
-  p.goto(url+'/office');p.locator('#login [name=name]').fill('Admin');p.locator('#login [name=password]').fill('testpassword');p.locator('#login button').click();expect(p.locator('[data-office-action=reports]')).to_be_visible()
-  p.locator('[data-office-action=report-center]').click();expect(p.locator('.rrStatus')).to_contain_text('Net sales exclude');p.screenshot(path=str(out/'Next-OFFICE-Analysis.png'))
+  p.goto(url+'/office');p.locator('#login [name=name]').fill('Admin');p.locator('#login [name=password]').fill('testpassword');p.locator('#login button').click();expect(office_setting(p,'reports')).to_be_visible()
+  office_setting(p,'report-center').click();expect(p.locator('.rrStatus')).to_contain_text('Net sales exclude');p.screenshot(path=str(out/'Next-OFFICE-Analysis.png'))
   p.locator('.rrFilters [name=kind]').select_option('cash');p.locator('.rrFilters button').first.click();expect(p.locator('.rrTable')).to_contain_text('100.54')
-  p.locator('#officeBack').click();p.locator('[data-office-action=users]').click();p.locator('#officeUserRows tr').filter(has_text='Employee').get_by_role('button',name='Edit user').click();expect(p.locator('.officeUserWizard')).to_be_visible();p.screenshot(path=str(out/'Next-OFFICE-User.png'))
+  p.locator('#officeBack').click();office_setting(p,'users').click();p.locator('#officeUserRows tr').filter(has_text='Employee').get_by_role('button',name='Edit user').click();expect(p.locator('.officeUserWizard')).to_be_visible();p.screenshot(path=str(out/'Next-OFFICE-User.png'))
   p.locator('[data-user-pane="2"]').click();expect(p.locator('#officeContactDetails')).to_be_visible();p.locator('#officeContactDetails [name=city]').fill('Mobile');p.locator('#officeContactDetails button').click();expect(p.locator('#officeUserSaveStatus')).to_contain_text('saved');p.screenshot(path=str(out/'Next-OFFICE-Personal.png'))
-  p.evaluate("document.querySelector('.officeUserWizard').close()");p.locator('#officeBack').click();p.locator('[data-office-action=labor-reports]').click();expect(p.locator('.rrTable')).to_contain_text('Employee');p.screenshot(path=str(out/'Next-OFFICE-Labor.png'))
+  p.evaluate("document.querySelector('.officeUserWizard').close()");p.locator('#officeBack').click();office_setting(p,'labor-reports').click();expect(p.locator('.rrTable')).to_contain_text('Employee');p.screenshot(path=str(out/'Next-OFFICE-Labor.png'))
   p.goto(url);p.wait_for_timeout(300);
   if p.locator('#sectionChooserForm').is_visible():p.locator('#sectionChooserForm [name=section][value=print]').check();p.locator('#sectionChooserForm button').click()
 

@@ -1,3 +1,4 @@
+from test_ui_helpers import office_setting
 import time,os
 from pathlib import Path
 from playwright.sync_api import sync_playwright,expect
@@ -18,12 +19,12 @@ try:
  with sync_playwright() as pw:
   b=pw.chromium.launch(executable_path=os.environ.get('TEST_CHROMIUM'));p=b.new_page(viewport={'width':1440,'height':1100});errors=[];p.on('pageerror',lambda e:errors.append(str(e)))
   p.goto(f'http://127.0.0.1:{f.f.port}/office');p.locator('#login [name=name]').fill('Admin');p.locator('#login [name=password]').fill('testpassword');p.locator('#login button').click()
-  p.locator('[data-office-section=system]').click();p.locator('[data-office-action=computer-register]').click();expect(p.locator('.computerCard')).to_have_count(3)
+  p.locator('[data-office-section=system]').click();office_setting(p,'computer-register').click();expect(p.locator('.computerCard')).to_have_count(3)
   Path('test-artifacts').mkdir(exist_ok=True);p.screenshot(path='test-artifacts/Computer-registration-preview.png')
   p.locator('[data-register-computer="'+('3'*32)+'"] [name=name]').fill('Second checkout')
   p.locator('[data-register-computer="'+('3'*32)+'"] button').click();expect(p.locator('#computerStatus')).to_contain_text('3 registered')
   p.locator('dialog[open] .flowClose').click()
-  p.locator('[data-office-action=computer-updates]').click();expect(p.locator('#computerVersions')).to_contain_text('9.0.0')
+  office_setting(p,'computer-updates').click();expect(p.locator('#computerVersions')).to_contain_text('9.0.0')
   expect(p.locator('#computerRollout button[type=submit]')).to_be_disabled()
   expect(p.locator('[data-select-computer]')).to_have_count(3)
   p.locator('[data-select-computer="'+('1'*32)+'"]').check()

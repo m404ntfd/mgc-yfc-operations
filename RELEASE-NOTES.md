@@ -1,29 +1,26 @@
-# CoastYouth Retail cash advances and centralized updates
+# CoastYouth Retail organized OFFICE settings
 
-Server 0.53.0 / DESK 1.15.0 / OFFICE 1.12.0 / STORE OPS desktop 1.2.0
+Server 0.54.0 / DESK 1.15.1 / OFFICE 1.13.0 / STORE OPS desktop 1.2.1
 
-- Adds a Cash Advance button beside Store credit in DESK. Authorized staff select another employee, enter an amount and reason, and confirm the cash payment. Each advance records the store, registered terminal, recipient, issuing employee and payment time.
-- Adds separate permissions to issue employee advances and view advance reports. Administrators have access by default; other roles must be assigned access. A user cannot issue their own advance.
-- Records advances separately from sales and store credit. When reconciliation is enabled, an open drawer is required, available cash is checked, and the advance reduces expected drawer cash exactly once. Cash and drawer reports include advances even when reconciliation is disabled. Payroll recovery is handled separately.
-- Adds OFFICE > Accounts > Employee cash advances, with store, date and employee filters, totals, printing and CSV export. Payment records retain their original names and cannot be silently changed or deleted. Retrying an interrupted request cannot create a duplicate advance.
-- Makes OFFICE > System > Application updates the central location for DESK, OFFICE, STORE OPS desktop and the STORE OPS web app/shared server. Includes active-user checks, staff notifications, cancellation and a completion notice after the server restarts.
-- Removes DESK and OFFICE update panels from the native server and standalone server administration applications. Server update and recovery controls remain available there.
-- Adds permission-aware settings search to the OFFICE top bar, including keyboard navigation and protection for unfinished forms.
+## Changes
+
+- Organizes OFFICE into Products, Sales, Customers, Staff, Reports and System. Each category has focused groups with no more than five tools, reducing the number of choices shown at once.
+- Adds location breadcrumbs and a return button for each settings group. Settings search opens the same tools and shows their new locations. Existing role permissions still control access.
+- Preserves unfinished-item warnings when using the new navigation. Settings remain readable in light, dark and liquid-glass themes and on smaller desktop screens.
+- Shows Open price in the bulk catalog, import preview and DESK layout editor for items that prompt the cashier for a price. This changes the label only; it does not change saved prices, tax rules or checkout behavior.
+- Improves Computer Setup diagnostics. If a component installer stops, the message names the application, reports its exit code, lists completed applications and identifies the saved logs. Remaining applications are not started after a failure. Individual installers also write setup logs.
+- Keeps the existing update size limit by losslessly compressing the embedded web assets in the update package. Application behavior and updater compatibility are preserved.
 
 ## Installation
 
-Create a verified server backup and finish current work. Run the full Server/Administration 0.53.0 installer over the existing installation, retaining its current data folder. The full installer is required for the native server-window changes; the web-only update package cannot replace that Windows program.
+Create a verified server backup and finish active work before installing. Keep the existing server data folder and connect all desktop applications to that same server. Update the shared server/web application to receive the new OFFICE screens. Computer Setup or the individual installers provide the updated desktop versions and installation logging.
 
-Then update OFFICE to 1.12.0 and DESK to 1.15.0 using Computer Setup, the individual installers, or the registered-computer updater in OFFICE. Keep every application connected to the same existing server. STORE OPS desktop remains at 1.2.0 and receives its web screens from that server.
+Publishing makes these downloads available; it does not install them on store computers or restart the live server. STORE OPS remains available at its existing web address.
 
-Configure issuing and reporting access in OFFICE > Security > Roles & permissions. Cash advances require a registered DESK terminal so the store and drawer are identified correctly.
-
-Publishing makes these downloads available. It does not install software on store computers or restart the live server. The STORE OPS website remains at its existing address.
+The installer diagnostics improve error reporting. They do not establish that an antivirus alert or an installation failure on a particular computer has been resolved. That computer can be investigated separately.
 
 ## Data preservation and verification
 
-The new cash-advance ledger is additive. Existing timecards, open punches and breaks, audit history, reservations and attachments, sales, refunds, store-credit ledgers, users, HR records, settings and terminal registrations are preserved.
+This release makes no database schema changes and does not import, replace or delete catalog data. Existing imported products, prices, taxes, departments, users, settings, terminal registrations, timecards, open punches and breaks, audit history, reservations and attachments, sales and account balances remain in the shared server database.
 
-Release checks cover a populated 0.52.0 upgrade, verified backup, repeated startup and rollback using isolated sample data, plus installation over existing data and device settings. Feature checks cover permissions, store assignment, available drawer cash, concurrent requests, interrupted-response recovery, reports, checkout, staff update coordination, settings search and theme readability.
-
-The inventory spreadsheet remains an import preview. This release does not import its items or change existing catalog prices or taxes.
+Checks cover navigation, search, permissions, unsaved forms, theme readability, open-priced item labels and existing OFFICE/DESK workflows. Release checks include a populated 0.53.0 upgrade, verified backup, repeated startup and rollback using isolated sample data, plus installation over existing data and device settings. Installer failure tests use harmless sample installers and verify that data files remain unchanged.

@@ -508,8 +508,8 @@ function retailLayoutForm(){
 }
 function retailTabs(){$('layoutGroups').innerHTML=retailDraft.groups.map((g,i)=>`<button type="button" data-group="${i}" aria-pressed="${i===retailGroup}">${esc(g.name)}</button>`).join('');}
 function retailGroupForm(){const g=retailDraft.groups[retailGroup];$('groupName').value=g.name;$('groupColor').value=g.color;$('layoutGroups').innerHTML=retailDraft.groups.map((g,i)=>`<button type="button" data-group="${i}" aria-pressed="${i===retailGroup}">${esc(g.name)}</button>`).join('');retailProducts();}
-function retailProducts(){const g=retailDraft.groups[retailGroup];const products=posOverview.products;const search=$('layoutSearch').value.toLowerCase();$('layoutAvailable').innerHTML=products.filter(p=>!g.products.includes(p.id)&&p.name.toLowerCase().includes(search)).map(p=>`<button type="button" data-product-add="${p.id}">${esc(p.name)} · ${posMoney(p.price)} <b>＋</b></button>`).join('');$('layoutSelected').innerHTML=g.products.map(id=>{const p=products.find(p=>p.id===id);return `<div>${esc(p?.name||'Unavailable product')}<span><button type="button" data-product-up="${id}" aria-label="Move ${esc(p?.name)} up">↑</button><button type="button" data-product-remove="${id}" aria-label="Remove ${esc(p?.name)}">×</button></span></div>`;}).join('');retailPreview();}
-function retailPreview(){const g=retailDraft.groups[retailGroup];$('layoutPreview').style.gridTemplateColumns=`repeat(${retailDraft.columns},minmax(0,1fr))`;$('layoutPreview').innerHTML=g.products.map(id=>{const p=posOverview.products.find(p=>p.id===id);return `<div style="--retail-color:${g.color};background:${g.color}"><strong>${esc(p?.name||'Unavailable')}</strong><span>${posMoney(p?.price||0)}</span></div>`;}).join('')||'<p>Add products to preview their buttons.</p>';for(const b of $('layoutPreview').querySelectorAll(':scope>div'))b.style.backgroundColor=g.color;}
+function retailProducts(){const g=retailDraft.groups[retailGroup];const products=posOverview.products;const search=$('layoutSearch').value.toLowerCase();$('layoutAvailable').innerHTML=products.filter(p=>!g.products.includes(p.id)&&p.name.toLowerCase().includes(search)).map(p=>`<button type="button" data-product-add="${p.id}">${esc(p.name)} · ${flowCatalogPrice(p)} <b>＋</b></button>`).join('');$('layoutSelected').innerHTML=g.products.map(id=>{const p=products.find(p=>p.id===id);return `<div>${esc(p?.name||'Unavailable product')}<span><button type="button" data-product-up="${id}" aria-label="Move ${esc(p?.name)} up">↑</button><button type="button" data-product-remove="${id}" aria-label="Remove ${esc(p?.name)}">×</button></span></div>`;}).join('');retailPreview();}
+function retailPreview(){const g=retailDraft.groups[retailGroup];$('layoutPreview').style.gridTemplateColumns=`repeat(${retailDraft.columns},minmax(0,1fr))`;$('layoutPreview').innerHTML=g.products.map(id=>{const p=posOverview.products.find(p=>p.id===id);return `<div style="--retail-color:${g.color};background:${g.color}"><strong>${esc(p?.name||'Unavailable')}</strong><span>${p?flowCatalogPrice(p):posMoney(0)}</span></div>`;}).join('')||'<p>Add products to preview their buttons.</p>';for(const b of $('layoutPreview').querySelectorAll(':scope>div'))b.style.backgroundColor=g.color;}
 function retailTerminals(){const root=$('retailEditor');root.innerHTML=`<p>All terminals use the existing Operations server. Registration links a device to one terminal; changing its display name preserves its identity.</p><table><thead><tr><th>Terminal</th><th>Device</th><th>Layout</th><th>Status</th><th></th></tr></thead><tbody>${retailState.terminals.map(t=>`<tr><td>${esc(t.name)}</td><td>${t.device?'Registered':'Awaiting setup'}</td><td>${esc(retailState.layouts.find(l=>l.id===t.layout)?.name||'Standard catalog')}</td><td>${t.enabled?'Enabled':'Disabled'}</td><td><button type="button" data-terminal="${t.id}">Edit</button></td></tr>`).join('')}</tbody></table><form id="terminalForm"><h3 id="terminalHeading">Add terminal</h3><label>Terminal name<input name="name" maxlength="60" required></label><label>DESK layout<select name="layout"><option value="">Standard catalog</option>${retailState.layouts.map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select></label><label><input type="checkbox" name="enabled" checked> Enabled</label><p>On the checkout PC, sign in as an administrator and choose Terminal setup to register it.</p><button>Save terminal</button><button type="button" id="terminalClear">Clear</button><p id="terminalStatus" role="status"></p></form>`;let selected=null;root.onclick=e=>{const b=e.target.closest('[data-terminal]');if(!b)return;if(changedForms.has($('terminalForm'))){posMessage('Save or clear changes first.');return;}selected=retailState.terminals.find(t=>t.id===b.dataset.terminal);const f=$('terminalForm').elements;f.name.value=selected.name;f.layout.value=selected.layout||'';f.enabled.checked=!!selected.enabled;$('terminalHeading').textContent='Edit '+selected.name;};$('terminalClear').onclick=()=>{changedForms.delete($('terminalForm'));retailTerminals();};$('terminalForm').onsubmit=async e=>{e.preventDefault();const f=e.target.elements;try{await retailSave('terminal-save',{...(selected||{}),name:f.name.value,layout:f.layout.value,enabled:f.enabled.checked});changedForms.delete(e.target);retailState=await api('pos/retail-config');retailTerminals();$('terminalStatus').textContent='Terminal saved.';}catch(err){$('terminalStatus').textContent=err.message;}};}
 
 
@@ -591,10 +591,11 @@ async function flowPrinting(){
  }catch(error){posMessage(error.message);}
 }
 async function flowPrintTickets(sale){try{const data=await api('pos/print-tickets?sale='+sale.id);const d=flowModal('Preparation tickets',`<p>Receipt #${data.sale}. Choose a category, then select its destination in the print dialog. Reprinting does not create another sale.</p><div class="flowToolbar">${data.tickets.map((t,i)=>`<button data-ticket="${i}">${esc(t.category)}${t.printer?' → '+esc(t.printer):''}</button>`).join('')}</div><div class="flowTicketPreview"></div><button class="flowTicketPrint" disabled>Print selected ticket</button>`);let chosen=null;d.onclick=e=>{const b=e.target.closest('[data-ticket]');if(!b)return;chosen=data.tickets[Number(b.dataset.ticket)];d.querySelector('.flowTicketPreview').innerHTML=`<h2>${esc(data.store)}</h2><h3>${esc(chosen.category)} · #${data.sale}</h3><p>${esc(data.at)}<br>${esc(data.cashier)}</p>${chosen.lines.map(l=>`<p><strong>${l.quantity} × ${esc(l.name)}</strong><br>${esc(flowLineDetails(l)+(l.tag?' · '+l.tag.name+' tag · '+posMoney(l.tag.discount)+' markdown':''))}</p>`).join('')}`;d.querySelector('.flowTicketPrint').disabled=false;};d.querySelector('.flowTicketPrint').onclick=()=>{if(!chosen)return;document.body.classList.add('flowPrinting');window.print();document.body.classList.remove('flowPrinting');};if(data.tickets.length)d.querySelector('[data-ticket]').click();}catch(e){posMessage(e.message);}}
-function flowBulk(){flowImport=null;const products=flowConfig.products;$('flowOffice').innerHTML=`<p>Imports update existing products by ID and create products when ID is blank. Previous sales are unchanged. Export first to retain the IDs and revision checks.</p><div class="flowToolbar"><button id="flowExportCSV">Export catalog CSV</button><button id="flowExportJSON">Export full catalog backup</button><label>Import CSV or full catalog JSON<input id="flowImportFile" type="file" accept=".csv,.json"></label></div><div class="flowColumns"><section><h3>Common settings</h3><form id="flowBulkForm"><label>Sub Department (blank = keep)<input name="category" maxlength="60"></label><label>Tax status<select name="taxable"><option value="">Keep current</option><option value="true">Taxable</option><option value="false">Non-taxable</option></select></label><label>Availability<select name="active"><option value="">Keep current</option><option value="true">Active</option><option value="false">Inactive</option></select></label><label>Printing category (blank = keep)<input name="print_category" maxlength="60"></label><button>Preview common changes</button><button type="reset">Clear</button></form></section><section><h3>Select products</h3><label><input id="flowBulkAll" type="checkbox"> Select all</label><div class="flowBulkProducts">${products.map(p=>`<label><input type="checkbox" data-bulk-product="${p.id}"> ${esc(p.name)} · ${posMoney(p.price)}</label>`).join('')}</div></section></div><section id="flowImportPreview" hidden><h3>Review import</h3><p id="flowImportSummary"></p><div id="flowImportRows" class="flowTable"></div><div class="flowToolbar"><button id="flowImportConfirm" class="primary">Confirm and save all changes</button><button id="flowImportCancel">Cancel preview</button></div></section><p id="flowImportStatus" role="status"></p>`;
+function flowCatalogPrice(product){return product.rules?.open_priced?'Open price':posMoney(product.price);}
+function flowBulk(){flowImport=null;const products=flowConfig.products;$('flowOffice').innerHTML=`<p>Imports update existing products by ID and create products when ID is blank. Previous sales are unchanged. Export first to retain the IDs and revision checks.</p><div class="flowToolbar"><button id="flowExportCSV">Export catalog CSV</button><button id="flowExportJSON">Export full catalog backup</button><label>Import CSV or full catalog JSON<input id="flowImportFile" type="file" accept=".csv,.json"></label></div><div class="flowColumns"><section><h3>Common settings</h3><form id="flowBulkForm"><label>Sub Department (blank = keep)<input name="category" maxlength="60"></label><label>Tax status<select name="taxable"><option value="">Keep current</option><option value="true">Taxable</option><option value="false">Non-taxable</option></select></label><label>Availability<select name="active"><option value="">Keep current</option><option value="true">Active</option><option value="false">Inactive</option></select></label><label>Printing category (blank = keep)<input name="print_category" maxlength="60"></label><button>Preview common changes</button><button type="reset">Clear</button></form></section><section><h3>Select products</h3><label><input id="flowBulkAll" type="checkbox"> Select all</label><div class="flowBulkProducts">${products.map(p=>`<label><input type="checkbox" data-bulk-product="${p.id}"> ${esc(p.name)} · ${flowCatalogPrice(p)}</label>`).join('')}</div></section></div><section id="flowImportPreview" hidden><h3>Review import</h3><p id="flowImportSummary"></p><div id="flowImportRows" class="flowTable"></div><div class="flowToolbar"><button id="flowImportConfirm" class="primary">Confirm and save all changes</button><button id="flowImportCancel">Cancel preview</button></div></section><p id="flowImportStatus" role="status"></p>`;
  const headers=['id','revision','name','category','price','taxable','active','print_category'];$('flowExportCSV').onclick=()=>flowDownload('CoastYouth-catalog.csv',flowCSV([headers,...products.map(p=>[p.id,p.revision,p.name,p.category,flowMoney(p.price),p.taxable,p.rules.active!==false,p.rules.print_category||''])]));$('flowExportJSON').onclick=()=>flowDownload('CoastYouth-catalog.json',JSON.stringify({format:'coastyouth-catalog-v1',products},null,2),'application/json');
  $('flowBulkAll').onchange=e=>{for(const x of $('flowOffice').querySelectorAll('[data-bulk-product]'))x.checked=e.target.checked;};
- const preview=async rows=>{try{const result=await retailSave('catalog-preview',{rows});flowImport=result.rows;$('flowImportPreview').hidden=false;$('flowImportSummary').textContent=`${result.create} new products · ${result.update} products updated. All changes save together.`;$('flowImportRows').innerHTML='<table><thead><tr><th>Product</th><th>Sub Department</th><th>Price</th><th>Tax</th><th>Active</th></tr></thead><tbody>'+flowImport.map(p=>`<tr><td>${esc(p.name)}</td><td>${esc(p.category)}</td><td>${posMoney(p.price)}</td><td>${p.taxable?'Taxable':'Non-taxable'}</td><td>${p.rules.active?'Yes':'No'}</td></tr>`).join('')+'</tbody></table>';$('flowImportStatus').textContent='Review the proposed values before saving.';changedForms.set($('flowBulkForm'),'import awaiting confirmation');}catch(e){$('flowImportStatus').textContent=e.message;}};
+ const preview=async rows=>{try{const result=await retailSave('catalog-preview',{rows});flowImport=result.rows;$('flowImportPreview').hidden=false;$('flowImportSummary').textContent=`${result.create} new products · ${result.update} products updated. All changes save together.`;$('flowImportRows').innerHTML='<table><thead><tr><th>Product</th><th>Sub Department</th><th>Price</th><th>Tax</th><th>Active</th></tr></thead><tbody>'+flowImport.map(p=>`<tr><td>${esc(p.name)}</td><td>${esc(p.category)}</td><td>${flowCatalogPrice(p)}</td><td>${p.taxable?'Taxable':'Non-taxable'}</td><td>${p.rules.active?'Yes':'No'}</td></tr>`).join('')+'</tbody></table>';$('flowImportStatus').textContent='Review the proposed values before saving.';changedForms.set($('flowBulkForm'),'import awaiting confirmation');}catch(e){$('flowImportStatus').textContent=e.message;}};
  $('flowBulkForm').onsubmit=e=>{e.preventDefault();const f=e.target.elements;const ids=[...$('flowOffice').querySelectorAll('[data-bulk-product]:checked')].map(x=>x.dataset.bulkProduct);const rows=products.filter(p=>ids.includes(p.id)).map(p=>{p=structuredClone(p);if(f.category.value)p.category=f.category.value;if(f.taxable.value)p.taxable=f.taxable.value==='true';if(f.active.value)p.rules.active=f.active.value==='true';if(f.print_category.value)p.rules.print_category=f.print_category.value;return p;});preview(rows);};
  $('flowImportFile').onchange=async e=>{try{const file=e.target.files[0];if(!file)return;if(file.size>2000000)throw Error('Use a file smaller than 2 MB.');const text=await file.text();let rows;if(file.name.toLowerCase().endsWith('.json')){const value=JSON.parse(text);if(value.format!=='coastyouth-catalog-v1'||!Array.isArray(value.products))throw Error('Choose a CoastYouth catalog export.');rows=value.products;}else{const parsed=flowParseCSV(text.replace(/^\uFEFF/,''));const head=parsed.shift();if(!head||head.join(',')!==headers.join(','))throw Error('Use the column headings from Export catalog CSV.');rows=parsed.map((cells,i)=>{if(cells.length!==headers.length)throw Error('Wrong column count on row '+(i+2));const r=Object.fromEntries(headers.map((h,j)=>[h,cells[j]]));const old=products.find(p=>p.id===r.id);for(const key of ['taxable','active'])if(!['true','false'].includes(r[key].toLowerCase()))throw Error('Use true or false for '+key+' on row '+(i+2));return {...r,id:r.id||null,price:posCents(r.price),taxable:r.taxable.toLowerCase()==='true',rules:{...(old?.rules||{}),active:r.active.toLowerCase()==='true',print_category:r.print_category}};});}await preview(rows);}catch(err){$('flowImportStatus').textContent=err.message;}};
  $('flowImportConfirm').onclick=async()=>{if(!flowImport)return;try{await retailSave('catalog-import',{rows:flowImport,confirmed:true});changedForms.delete($('flowBulkForm'));flowConfig=await api('pos/catalog-config');await posLoad();flowBulk();$('flowImportStatus').textContent='Catalog saved. All rows were validated before any changes were committed.';}catch(e){$('flowImportStatus').textContent=e.message;}};$('flowImportCancel').onclick=()=>{flowImport=null;$('flowImportPreview').hidden=true;changedForms.delete($('flowBulkForm'));$('flowBulkForm').reset();};
@@ -1141,7 +1142,7 @@ async function catalogOptionsEditor(section='sub_departments'){
  if(info.parent&&!v[info.parent].length)list.message('Create '+catalogSetupSections[info.parent].title+' first using the setup menu above.');
 }
 let catalogLeavePending=false;
-document.addEventListener('click',e=>{const target=e.target.closest('[data-office-section],[data-office-action],#officeBack,.operationsLinks a,#signOut');const form=$('flowProductForm');if(!target||!form||!changedForms.has(form)||catalogLeavePending)return;e.preventDefault();e.stopImmediatePropagation();const d=flowModal('Finish this item?',`<p>Complete the item and save it, or discard your changes before moving to the next page.</p><div class="flowToolbar"><button id="itemKeepEditing">Keep editing</button><button id="itemSaveLeave">Save & continue</button><button id="itemDiscardLeave">Discard & continue</button></div>`);const close=()=>{d.close();d.remove();};$('itemKeepEditing').onclick=close;const go=()=>{close();catalogLeavePending=true;target.click();catalogLeavePending=false;};$('itemDiscardLeave').onclick=()=>{changedForms.delete(form);go();};$('itemSaveLeave').onclick=async()=>{if(!form.reportValidity()){close();return;}await form.onsubmit({preventDefault(){},target:form});if(!changedForms.has(form))go();else d.querySelector('.flowError').textContent=$('flowProductStatus').textContent;};},true);
+document.addEventListener('click',e=>{const target=e.target.closest('[data-office-section],[data-office-category],[data-office-group],[data-office-action],#officeBack,.operationsLinks a,#signOut');const form=$('flowProductForm');if(!target||!form||!changedForms.has(form)||catalogLeavePending)return;e.preventDefault();e.stopImmediatePropagation();const d=flowModal('Finish this item?',`<p>Complete the item and save it, or discard your changes before moving to the next page.</p><div class="flowToolbar"><button id="itemKeepEditing">Keep editing</button><button id="itemSaveLeave">Save & continue</button><button id="itemDiscardLeave">Discard & continue</button></div>`);const close=()=>{d.close();d.remove();};$('itemKeepEditing').onclick=close;const go=()=>{close();catalogLeavePending=true;target.click();catalogLeavePending=false;};$('itemDiscardLeave').onclick=()=>{changedForms.delete(form);go();};$('itemSaveLeave').onclick=async()=>{if(!form.reportValidity()){close();return;}await form.onsubmit({preventDefault(){},target:form});if(!changedForms.has(form))go();else d.querySelector('.flowError').textContent=$('flowProductStatus').textContent;};},true);
 
 const catalogFlowOffice=flowOffice;flowOffice=async function(action){if(['product-tools','bundles','availability'].includes(action))catalogOptions=await api('pos/catalog-options');return catalogFlowOffice(action);};
 
@@ -1308,6 +1309,127 @@ if(officeMode){
 }
 
 // END OFFICE UPDATES
+// BEGIN OFFICE NAVIGATION
+// OFFICE navigation changes only; existing editors, permissions and saves are reused.
+const officeNavigationSections=[
+ ['home','Home','⌂','Choose an area or search for a setting.'],
+ ['products','Products','▦','Items, pricing, donation intake and product organization.'],
+ ['sales','Sales','＄','Payment rules, transactions, refunds and cash drawers.'],
+ ['accounts','Customers','◎','Customer accounts, rewards and customer communications.'],
+ ['staff','Staff','♙','Users, permissions, onboarding and timekeeping.'],
+ ['reports','Reports','▥','Sales, store activity and labor reports.'],
+ ['system','System','⚙','Stores, checkout screens, printers, computers and updates.']
+];
+const officeNavigationGroups=[
+ {section:'products',id:'items',title:'Items & pricing',description:'Create products, manage prices and receive donated stock.',actions:['catalog','bundles','availability','bulk-catalog','thrift-intake']},
+ {section:'products',id:'organization',title:'Product organization',description:'Revenue Centers → Departments → Sub Departments.',actions:['revenue-centers','departments','sub-departments']},
+ {section:'sales',id:'policies',title:'Taxes & payment rules',description:'Keep taxes, discounts, surcharges and cash settings separate.',actions:['taxes','cash-rules','discount-rules','surcharge-settings','card-future-settings']},
+ {section:'sales',id:'transactions',title:'Transactions & cash',description:'Review sales, approve adjustments and manage cash drawers.',actions:['history','held','refunds','approvals','stores-drawers']},
+ {section:'sales',id:'fulfillment',title:'Pickup & delivery',description:'Manage sold items awaiting collection or delivery.',actions:['thrift-pickups']},
+ {section:'accounts',id:'accounts',title:'Customers & balances',description:'Customer profiles, store credit, vouchers and gift certificates.',actions:['thrift-customers','accounts','thrift-vouchers','stores-gifts','stores-members']},
+ {section:'accounts',id:'programs',title:'Rewards & programs',description:'Color tags, donation prompts, loyalty and optional programs.',actions:['thrift-settings','stores-programs']},
+ {section:'accounts',id:'messages',title:'Receipts & messages',description:'Receipt design, reservation confirmations and reminders.',actions:['receipt-design','reservation-messages']},
+ {section:'staff',id:'access',title:'Users & permissions',description:'One shared user directory with role-based access.',actions:['users','user-setup','roles','login-security']},
+ {section:'staff',id:'hr',title:'Human resources',description:'Invite employees and review onboarding progress.',actions:['hr-onboarding']},
+ {section:'staff',id:'timekeeping',title:'Timekeeping',description:'Manage time entries, schedules, requests and payroll.',actions:['timekeeping-manage']},
+ {section:'staff',id:'communications',title:'Communications oversight',description:'Review retained staff messages and attachments with permission.',actions:['review-communications']},
+ {section:'reports',id:'sales',title:'Sales analysis',description:'Sales, tax, cash, products and transaction summaries.',actions:['report-center','reports']},
+ {section:'reports',id:'store',title:'Store activity',description:'Donations, color tags, pickups, vouchers and employee cash advances.',actions:['thrift-reports','cash-advance-report']},
+ {section:'reports',id:'labor',title:'Labor & schedules',description:'Time-entry reports and printable employee schedules.',actions:['labor-reports','schedule-report']},
+ {section:'system',id:'stores',title:'Stores & appearance',description:'Store profiles, branding and your color theme.',actions:['stores-profiles','office-appearance']},
+ {section:'system',id:'checkout',title:'Checkout & printing',description:'Terminals, DESK layouts, customer displays and ticket printing.',actions:['terminals','layouts','customer-display','printing-categories','printing']},
+ {section:'system',id:'computers',title:'Computers & updates',description:'Computer registration, application updates and the shared server.',actions:['computer-register','computer-updates','server']}
+];
+const officeNavigationAliases={'product-tools':'catalog',receipt:'stores-profiles',cards:'card-future-settings'};
+function officeSettingsPath(entry){
+ const action=officeNavigationAliases[entry.action]||entry.action;
+ const group=officeNavigationGroups.find(g=>g.actions.includes(action));
+ const section=officeNavigationSections.find(s=>s[0]===(group?.section||entry.section));
+ return [section?.[1]||'Settings',group?.title].filter(Boolean).join(' › ');
+}
+function officeMenuCards(){
+ if(!user)return [];
+ return [...officeAvailableCards().filter(c=>!officeNavigationAliases[c.action]),{action:'office-appearance',title:'Appearance & themes',description:'Choose your color theme or the store default.',section:'system',icon:'◐',keywords:'color colour liquid glass aero dark light gray grey'}];
+}
+if(officeMode){
+ officeSections.splice(0,officeSections.length,...officeNavigationSections);
+ const labels={
+  catalog:['Products & item choices','Create items, set prices, and configure open prices, weights and add-ons.'],
+  printing:['Printer routing','Assign printing categories to ticket destinations.'],
+  'discount-rules':['Discount & return rules','Discount limits, eligible products and the return window.'],
+  'card-future-settings':['Credit cards · future update','Credit cards and card surcharges will be added in future updates.'],
+  users:['Add users & assign roles','Create shared accounts and assign their roles.'],
+  'user-setup':['Employee profiles & access','Personal details, work assignments, PINs and individual access.'],
+  reports:['Sales totals','Compare sales, tax, cash and store-credit totals.']
+ };
+ for(const card of officeCards){
+  const group=officeNavigationGroups.find(g=>g.actions.includes(officeNavigationAliases[card.action]||card.action));
+  if(group)card.section=group.section;
+  if(labels[card.action])[card.title,card.description]=labels[card.action];
+ }
+ let officeGroup='',officeOpenedAction='';
+ officeNav.innerHTML=officeSections.map(([id,label,icon])=>`<button type="button" data-office-section="${id}"><span aria-hidden="true">${icon}</span>${label}</button>`).join('');
+ const navigation=document.createElement('div');navigation.id='officeNavigation';
+ navigation.innerHTML='<nav id="officeBreadcrumb" aria-label="Settings location"></nav><nav id="officeGroups" aria-label="Settings groups"></nav><div id="officeGroupHeading"><h2></h2><p></p></div>';
+ $('officeTiles').before(navigation);
+ const availableGroups=cards=>officeNavigationGroups.filter(g=>cards.some(c=>g.actions.includes(c.action)));
+ const tile=(card,attribute,extra='')=>`<button type="button" class="officeTile" ${attribute}><span class="officeIcon" aria-hidden="true">${esc(card.icon)}</span><span><strong>${esc(card.title)}</strong><small>${esc(card.description)}</small>${extra}</span><span aria-hidden="true">›</span></button>`;
+ officeRender=function(){
+  const cards=officeMenuCards(),groups=availableGroups(cards),sections=new Set(groups.map(g=>g.section));
+  if(officeSection!=='home'&&!sections.has(officeSection)){officeSection='home';officeGroup='';}
+  const section=officeSections.find(s=>s[0]===officeSection)||officeSections[0];
+  const sectionGroups=groups.filter(g=>g.section===officeSection);
+  if(!sectionGroups.some(g=>g.id===officeGroup))officeGroup=sectionGroups[0]?.id||'';
+  const group=sectionGroups.find(g=>g.id===officeGroup);
+  $('officeHeading').textContent=officeSection==='home'?'OFFICE settings':section[1];
+  document.querySelector('.officeIntro p').textContent=section[3];
+  for(const b of officeNav.querySelectorAll('button')){b.hidden=b.dataset.officeSection!=='home'&&!sections.has(b.dataset.officeSection);b.setAttribute('aria-current',b.dataset.officeSection===officeSection?'page':'false');}
+  $('officeBreadcrumb').hidden=officeSection==='home';
+  $('officeBreadcrumb').innerHTML='<button type="button" data-office-category="home">Home</button><span aria-hidden="true">›</span>'+`<button type="button" data-office-category="${section[0]}">${esc(section[1])}</button>`+(group?`<span aria-hidden="true">›</span><button type="button" data-office-group="${group.id}">${esc(group.title)}</button>`:'');
+  const opened=cards.find(c=>c.action===officeOpenedAction);
+  if(opened&&!$('officeWork').hidden)$('officeBreadcrumb').innerHTML+=`<span aria-hidden="true">›</span><strong aria-current="page">${esc(opened.title)}</strong>`;
+  $('officeGroups').hidden=officeSection==='home'||!$('officeWork').hidden;
+  $('officeGroups').innerHTML=sectionGroups.map(g=>`<button type="button" data-office-group="${g.id}" aria-pressed="${g.id===officeGroup}">${esc(g.title)}<span class="officeGroupCount">${cards.filter(c=>g.actions.includes(c.action)).length}</span></button>`).join('');
+  $('officeGroupHeading').hidden=!group||!$('officeWork').hidden;
+  $('officeGroupHeading').querySelector('h2').textContent=group?.title||'';
+  $('officeGroupHeading').querySelector('p').textContent=group?.description||'';
+  if(officeSection==='home'){
+   $('officeTiles').innerHTML=officeSections.filter(s=>sections.has(s[0])).map(([id,title,icon,description])=>tile({title,icon,description},`data-office-category="${id}"`,`<span class="officeTileMeta">${groups.filter(g=>g.section===id).length} focused groups</span>`)).join('');
+  }else{
+   $('officeTiles').innerHTML=(group?.actions||[]).map(a=>cards.find(c=>c.action===a)).filter(Boolean).map(c=>tile(c,`data-office-action="${c.action}"`)).join('');
+  }
+  if(!$('officeTiles').innerHTML)$('officeTiles').innerHTML='<p>No settings are available for your role.</p>';
+  $('officeBack').textContent='‹ Back to '+(group?.title||'settings');
+ };
+ officeHome=function(section='home',group=''){
+  if(!navigationAllowed())return;
+  if(unfinished()){posMessage('Save or discard your current work before changing settings.');return;}
+  const legacy={hr:['staff','hr'],security:['staff','access'],timekeeping:['staff','timekeeping'],communications:['staff','communications']};
+  [section,group]=legacy[section]||[section,group];
+  officeSection=section;officeGroup=group;officeOpenedAction='';
+  $('officeWork').hidden=true;$('officeTiles').hidden=false;officeRender();
+ };
+ const openExisting=officeAction;
+ officeAction=async function(action){
+  action=officeNavigationAliases[action]||action;
+  const card=officeMenuCards().find(c=>c.action===action);
+  if(!card){posMessage('Your role does not have access to this setting.');return;}
+  if(!navigationAllowed())return;
+  if(unfinished()){posMessage('Save or discard your current work before opening another setting.');return;}
+  const group=officeNavigationGroups.find(g=>g.actions.includes(action));
+  if(group){officeSection=group.section;officeGroup=group.id;}
+  officeOpenedAction=action;officeRender();
+  if(action==='office-appearance')retailAppearanceButton.click();
+  else await openExisting(action);
+  officeRender();
+ };
+ $('officeTiles').onclick=e=>{const b=e.target.closest('button');if(b?.dataset.officeCategory)officeHome(b.dataset.officeCategory);else if(b?.dataset.officeAction)officeAction(b.dataset.officeAction);};
+ navigation.onclick=e=>{const b=e.target.closest('button');if(b?.dataset.officeCategory)officeHome(b.dataset.officeCategory);else if(b?.dataset.officeGroup)officeHome(officeSection,b.dataset.officeGroup);};
+ $('officeBack').onclick=()=>officeHome(officeSection,officeGroup);
+ new MutationObserver(()=>{if($('auth').hidden)return;officeSection='home';officeGroup='';officeOpenedAction='';$('officeWork').hidden=true;$('officeTiles').hidden=false;officeRender();}).observe($('auth'),{attributes:true,attributeFilter:['hidden']});
+}
+
+// END OFFICE NAVIGATION
 // BEGIN OFFICE SEARCH
 // Search navigation only: no customer records, form values, or settings are indexed.
 (()=>{
@@ -1347,7 +1469,7 @@ if(officeMode){
  const input=$('officeSearchInput'),clear=$('officeSearchClear'),popup=$('officeSearchPopup'),results=$('officeSearchResults'),summary=$('officeSearchSummary');
  let matches=[],active=-1,opening=false,sessionName=null,renderedMarkup='';
  const normalize=value=>String(value).normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
- const entries=()=>[...officeAvailableCards(),{action:'office-appearance',title:'Appearance & themes',description:'Choose your color theme or the store default.',section:'system',keywords:'color colour liquid glass aero dark light gray grey'}];
+ const entries=()=>officeMenuCards();
  function close(){popup.hidden=true;input.setAttribute('aria-expanded','false');input.removeAttribute('aria-activedescendant');}
  function sync(){
   host.hidden=!user||!$('auth').hidden||$('posRoot').hidden;
@@ -1364,7 +1486,7 @@ if(officeMode){
   sync();if(host.hidden)return;
   const query=normalize(input.value),words=query.split(' ').filter(Boolean);clear.hidden=!input.value;
   matches=words.length?entries().map(entry=>{
-   const title=normalize(entry.title),section=officeSections.find(x=>x[0]===entry.section)?.[1]||'Settings';
+   const title=normalize(entry.title),section=officeSettingsPath(entry);
    const haystack=normalize([entry.title,entry.description,section,aliases[entry.action]||'',entry.keywords||''].join(' '));
    return {...entry,sectionLabel:section,score:title===query?0:title.startsWith(query)?1:title.includes(query)?2:3,match:words.every(word=>haystack.includes(word))};
   }).filter(entry=>entry.match).sort((a,b)=>a.score-b.score||a.title.localeCompare(b.title)):[];
@@ -1396,8 +1518,7 @@ if(officeMode){
   if(unfinished()){posMessage('Save or discard the current form before opening another setting.');return;}
   opening=true;
   try{
-   if(action==='office-appearance')retailAppearanceButton.click();
-   else await officeAction(action);
+   await officeAction(action);
    input.value='';clear.hidden=true;
    if(!document.querySelector('dialog[open]')){
     const title=$('officeWork').hidden?$('officeHeading'):$('officeWorkTitle');

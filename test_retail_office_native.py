@@ -21,7 +21,7 @@ def run():
   try:
    wait("document.querySelector('#login') && typeof officeAction==='function'")
    w.evaluate_js("document.querySelector('#login [name=name]').value='Admin';document.querySelector('#login [name=password]').value='testpassword';document.querySelector('#login').requestSubmit()")
-   wait("document.querySelector('[data-office-action=users]') && document.querySelector('[data-office-action=thrift-settings]')")
+   wait("document.querySelector('#officeTiles [data-office-category=staff]') && document.querySelector('#officeTiles [data-office-category=accounts]')")
    wait("document.querySelector('#nativeTerminalForm')")
    w.evaluate_js("document.querySelector('#nativeTerminalForm').requestSubmit()")
    wait("document.querySelector('#nativeTerminalStatus').textContent.includes('Registered') && !document.querySelector('#nativeTerminalSetup').open")

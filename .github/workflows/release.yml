@@ -70,6 +70,7 @@ jobs:
       - run: python test_catalog_hierarchy_ui.py
       - run: python test_setup_list_ui.py
       - run: python test_office_search_ui.py
+      - run: python test_office_navigation_ui.py
       - run: python test_hr_browser_ui.py
       - run: python test_hr_sources_ui.py
       - run: python test_office_expansion_ui.py
@@ -138,7 +139,7 @@ jobs:
         shell: pwsh
         run: |
           $baseline = Join-Path $env:RUNNER_TEMP 'retail-upgrade-baseline'
-          git clone --depth 1 --branch v0.52.0 https://github.com/m404ntfd/mgc-yfc-operations.git $baseline
+          git clone --depth 1 --branch v0.53.0 https://github.com/m404ntfd/mgc-yfc-operations.git $baseline
           if ($LASTEXITCODE -ne 0) { throw 'Baseline checkout failed' }
           $env:RETAIL_BASE_SOURCE = $baseline
           python test_retail_release_upgrade.py
@@ -160,16 +161,17 @@ jobs:
           & $compiler "/DAppVersion=$version" installer/suite.iss
           if ($LASTEXITCODE -ne 0) { throw "Computer setup installer build failed" }
           $officeInstall = Join-Path $env:RUNNER_TEMP 'OfficeInstallTest'
-          $p = Start-Process -WindowStyle Hidden -FilePath 'dist/CoastYouth-Retail-OFFICE-Setup-v1.12.0.exe' -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$officeInstall") -PassThru -Wait
+          $p = Start-Process -WindowStyle Hidden -FilePath 'dist/CoastYouth-Retail-OFFICE-Setup-v1.13.0.exe' -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$officeInstall") -PassThru -Wait
           if ($p.ExitCode -ne 0) { throw 'OFFICE install failed' }
           $p = Start-Process -WindowStyle Hidden -FilePath (Join-Path $officeInstall 'CoastYouth Retail OFFICE.exe') -ArgumentList '--smoke-test' -PassThru -Wait
           if ($p.ExitCode -ne 0) { throw 'Installed OFFICE failed' }
           $posInstall = Join-Path $env:RUNNER_TEMP 'PosInstallTest'
-          $p = Start-Process -WindowStyle Hidden -FilePath 'dist/MGC-YFC-POS-Setup-v1.15.0.exe' -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$posInstall") -PassThru -Wait
+          $p = Start-Process -WindowStyle Hidden -FilePath 'dist/MGC-YFC-POS-Setup-v1.15.1.exe' -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$posInstall") -PassThru -Wait
           if ($p.ExitCode -ne 0) { throw 'POS install failed' }
           $p = Start-Process -WindowStyle Hidden -FilePath (Join-Path $posInstall 'MGC YFC Point of Sale.exe') -ArgumentList '--smoke-test' -PassThru -Wait
           if ($p.ExitCode -ne 0) { throw 'Installed POS failed' }
       - run: python test_pos_self_update.py
+      - run: python installer/test_suite_errors.py
       - run: python installer/test_suite_install.py
       - name: Test installed server and remote connection
         shell: pwsh
@@ -227,4 +229,4 @@ jobs:
             echo "Release already exists; leaving published assets unchanged."
             exit 0
           fi
-          gh release create "$tag" dist/*.exe dist/Store-Dispatch-Update.zip --target "$GITHUB_SHA" --title "CoastYouth Retail Cash Advances + OFFICE Updates $tag" --notes-file RELEASE-NOTES.md
+          gh release create "$tag" dist/*.exe dist/Store-Dispatch-Update.zip --target "$GITHUB_SHA" --title "CoastYouth Retail Organized OFFICE Settings $tag" --notes-file RELEASE-NOTES.md

@@ -1,3 +1,4 @@
+from test_ui_helpers import office_setting
 """OFFICE web/server updates: isolated database, mocked download/restart, no live install."""
 import json,os,time
 from pathlib import Path
@@ -91,7 +92,7 @@ def run():
     p.evaluate('pollFlow()');expect(p.locator('#updateTitle')).to_have_text('Update complete');expect(p.locator('#updateDone')).to_be_visible();expect(p.locator('#officeWebFlowCancel')).to_be_hidden()
    assert not errors,errors
    # Staff cannot see update controls or call the install endpoints.
-   other=browser.new_page();login(other,'Employee');expect(other.locator('[data-office-action=computer-updates]')).to_have_count(0);expect(other.locator('.computerUpdateSummary')).to_be_hidden()
+   other=browser.new_page();login(other,'Employee');expect(office_setting(other,'computer-updates')).to_have_count(0);expect(other.locator('.computerUpdateSummary')).to_be_hidden()
    assert other.request.post(origin+'/api/update-flow/start',data={'version':'99.0.0','ready':True},headers={'X-Dispatch':'1'}).status==403
    assert snapshot()==before;browser.close()
  finally:fixture.tearDown()

@@ -36,7 +36,7 @@
  const input=$('officeSearchInput'),clear=$('officeSearchClear'),popup=$('officeSearchPopup'),results=$('officeSearchResults'),summary=$('officeSearchSummary');
  let matches=[],active=-1,opening=false,sessionName=null,renderedMarkup='';
  const normalize=value=>String(value).normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
- const entries=()=>[...officeAvailableCards(),{action:'office-appearance',title:'Appearance & themes',description:'Choose your color theme or the store default.',section:'system',keywords:'color colour liquid glass aero dark light gray grey'}];
+ const entries=()=>officeMenuCards();
  function close(){popup.hidden=true;input.setAttribute('aria-expanded','false');input.removeAttribute('aria-activedescendant');}
  function sync(){
   host.hidden=!user||!$('auth').hidden||$('posRoot').hidden;
@@ -53,7 +53,7 @@
   sync();if(host.hidden)return;
   const query=normalize(input.value),words=query.split(' ').filter(Boolean);clear.hidden=!input.value;
   matches=words.length?entries().map(entry=>{
-   const title=normalize(entry.title),section=officeSections.find(x=>x[0]===entry.section)?.[1]||'Settings';
+   const title=normalize(entry.title),section=officeSettingsPath(entry);
    const haystack=normalize([entry.title,entry.description,section,aliases[entry.action]||'',entry.keywords||''].join(' '));
    return {...entry,sectionLabel:section,score:title===query?0:title.startsWith(query)?1:title.includes(query)?2:3,match:words.every(word=>haystack.includes(word))};
   }).filter(entry=>entry.match).sort((a,b)=>a.score-b.score||a.title.localeCompare(b.title)):[];
@@ -85,8 +85,7 @@
   if(unfinished()){posMessage('Save or discard the current form before opening another setting.');return;}
   opening=true;
   try{
-   if(action==='office-appearance')retailAppearanceButton.click();
-   else await officeAction(action);
+   await officeAction(action);
    input.value='';clear.hidden=true;
    if(!document.querySelector('dialog[open]')){
     const title=$('officeWork').hidden?$('officeHeading'):$('officeWorkTitle');

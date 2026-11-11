@@ -1,3 +1,4 @@
+from test_ui_helpers import office_setting
 import os,uuid,base64
 from pathlib import Path
 from playwright.sync_api import sync_playwright,expect
@@ -19,11 +20,11 @@ def run():
   with sync_playwright() as pw:
    b=pw.chromium.launch(executable_path=os.environ.get('TEST_CHROMIUM') or None,headless=True);ctx=b.new_context(viewport={'width':1440,'height':1050});p=ctx.new_page();p.on('pageerror',lambda e:errors.append(str(e)));origin=f'http://127.0.0.1:{f.port}'
    p.goto(origin+'/office');password_login_page(p).locator('#login [name=name]').fill('Admin');p.locator('#login [name=password]').fill('testpassword');p.locator('#login button').click();expect(p.locator('#officeTiles')).to_be_visible()
-   p.locator('[data-office-action=roles]').click();frame=p.frame_locator('#officeSecurityFrame');expect(frame.locator('#rolesArea')).to_be_visible();frame.locator('#roleSelect').select_option(str(role));frame.locator('[data-role-tab=permissions]').click();p.screenshot(path=str(out/'OFFICE-Roles.png'))
+   office_setting(p,'roles').click();frame=p.frame_locator('#officeSecurityFrame');expect(frame.locator('#rolesArea')).to_be_visible();frame.locator('#roleSelect').select_option(str(role));frame.locator('[data-role-tab=permissions]').click();p.screenshot(path=str(out/'OFFICE-Roles.png'))
    frame.locator('#roleCategories input').fill('Point of sale');assert p.evaluate('unfinished()');p.locator('#officeBack').click();expect(frame.locator('#rolesArea')).to_be_visible()
    frame.locator('#roleForm').get_by_role('button',name='Cancel changes').click();p.locator('#officeBack').click();expect(p.locator('#officeTiles')).to_be_visible()
-   p.locator('[data-office-action=user-setup]').click();expect(frame.locator('#users')).to_contain_text('Employee');frame.locator('[data-password=Employee]').click();expect(frame.locator('#userEditor_properties')).to_be_visible();p.screenshot(path=str(out/'OFFICE-Full-User-Setup.png'));frame.locator('#passwordClose').click();p.locator('#officeBack').click()
-   p.locator('[data-office-action=report-center]').click();expect(p.locator('.rrDocumentHeader')).to_contain_text('Thrift Mart');p.locator('.rrFilters [name=kind]').select_option('products');p.locator('.rrFilters button').first.click();expect(p.locator('.rrTable')).to_contain_text('Sofa');expect(p.locator('.rrDocumentHeader img')).to_be_visible();p.screenshot(path=str(out/'OFFICE-Branded-Report.png'))
+   office_setting(p,'user-setup').click();expect(frame.locator('#users')).to_contain_text('Employee');frame.locator('[data-password=Employee]').click();expect(frame.locator('#userEditor_properties')).to_be_visible();p.screenshot(path=str(out/'OFFICE-Full-User-Setup.png'));frame.locator('#passwordClose').click();p.locator('#officeBack').click()
+   office_setting(p,'report-center').click();expect(p.locator('.rrDocumentHeader')).to_contain_text('Thrift Mart');p.locator('.rrFilters [name=kind]').select_option('products');p.locator('.rrFilters button').first.click();expect(p.locator('.rrTable')).to_contain_text('Sofa');expect(p.locator('.rrDocumentHeader img')).to_be_visible();p.screenshot(path=str(out/'OFFICE-Branded-Report.png'))
    p.evaluate("()=>{window.print=()=>{window.printedDocument=document.querySelector('#retailPrintReport').outerHTML}}");p.locator('[data-rr-print]').click();p.wait_for_function('window.printedDocument');assert 'Thrift Mart' in p.evaluate('window.printedDocument')
    if os.environ.get('REPORT_PREVIEW_PDF'):
     target=Path('output/pdf');target.mkdir(parents=True,exist_ok=True)

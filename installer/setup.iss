@@ -18,6 +18,7 @@ OutputBaseFilename=MGC-YFC-Operations-Setup-v{#AppVersion}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+SetupLogging=yes
 SetupIconFile=..\assets\dispatch.ico
 AppMutex=ThriftMartDispatchServer,ThriftMartDispatchTray
 UninstallDisplayName=MGC YFC Operations

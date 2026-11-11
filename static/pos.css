@@ -281,3 +281,29 @@ dialog.catalogSetup{width:min(940px,calc(100vw - 48px));max-width:calc(100vw - 4
 }
 
 /* END REPORT DOCUMENT */
+/* BEGIN OFFICE NAVIGATION */
+/* Settings use the current palette for both text and surfaces. */
+@media screen {
+ .retailOffice #officeNav{flex:1 0 auto;min-width:max-content}
+ #officeNavigation{color:var(--rt-text,#19334a)}
+ #officeBreadcrumb{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 22px;font-size:13px}
+ :root #officeBreadcrumb button{border:0;padding:4px 0;min-height:30px;background:transparent!important;color:var(--rt-text,#19334a)!important;font-size:13px}
+ #officeBreadcrumb strong{color:var(--rt-text,#19334a)}
+ #officeGroups{display:flex;flex-wrap:wrap;gap:10px;padding:0 0 18px;border-bottom:1px solid var(--rt-border,#bdcddd)}
+ :root #officeGroups button{display:flex;align-items:center;gap:10px;padding:11px 16px;min-height:44px;background:var(--rt-surface,#fff)!important;color:var(--rt-text,#19334a)!important;border:1px solid var(--rt-border,#bdcddd);border-radius:9px}
+ :root #officeGroups button[aria-pressed=true]{background:var(--rt-text,#19334a)!important;color:var(--rt-surface,#fff)!important;border-color:var(--rt-text,#19334a);box-shadow:0 3px 0 var(--rt-accent,#245c8e)}
+ #officeGroups .officeGroupCount{color:inherit;font-size:12px;border:1px solid currentColor;border-radius:12px;padding:1px 7px;min-width:20px}
+ #officeGroupHeading{margin:24px 0 18px}#officeGroupHeading h2{font-size:21px;margin:0 0 7px;color:var(--rt-text,#19334a)}#officeGroupHeading p{font-size:14px;margin:0;color:var(--rt-muted,#405b70)}
+ #officeHub .officeTile{min-height:128px;transition:box-shadow .15s,transform .15s}
+ #officeHub .officeTile:hover{box-shadow:0 5px 16px #10283a24;transform:translateY(-1px)}
+ #officeHub .officeTile .officeTileMeta{display:block;color:var(--rt-muted,#405b70);font-size:12px;font-weight:600;margin-top:14px}
+ #officeHub .officeIcon{background:var(--rt-bg,#e6edf4);color:var(--rt-text,#19334a)}
+ :root #officeNavigation button:focus-visible,:root #officeHub .officeTile:focus-visible{outline:3px solid var(--rt-text,#19334a);outline-offset:3px}
+ #officeTiles{align-content:start}
+ @media(max-width:1100px){#officeNav button{min-width:62px;padding:8px}#officeGroups{gap:8px}#officeGroups button{padding:9px 12px}}
+ @media(max-width:760px){.retailOffice #officeNav{min-width:0;flex-basis:100%}}
+ @media(prefers-reduced-motion:reduce){#officeHub .officeTile{transition:none}#officeHub .officeTile:hover{transform:none}}
+}
+@media print{#officeNavigation{display:none!important}}
+
+/* END OFFICE NAVIGATION */

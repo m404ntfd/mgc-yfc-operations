@@ -1,3 +1,4 @@
+from test_ui_helpers import office_setting
 import os,uuid,datetime as dt
 from pathlib import Path
 from playwright.sync_api import sync_playwright,expect
@@ -18,7 +19,7 @@ def run():
    b=pw.chromium.launch(executable_path=os.environ.get('TEST_CHROMIUM') or None,headless=True)
    page=b.new_page(viewport={'width':1440,'height':1050});page.on('pageerror',lambda e:errors.append(str(e)));page.on('dialog',lambda d:d.accept())
    origin=f'http://127.0.0.1:{f.port}';page.goto(origin+'/office');password_login_page(page).locator('#login [name=name]').fill('Admin');page.locator('#login [name=password]').fill('testpassword');page.locator('#login button').click();expect(page.locator('#officeHub')).to_be_visible()
-   page.locator('[data-office-action=catalog]').click();page.locator('#flowProductChoice').select_option(pid);expect(page.locator('[name=pickup_slip]')).to_be_checked();page.screenshot(path=str(out/'OFFICE-Pickup-Item.png'))
+   office_setting(page,'catalog').click();page.locator('#flowProductChoice').select_option(pid);expect(page.locator('[name=pickup_slip]')).to_be_checked();page.screenshot(path=str(out/'OFFICE-Pickup-Item.png'))
    page.goto(origin+'/pos');page.locator('#posNew').click();page.locator('[data-pos-product="'+pid+'"]').click();page.locator('#posPayNow').click();page.locator('#posCash [name=tender]').fill('140');page.locator('#posCash button.primary').click()
    expect(page.locator('#pickupYes')).to_be_visible();page.screenshot(path=str(out/'DESK-Paid-Pickup-Prompt.png'));page.locator('#pickupYes').click()
    d=page.locator('dialog[open]');d.locator('[name=customer]').fill('Sample Customer');d.locator('[name=contact]').fill('555-0100');d.locator('[name=location]').fill('Furniture bay A');d.locator('[name=due]').fill(today);d.locator('button.primary').click();expect(page.locator('#thriftPrintSlip')).to_be_enabled()

@@ -68,8 +68,9 @@ def run():
    p.screenshot(path=str(out/'OFFICE-Settings-Search-Compact.png'))
    # Role-limited users can find allowed screens but never see administrative settings.
    limited=b.new_page();login(limited,'Employee');limited.locator('#officeSearchInput').fill('users');expect(limited.locator('#officeSearchResults [data-office-action=users]')).to_be_visible()
-   for query in ['taxes','computer updates','roles permissions']:
+   for query in ['taxes','computer updates']:
     limited.locator('#officeSearchInput').fill(query);expect(limited.locator('#officeSearchResults button')).to_have_count(0)
+   limited.locator('#officeSearchInput').fill('roles permissions');expect(limited.locator('#officeSearchResults [data-office-action=roles]')).to_have_count(0)
    limited.locator('#officeSearchInput').fill('user');limited.locator('#officeSearchResults [data-office-action=users]').click();expect(limited.locator('#officeUserRows')).to_be_visible()
    limited.locator('#signOut').click();expect(limited.locator('#officeSettingsSearch')).to_be_hidden();expect(limited.locator('#officeSearchResults button')).to_have_count(0)
    desk=b.new_page();desk.goto(origin+'/pos');expect(desk.locator('#officeSettingsSearch')).to_have_count(0)

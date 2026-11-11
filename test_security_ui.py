@@ -1,3 +1,4 @@
+from test_ui_helpers import office_setting
 """Browser test for administrator and delegated account-unlock settings."""
 import test_server,os
 from test_ui_helpers import password_login_page
@@ -15,7 +16,7 @@ def run():
    browser=p.chromium.launch(**({'executable_path':os.environ['TEST_CHROMIUM']} if os.environ.get('TEST_CHROMIUM') else {}));page=browser.new_page(viewport={'width':390,'height':844});errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
    base=f'http://127.0.0.1:{Fixture.port}'
    def login(name,password):
-    page.emulate_media(reduced_motion='reduce');page.goto(base+'/office');password_login_page(page).locator('#login [name=name]').fill(name);page.locator('#login [name=password]').fill(password);page.locator('#login button').click();page.locator('[data-office-action=login-security]').click()
+    page.emulate_media(reduced_motion='reduce');page.goto(base+'/office');password_login_page(page).locator('#login [name=name]').fill(name);page.locator('#login [name=password]').fill(password);page.locator('#login button').click();office_setting(page,'login-security').click()
    login('Admin','testpassword');expect(page.locator('#officeLoginLimit [name=max_attempts]')).to_have_value('5');page.locator('#officeLoginLimit [name=max_attempts]').fill('2');page.locator('#officeLoginLimit button').click();expect(page.locator('#officeSecurityStatus')).to_have_text('Login limit saved.')
    for _ in range(2):Fixture.call('login',{'name':'Brad','password':'bad'})
    page.evaluate("officeAction('login-security')");expect(page.locator('#officeLockedUsers')).to_contain_text('Brad')

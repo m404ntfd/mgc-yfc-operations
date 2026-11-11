@@ -2,7 +2,7 @@
 UninstallDisplayIcon={app}\CoastYouth Retail OFFICE.exe
 AppId={{CF27FBAA-F830-4BF3-A509-417F1D4A3B99}
 AppName=CoastYouth Retail OFFICE
-AppVersion=1.12.0
+AppVersion=1.13.0
 AppPublisher=CoastYouth Retail
 DefaultDirName={localappdata}\Programs\CoastYouthRetailOffice
 DefaultGroupName=CoastYouth Retail
@@ -10,10 +10,11 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\dist
-OutputBaseFilename=CoastYouth-Retail-OFFICE-Setup-v1.12.0
+OutputBaseFilename=CoastYouth-Retail-OFFICE-Setup-v1.13.0
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+SetupLogging=yes
 SetupIconFile=..\assets\office.ico
 DisableProgramGroupPage=yes
 [Files]
