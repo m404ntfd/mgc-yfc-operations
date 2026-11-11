@@ -6,7 +6,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 TITLE = "CoastYouth Retail STORE OPS"
-VERSION = "1.2.1"
+VERSION = "1.3.0"
 DEFAULT_SERVER = "https://operations.coastyfc.com"
 
 def server_url(value):
@@ -115,7 +115,10 @@ def main():
             finally: window.destroy()
         webview.start(check, gui="edgechromium", private_mode=True)
         raise SystemExit(1 if errors else 0)
+    from desktop_startup import startup_update,claim_instance
+    if not claim_instance("ops"):return
     directory = Path(os.environ.get("APPDATA", str(Path.home()))) / "CoastYouthRetailStoreOps"
+    if startup_update("ops",VERSION,directory/"settings.json"):return
     config = directory / "connection.json"
     address = DEFAULT_SERVER
     try: address = server_url(json.loads(config.read_text(encoding="utf-8"))["server"])

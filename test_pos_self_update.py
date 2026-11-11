@@ -6,13 +6,13 @@ import pos_updater
 
 def run(app="pos"):
  root=Path(__file__).parent
- version,name,prefix={'office':('1.13.0','CoastYouth Retail OFFICE.exe','CoastYouth-Retail-OFFICE-Setup-v'),'pos':('1.16.0','MGC YFC Point of Sale.exe','MGC-YFC-POS-Setup-v'),'ops':('1.2.1','CoastYouth Retail STORE OPS.exe','CoastYouth-Retail-STORE-OPS-Setup-v')}[app]
+ version,name,prefix={'remote':((root/'VERSION').read_text().strip(),'MGC YFC Operations Remote Manager.exe','MGC-YFC-Operations-Setup-v'),'office':('1.14.0','CoastYouth Retail OFFICE.exe','CoastYouth-Retail-OFFICE-Setup-v'),'pos':('1.17.0','MGC YFC Point of Sale.exe','MGC-YFC-POS-Setup-v'),'ops':('1.3.0','CoastYouth Retail STORE OPS.exe','CoastYouth-Retail-STORE-OPS-Setup-v')}[app]
  setup=root/'dist'/(prefix+version+'.exe')
  with tempfile.TemporaryDirectory() as tmp:
   target=Path(tmp)/'installed';target.mkdir();exe=target/name;shutil.copy2(root/'dist'/name,exe)
   settings=Path(tmp)/'settings.json';settings.write_text('{"device":"retain","passcode":{"hash":"retain-existing-hash"},"server":"http://unchanged"}')
   data=target/'data';data.mkdir();(data/'schedule.db').write_bytes(b'preserve-operational-data');before=settings.read_bytes()
-  manifest=Path(tmp)/'install.json';manifest.write_text(json.dumps({'installer':str(setup),'sha256':hashlib.sha256(setup.read_bytes()).hexdigest(),'exe':str(exe),'pid':0,'version':version,'settings':str(settings)}))
+  manifest=Path(tmp)/'install.json';manifest.write_text(json.dumps({'installer':str(setup),'sha256':hashlib.sha256(setup.read_bytes()).hexdigest(),'exe':str(exe),'pid':0,'version':version,'settings':str(settings),**({'install_type':'remote'} if app=='remote' else {})}))
   kernel=Mock();kernel.OpenProcess.return_value=None
   original_popen=subprocess.Popen;restarted=[]
   def launch(command,*args,**kwargs):
@@ -30,3 +30,4 @@ if __name__=='__main__':
  run('pos')
  run('office')
  run('ops')
+ run('remote')

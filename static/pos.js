@@ -373,8 +373,8 @@ boot();
  const dialog=document.createElement('dialog');dialog.id='posUpdatesDialog';dialog.innerHTML='<h2>POS application updates</h2><p>Updates do not change timecards or reservations. Each checkout computer receives its full warning period and waits for staff to finish the current sale.</p><form id="posUpdateSettings"><label>Employee warning (seconds)<input name="seconds" type="number" min="30" max="3600" value="120" required></label><button>Save warning time</button></form><div class="actions"><button type="button" id="checkPosRelease">Check for updates</button><button type="button" id="startPosRelease" disabled>Notify staff and update POS</button><button type="button" id="cancelPosRelease">Cancel update request</button></div><label>Checkout computers<select id="posUpdateTarget"><option value="all">All connected POS computers</option></select></label><p id="posReleaseStatus" role="status"></p><div id="posDeviceList"></div><button type="button" id="closePosUpdates">Close</button>';
  document.body.append(dialog);
  const banner=document.createElement('aside');banner.id='posInstallBanner';banner.hidden=true;banner.setAttribute('role','status');banner.innerHTML='<strong>POS update pending</strong><span id="posInstallMessage"></span><button type="button" id="posInstallReady">My work is finished — update</button>';document.body.append(banner);
- const get=id=>document.getElementById(id);let state=null,info=null,busy=false,lastStatus='',deadline=0,campaignId=null,seconds=0,installing=false;
- const setBanner=shown=>{banner.hidden=!shown;document.body.classList.toggle('posInstallWarning',shown);};
+ const get=id=>document.getElementById(id);let state=null,info=null,busy=false,lastStatus='',deadline=0,campaignId=null,seconds=0,installing=false,acting=false,staffReady=false,lastUpdate=null,noticeError='',pollError='';
+ const setBanner=shown=>{banner.hidden=!shown;document.body.classList.toggle('posInstallWarning',shown);if(!shown){staffReady=false;lastUpdate=null;noticeError='';window.posUpdateCountdownDone=false;}};
  function render(data){
   state=data;if(!user?.admin)return;
   const release=data.release||{},campaign=data.campaign;
@@ -398,13 +398,59 @@ boot();
  get('closePosUpdates').onclick=()=>dialog.close();get('checkPosRelease').onclick=()=>action('check');get('cancelPosRelease').onclick=()=>action('cancel');
  get('startPosRelease').onclick=()=>action('start',{target:get('posUpdateTarget').value});
  get('posUpdateSettings').onsubmit=async e=>{e.preventDefault();await action('settings',{seconds:Number(e.target.elements.seconds.value)});};
+ function drawNotice(){
+  if(banner.hidden||!info?.updater||!lastUpdate)return;
+  seconds=Math.max(0,Math.ceil((deadline-Date.now())/1000));
+  const button=get('posInstallReady');
+  button.disabled=acting||installing;
+  if(!inPos){button.textContent='Return to POS to finish update';}
+  else button.textContent=lastUpdate.state==='error'?'Retry update download':staffReady?'Keep working':'My work is finished — update';
+  window.posUpdateCountdownDone=seconds===0;
+  const wait=seconds?'Warning time remaining: '+seconds+' seconds. ':'';
+  let message=pollError||lastUpdate.error||noticeError;
+  if(!message){
+   if(lastUpdate.state==='downloading')message=wait+'Downloading and verifying the installer. '+(staffReady?'Your work is marked finished. The update will start when the download and warning time are complete.':'Finish your work, then select My work is finished — update when ready.');
+   else if(lastUpdate.state==='ready')message=wait+(staffReady?'Your work is marked finished. Waiting for the warning time to end.':'Finish or hold the current sale and save your work, then select My work is finished — update.');
+   else if(lastUpdate.state==='installing')message='Installing the update. DESK will reopen when finished.';
+   else message=wait+'Checking update readiness. Your work has not been closed.';
+  }
+  if(lastUpdate.state==='error')message='Update paused: '+(message||'The installer could not be prepared.')+' Select Retry update download. Your sale is unchanged.';
+  get('posInstallMessage').textContent=message;
+ }
+ async function attemptInstall(native){
+  if(acting||installing||lastUpdate?.state!=='ready'||seconds>0)return;
+  acting=true;drawNotice();
+  try{
+   const outcome=await native.install_update();
+   if(outcome?.error){staffReady=false;noticeError=outcome.error;lastStatus=outcome.error;}
+  }catch(error){staffReady=false;noticeError='Update paused: '+error.message;}
+  finally{acting=false;if(!installing)drawNotice();}
+ }
+ for(const event of ['pointerdown','keydown','input'])document.addEventListener(event,e=>{
+  if(staffReady&&!banner.contains(e.target)){staffReady=false;noticeError='';drawNotice();}
+ },true);
  get('posInstallReady').onclick=async()=>{
-  if(!inPos){const result=await window.pywebview.api.open_operations('pos');if(result.error)get('posInstallMessage').textContent=result.error;return;}
+  if(acting||installing)return;
+  const native=window.pywebview?.api;
+  if(!inPos){const result=await native.open_operations('pos');if(result.error)get('posInstallMessage').textContent=result.error;return;}
   if(!info?.updater){get('posInstallMessage').textContent='This older POS needs the one-time installer. Ask an administrator to finish this installation.';return;}
-  const result=await window.pywebview.api.install_update();if(result?.error){get('posInstallMessage').textContent=result.error;lastStatus=result.error;}
+  noticeError='';
+  if(lastUpdate?.state==='error'){
+   staffReady=false;acting=true;drawNotice();
+   try{
+    // Older installed clients can retry safely too; they repeat their warning period.
+    if(native.retry_update){lastUpdate=await native.retry_update(campaignId);deadline=Date.now()+Math.max(0,lastUpdate.seconds||0)*1000;}
+    else{await native.update_status(null);lastUpdate=null;}
+   }catch(error){noticeError='Unable to retry the download: '+error.message;}
+   finally{acting=false;drawNotice();}
+   await poll();return;
+  }
+  if(staffReady){staffReady=false;drawNotice();return;}
+  if(unfinished()||posCurrent?.lines.length||flow?.active){noticeError='Finish or cancel your current sale, or hold it, and save all unfinished entries before updating.';drawNotice();return;}
+  staffReady=true;drawNotice();await attemptInstall(native);
  };
  async function poll(){
-  if(busy||!user||installing)return;busy=true;
+  if(busy||acting||!user||installing)return;busy=true;
   try{
    node.hidden=!user.admin||(inPos&&!officeMode);
    if((!inPos||officeMode)&&location.hash==='#pos-updates'&&user.admin&&!dialog.open){get('openPosUpdates').click();history.replaceState(null,'',location.pathname);}
@@ -421,20 +467,17 @@ boot();
    if(info.updater){
     const update=await native.update_status(campaign.id);lastStatus=update.state==='complete'?'Update complete · POS '+info.version:update.error||update.state+(update.seconds?' · '+update.seconds+' seconds':'');
     if(update.state==='complete'||update.state==='idle'){setBanner(false);return;}
-    seconds=update.seconds||0;deadline=Date.now()+seconds*1000;campaignId=campaign.id;setBanner(true);
-    get('posInstallMessage').textContent=update.error|| (seconds?'Update in '+seconds+' seconds. Finish your current transaction.':'Warning time ended. Finish or hold the current sale and save your work; a coordinated update installs automatically when safe.')+(update.state==='downloading'?' Downloading the verified installer…':'');
-    get('posInstallReady').disabled=update.state!=='ready'||seconds>0;
-    if(!inPos){get('posInstallReady').disabled=false;get('posInstallReady').textContent='Return to POS to finish update';}
-    window.posUpdateCountdownDone=seconds===0;
-    if(update.state==='ready'&&seconds===0&&(campaign.mode==='force'||campaign.automatic)&&!unfinished()){const outcome=await native.install_update();if(outcome?.error)get('posInstallMessage').textContent=outcome.error;}
+    if(campaignId!==campaign.id){staffReady=false;noticeError='';}
+    pollError='';lastUpdate=update;seconds=Math.max(0,Number(update.seconds)||0);deadline=Date.now()+seconds*1000;campaignId=campaign.id;setBanner(true);drawNotice();
+    if(inPos&&update.state==='ready'&&seconds===0&&(staffReady||campaign.mode==='force'||campaign.automatic)&&!unfinished())await attemptInstall(native);
    }else{
     if(campaignId!==campaign.id){campaignId=campaign.id;deadline=Date.now()+campaign.seconds*1000;}
     setBanner(true);get('posInstallReady').disabled=true;get('posInstallMessage').textContent='An update is pending. Finish your transaction. This older POS requires an administrator to install the new version once.';lastStatus='One-time installer required';
    }
-  }catch(e){if(!banner.hidden)get('posInstallMessage').textContent='Update paused: '+e.message;}
+  }catch(e){if(!banner.hidden){pollError='Update paused: '+e.message;get('posInstallMessage').textContent=pollError;}}
   finally{busy=false;}
  }
- setInterval(()=>{if(!banner.hidden&&deadline>Date.now()&&info?.updater)get('posInstallMessage').textContent='Update in '+Math.ceil((deadline-Date.now())/1000)+' seconds. Please finish your current transaction.';},1000);
+ setInterval(drawNotice,1000);
  setInterval(poll,4000);window.addEventListener('pywebviewready',poll);setTimeout(poll,1000);
  if(inPos){
   window.posUpdateFreeze=(force=false)=>{
@@ -442,7 +485,7 @@ boot();
    installing=true;window.posUpdateInstalling=true;document.body.classList.add('posInstalling');get('posInstallMessage').textContent='Installing POS update. The application will reopen when finished.';return true;
   };
   window.posUpdateUnfreeze=()=>{installing=false;window.posUpdateInstalling=false;document.body.classList.remove('posInstalling');};
-  const original=posDo;posDo=async function(action,...args){if(window.posUpdateInstalling)return;if(action==='new'&&window.posUpdateCountdownDone&&!banner.hidden){posMessage('An update is ready. Finish this transaction and update before starting another.');return;}return original(action,...args);};
+  const original=posDo;posDo=async function(action,...args){if(window.posUpdateInstalling)return;if(action==='new'&&window.posUpdateCountdownDone&&!banner.hidden){posMessage('An update is pending. Finish this transaction and update before starting another.');return;}return original(action,...args);};
  }
 })();
 // Shared terminal registry and OFFICE-only layout configuration.

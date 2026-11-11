@@ -9,12 +9,38 @@ def save_connection(settings,address):
  return url
 
 class OfficeBridge:
- def __init__(self,address=None):self._window=None;self._exiting=False;self._checking=False;self._address=address;self._kiosk=None
+ def __init__(self,address=None):self._window=None;self._exiting=False;self._checking=False;self._address=address;self._kiosk=None;self._signed_in=False;self._sign_in_lock=threading.Lock()
  def _trusted(self):
   from urllib.parse import urlsplit
   if not self._window:return False
   actual=urlsplit(self._window.get_current_url());expected=urlsplit(self._address)
   return (actual.scheme,actual.netloc)==(expected.scheme,expected.netloc) and actual.path in ('/office','/office/')
+ def office_session_changed(self):
+  if not self._trusted():return {'error':'Open the configured OFFICE server.'}
+  try:
+   with self._sign_in_lock:
+    signed_in=self._window.evaluate_js('typeof user !== "undefined" && !!user && document.getElementById("auth")?.hidden === true') is True
+    if signed_in and not self._signed_in:self._window.maximize()
+    self._signed_in=signed_in
+   return {'ok':True}
+  except Exception as e:return {'error':str(e)}
+ def _watch_sign_in(self):
+  if not self._trusted():return
+  # Watch the existing login view, including restored sessions on older servers.
+  # Only maximize on a sign-in transition; staff can restore/resize afterward.
+  self._window.run_js("""(()=>{
+   if(window.__officeSignInObserver)window.__officeSignInObserver.disconnect();
+   let previous;
+   const changed=()=>{
+    const signedIn=typeof user!=='undefined'&&!!user&&document.getElementById('auth')?.hidden===true;
+    if(previous===signedIn||!window.pywebview?.api?.office_session_changed)return;
+    previous=signedIn;
+    window.pywebview.api.office_session_changed().then(r=>{if(r?.error)previous=undefined;}).catch(()=>{previous=undefined;});
+   };
+   window.__officeSignInObserver=new MutationObserver(changed);
+   window.__officeSignInObserver.observe(document.getElementById('auth')||document.body,{attributes:true,childList:true,subtree:true});
+   window.addEventListener('pywebviewready',changed,{once:true});changed();
+  })();""")
  def terminal_info(self):
   info=self.office_update_info();return {**info,'app':'office'}
  def office_update_info(self):
@@ -23,7 +49,7 @@ class OfficeBridge:
   if not self._trusted():return {'error':'Open the configured OFFICE server.'}
   if not hasattr(self,'_updates'):
    self._store=KioskStore(Path(os.environ.get('APPDATA',str(Path.home())))/'CoastYouthRetailOffice'/'settings.json')
-   self._updates=PosUpdater(self,app='office',current='1.13.0')
+   self._updates=PosUpdater(self,app='office',current='1.14.0')
   from computer_identity import computer_info
   return {'computer':computer_info(),'device':self._store.data['device'],'version':self._updates.version,'updater':True}
  def office_update_status(self,ident=None):
@@ -65,6 +91,7 @@ def office_window(address,storage,hidden=False):
  bridge=OfficeBridge(server_url(address))
  window=webview.create_window('CoastYouth Retail OFFICE',server_url(address)+'/office',js_api=bridge,width=1366,height=900,min_size=(1000,700),hidden=hidden)
  bridge._window=window;window.events.closing+=bridge._closing
+ window.events.loaded+=bridge._watch_sign_in
  return window
 
 def main():
@@ -84,7 +111,10 @@ def main():
    finally:window.destroy()
   webview.start(check,gui='edgechromium',private_mode=True)
   raise SystemExit(1 if errors else 0)
+ from desktop_startup import startup_update,claim_instance
+ if not claim_instance('office'):return
  directory=Path(os.environ.get('APPDATA',str(Path.home())))/'CoastYouthRetailOffice'
+ if startup_update('office','1.14.0',directory/'settings.json'):return
  settings=directory/'settings.json';address='http://localhost:8080'
  if settings.exists():
   try:address=server_url(json.loads(settings.read_text(encoding='utf-8'))['server'])

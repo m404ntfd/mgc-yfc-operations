@@ -2,7 +2,7 @@
 import hashlib,json,os,re,shutil,subprocess,sys,threading,time
 from pathlib import Path
 from urllib.request import Request,urlopen
-VERSION='1.16.0'
+VERSION='1.17.0'
 REPO='m404ntfd/mgc-yfc-operations'
 def version(value):
  if not isinstance(value,str) or not re.fullmatch(r'\d+\.\d+\.\d+',value):raise ValueError('Invalid POS version.')
@@ -14,12 +14,12 @@ def fetch(url,limit=1000000):
 def verified_installer(expected,app='pos'):
  release=json.loads(fetch('https://api.github.com/repos/'+REPO+'/releases/latest'))
  if release.get('draft') or release.get('prerelease'):raise ValueError('Stable POS release required.')
- name={'office':'CoastYouth-Retail-OFFICE-Setup-v','pos':'MGC-YFC-POS-Setup-v','ops':'CoastYouth-Retail-STORE-OPS-Setup-v'}[app]+expected+'.exe'
+ name={'office':'CoastYouth-Retail-OFFICE-Setup-v','pos':'MGC-YFC-POS-Setup-v','ops':'CoastYouth-Retail-STORE-OPS-Setup-v','remote':'MGC-YFC-Operations-Setup-v'}[app]+expected+'.exe'
  asset=next((a for a in release.get('assets',[]) if a.get('name')==name),None)
  if not asset:raise ValueError('The POS release changed. Ask an administrator to check again.')
  digest=asset.get('digest','');url=asset.get('browser_download_url','')
  if not re.fullmatch(r'sha256:[a-f0-9]{64}',digest) or not url.startswith('https://github.com/'+REPO+'/releases/download/'):raise ValueError('Verified POS download information is missing.')
- raw=fetch(url,100*1024*1024)
+ raw=fetch(url,(200 if app=='remote' else 100)*1024*1024)
  if 'sha256:'+hashlib.sha256(raw).hexdigest()!=digest:raise ValueError('POS download checksum mismatch. Nothing was installed.')
  return raw,digest[7:]
 class PosUpdater:
@@ -29,7 +29,7 @@ class PosUpdater:
  def ticket(self,ident):
   if not isinstance(ident,str) or not re.fullmatch('[0-9a-f]{64}',ident):raise ValueError('Invalid update request.')
   return json.loads(fetch(self.bridge._address+'/api/'+self.app+'-update/ticket?id='+ident))
- def observe(self,ident):
+ def observe(self,ident,retry=False):
   if not self.bridge._trusted():return {'error':'Open the configured server.'}
   with self.lock:
    if not ident:self.job=None;self.state='idle';return {'state':'idle','version':self.version}
@@ -41,6 +41,9 @@ class PosUpdater:
      seconds=job.get('seconds')
      if type(seconds) is not int or not (30<=seconds<=3600 or seconds==0 and job.get('mode') in ('force','install')):raise ValueError('Invalid warning period.')
      self.job=job;self.deadline=time.monotonic()+seconds;self.state='downloading';self.error='';self.path=None
+     threading.Thread(target=self.download,args=(dict(job),),daemon=True).start()
+    elif retry and self.state=='error':
+     self.state='downloading';self.error='';self.path=None;self.digest=None
      threading.Thread(target=self.download,args=(dict(job),),daemon=True).start()
     return {'state':self.state,'seconds':max(0,int(self.deadline-time.monotonic()+.999)),'version':self.version,'target':job['version'],'error':self.error}
    except Exception as e:return {'state':'error','error':str(e),'version':self.version}
@@ -86,9 +89,13 @@ def apply_update(manifest_path):
  try:
   if hashlib.sha256(installer.read_bytes()).hexdigest()!=meta['sha256']:raise ValueError('Installer checksum mismatch.')
   if settings.exists():shutil.copy2(settings,manifest.parent/'settings-backup.json')
-  command=[str(installer),'/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/DIR='+str(exe.parent),'/LOG='+str(manifest.parent/'installer.log')]
+  command=[str(installer),'/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/RESTARTEXITCODE=3010','/NOCLOSEAPPLICATIONS','/NORESTARTAPPLICATIONS','/DIR='+str(exe.parent),'/LOG='+str(manifest.parent/'installer.log')]
+  if meta.get('install_type') is not None:
+   if meta['install_type']!='remote' or (exe.parent/'server.py').exists():raise ValueError('Use the server Updates tab for a combined server installation.')
+   command.append('/TYPE=remote')
   done=subprocess.run(command,timeout=300,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
-  if done.returncode not in (0,3010):raise ValueError('Installer failed with code '+str(done.returncode)+'. Check the installer log; settings backup was retained.')
+  if done.returncode==3010:raise ValueError('Windows needs a restart to finish the update. Save work in all applications before restarting Windows. Settings were retained.')
+  if done.returncode!=0:raise ValueError('Installer failed with code '+str(done.returncode)+'. Check the installer log; settings backup was retained.')
   outcome['ok']=True
  except Exception as e:outcome['error']=str(e)
  result.write_text(json.dumps(outcome),encoding='utf-8')

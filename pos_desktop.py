@@ -69,6 +69,8 @@ def main():
  if ctypes.get_last_error()==183:
   root=tk.Tk();root.withdraw();messagebox.showinfo('Point of Sale','Point of Sale is already running on this Windows login.');root.destroy();return
  settings=Path(os.environ.get('APPDATA',str(Path.home())))/'MGCYFCPOS'/'settings.json'
+ from desktop_startup import startup_update
+ if startup_update('pos',VERSION,settings):return
  from pos_kiosk import KioskStore
  try:store=KioskStore(settings)
  except ValueError as e:

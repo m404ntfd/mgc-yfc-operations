@@ -2,7 +2,7 @@
 UninstallDisplayIcon={app}\MGC YFC Point of Sale.exe
 AppId={{8CDE3797-D37D-4200-BC84-03B9F5F136AA}
 AppName=CoastYouth Retail DESK
-AppVersion=1.16.0
+AppVersion=1.17.0
 AppPublisher=CoastYouth Retail
 DefaultDirName={localappdata}\Programs\MGCYFCPOS
 DefaultGroupName=MGC YFC Point of Sale
@@ -10,7 +10,7 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\dist
-OutputBaseFilename=MGC-YFC-POS-Setup-v1.16.0
+OutputBaseFilename=MGC-YFC-POS-Setup-v1.17.0
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern

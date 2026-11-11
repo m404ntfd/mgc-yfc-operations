@@ -87,6 +87,8 @@ class KioskBridge:
   return {'computer':computer_info(),'device':self._store.data['device'],'nonce':self._nonce,'configured':self._store.configured,'version':VERSION,'updater':True,'update_result':result}
  def update_status(self,ident=None):
   return self._updates.observe(ident)
+ def retry_update(self,ident):
+  return self._updates.observe(ident,retry=True)
  def install_update(self):
   try:return self._updates.install()
   except Exception as e:return {'error':str(e)}

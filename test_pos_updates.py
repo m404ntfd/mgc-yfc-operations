@@ -50,4 +50,19 @@ class Native(unittest.TestCase):
     b._window.run_js.assert_called_with('window.posUpdateUnfreeze && window.posUpdateUnfreeze()');b._window.destroy.assert_not_called()
     u.ticket.side_effect=ValueError('Canceled')
     with self.assertRaisesRegex(ValueError,'Canceled'):u.install()
+ def test_failed_download_retries_without_restarting_warning(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   b=KioskBridge(KioskStore(Path(tmp)/'settings.json'),'http://localhost');b._window=Mock();b._window.get_current_url.return_value='http://localhost/pos';u=b._updates
+   job={'id':'b'*64,'version':'9.0.0','target':'all','seconds':30};u.ticket=Mock(return_value=job)
+   with patch.object(pos_updater.threading,'Thread') as worker:
+    u.observe(job['id']);deadline=u.deadline
+    u.state='error';u.error='Download interrupted'
+    status=u.observe(job['id']);self.assertEqual(status['state'],'error');self.assertEqual(worker.call_count,1)
+    status=b.retry_update(job['id']);self.assertEqual(status['state'],'downloading');self.assertFalse(status['error'])
+    self.assertEqual(u.deadline,deadline);self.assertEqual(worker.call_count,2)
+    b.retry_update(job['id']);self.assertEqual(worker.call_count,2)
+    u.state='error';u.ticket.side_effect=ValueError('Update canceled')
+    self.assertEqual(b.retry_update(job['id'])['state'],'error');self.assertEqual(worker.call_count,2)
+   b._window.destroy.assert_not_called()
+
 if __name__=='__main__':unittest.main()

@@ -8,12 +8,12 @@ try:
 except ImportError:
     from client import Client
 NAME='MGC YFC Operations Remote Manager'
-VERSION='0.55.0'
+VERSION='0.56.0'
 CONFIG=Path(os.environ.get('APPDATA',Path.home()))/'ThriftMartDispatchRemoteManager'/'config.json'
 
 class App:
     def __init__(self,root,local=False,container=None,address=None,local_control=None,session_path=None,updates_container=None):
-        self.root=root;self.client=None;self.release=None;self.busy=False;self.results=queue.Queue()
+        self.root=root;self.client=None;self.release=None;self.busy=False;self.results=queue.Queue();self.startup_version=None
         self.local=local;self.local_control=local_control;self.session_path=session_path;self.update_receipt=None;self.flow=None;self.notice_id=None;self.monitor_client=None
         if container is None:
             root.title('MGC YFC Operations Server — Administration' if local else NAME);root.geometry('800x830');root.minsize(720,760)
@@ -119,7 +119,27 @@ class App:
         return True
     def show_status(self,r):
         self.status.set('Connected to '+self.client.address)
+        if self.startup_version:self.root.after(0,self.resume_startup_update)
         self.details.set(f"{r['name']} • v{r['version']}\n{r['jobs']} appointments · {r['vehicles']} vehicles · {r['users']} accounts\nUptime: {r['uptime_minutes']} minutes · Server time: {r['time']}")
+    def request_startup_update(self,version):
+        self.startup_version=version
+        self.resume_startup_update()
+    def resume_startup_update(self):
+        if not self.startup_version:return
+        if not self.client:
+            self.status.set('Update selected. Sign in as an administrator to notify staff and update the server when their work is finished.')
+            return
+        if self.busy:
+            self.root.after(250,self.resume_startup_update);return
+        client=self.client;requested=self.startup_version;self.startup_version=None
+        def done(release):
+            if self.client is not client:return
+            if not release.get('available'):
+                self.status.set('The server is already up to date.');return
+            if release['latest']!=requested:
+                self.status.set('The available release changed. Check for updates again before installing.');return
+            self.release=release['latest'];self.start_flow(confirmed=True)
+        self.run(lambda:client.request('update-check',{}),done)
     def refresh(self):
         if self.require():self.run(lambda:self.client.request('admin/status'),self.show_status)
     def open_browser(self):
@@ -280,12 +300,12 @@ class App:
                 if messagebox.askyesno(NAME,'An update is pending. Is your current work saved and are you ready? Choose No to finish your work first.',parent=self.root):
                     self.run(lambda:client.request('update-flow/acknowledge',{'id':flow['id'],'ready':True}),lambda r:self.status.set('Ready. Waiting for the update.'))
         self.run(work,done,quiet=True)
-    def start_flow(self,force=False):
+    def start_flow(self,force=False,confirmed=False):
         if not self.require():return
         version=(self.flow or {}).get('version') if force and (self.flow or {}).get('active') else self.release
         if not version:self.status.set('Check for a newer release first.');return
         question=('Override user notifications and acknowledgements and install version '+version+' now? This can interrupt unsaved work. Saved records are backed up before installation.' if force else 'Notify active users, let them finish, and install version '+version+' automatically when ready? Your current work must be saved.')
-        if not messagebox.askyesno(NAME,question,parent=self.root):return
+        if not confirmed and not messagebox.askyesno(NAME,question,parent=self.root):return
         client=self.client
         def done(result):
             self.flow=result;self.update_receipt=result['receipt'];self.monitor_client=client
@@ -332,6 +352,9 @@ class App:
         version=self.release;self.run(lambda:self.client.request('update-install',{'version':version}),self.restarting)
 
 def main():
+    if '--apply-pos-update' in sys.argv:
+        from pos_updater import apply_update
+        apply_update(sys.argv[sys.argv.index('--apply-pos-update')+1]);return
     if '--restore-self-test' in sys.argv:
         from restore import restore_self_test
         restore_self_test();return
@@ -340,5 +363,8 @@ def main():
         restore_window(Path(sys.argv[sys.argv.index('--restore-dir')+1]));return
     if '--smoke-test' in sys.argv:
         root=tk.Tk();root.withdraw();App(root);root.update();root.destroy();return
+    from desktop_startup import startup_update,claim_instance
+    if not claim_instance('remote'):return
+    if startup_update('remote',VERSION,CONFIG):return
     root=tk.Tk();App(root,local='--local-server' in sys.argv);root.mainloop()
 if __name__=='__main__':main()

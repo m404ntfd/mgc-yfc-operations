@@ -20,7 +20,7 @@ jobs:
         with:
           python-version: '3.13'
       - run: python -m pip install -r requirements-push.txt
-      - run: python -m unittest test_server test_updater test_remote test_lockout test_journal test_receipts test_daily_session test_native_revision test_login_counts test_revision29 test_page_colors test_receipt_assignment test_roles test_comms test_workforce test_web_push test_web_assets test_mobile_media test_store_ops_review test_computer_updates test_computer_native test_terminal_registration
+      - run: python -m unittest test_server test_updater test_remote test_lockout test_journal test_receipts test_daily_session test_native_revision test_login_counts test_revision29 test_page_colors test_receipt_assignment test_roles test_comms test_workforce test_web_push test_web_assets test_mobile_media test_store_ops_review test_computer_updates test_computer_native test_terminal_registration test_startup_updates
       - run: node --check static/app.js
       - run: node --check static/pos.js
       - run: python -m unittest test_cash_advances test_thrift_retail.ThriftTests test_retail_stores.StoreTests test_pickup_followup.PickupTests test_hr_catalog test_catalog_hierarchy test_hr_browser test_hr_completion test_hr_formats test_hr_sources
@@ -106,11 +106,12 @@ jobs:
         with:
           python-version: '3.13'
       - run: python -m pip install -r requirements-push.txt pyinstaller==6.22.3 pystray==0.19.5 Pillow pywebview==6.1
+      - run: python test_startup_updates_ui.py
       - run: python test_pos_native.py
       - run: python test_retail_office_native.py
       - run: python test_store_ops_native.py
       - run: python assets/create_icon.py
-      - run: python -m PyInstaller --noconfirm --clean --onefile --windowed --icon assets/remote.ico --add-data "assets/remote.ico:assets" --name "MGC YFC Operations Remote Manager" remote/remote_manager.py
+      - run: python -m PyInstaller --noconfirm --clean --onefile --windowed --icon assets/remote.ico --add-data "assets/remote.ico:assets" --paths . --name "MGC YFC Operations Remote Manager" remote/remote_manager.py
       - run: python -m PyInstaller --noconfirm --clean --onefile --windowed --icon assets/dispatch.ico --add-data "assets/dispatch.ico:assets" --add-data "assets/dispatch.png:assets" --hidden-import pystray._win32 --name "MGC YFC Operations Server" server_desktop.py
       - run: python -m PyInstaller --noconfirm --clean --onefile --console --icon assets/dispatch.ico --add-data "assets/dispatch.ico:assets" --add-data "assets/dispatch.png:assets" --hidden-import pystray._win32 --name "MGC YFC Operations Server Console" server_desktop.py
       - name: Verify Remote Manager and restore utility startup
@@ -141,7 +142,7 @@ jobs:
         shell: pwsh
         run: |
           $baseline = Join-Path $env:RUNNER_TEMP 'retail-upgrade-baseline'
-          git clone --depth 1 --branch v0.54.0 https://github.com/m404ntfd/mgc-yfc-operations.git $baseline
+          git clone --depth 1 --branch v0.55.0 https://github.com/m404ntfd/mgc-yfc-operations.git $baseline
           if ($LASTEXITCODE -ne 0) { throw 'Baseline checkout failed' }
           $env:RETAIL_BASE_SOURCE = $baseline
           python test_retail_release_upgrade.py
@@ -163,12 +164,12 @@ jobs:
           & $compiler "/DAppVersion=$version" installer/suite.iss
           if ($LASTEXITCODE -ne 0) { throw "Computer setup installer build failed" }
           $officeInstall = Join-Path $env:RUNNER_TEMP 'OfficeInstallTest'
-          $p = Start-Process -WindowStyle Hidden -FilePath 'dist/CoastYouth-Retail-OFFICE-Setup-v1.13.0.exe' -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$officeInstall") -PassThru -Wait
+          $p = Start-Process -WindowStyle Hidden -FilePath 'dist/CoastYouth-Retail-OFFICE-Setup-v1.14.0.exe' -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$officeInstall") -PassThru -Wait
           if ($p.ExitCode -ne 0) { throw 'OFFICE install failed' }
           $p = Start-Process -WindowStyle Hidden -FilePath (Join-Path $officeInstall 'CoastYouth Retail OFFICE.exe') -ArgumentList '--smoke-test' -PassThru -Wait
           if ($p.ExitCode -ne 0) { throw 'Installed OFFICE failed' }
           $posInstall = Join-Path $env:RUNNER_TEMP 'PosInstallTest'
-          $p = Start-Process -WindowStyle Hidden -FilePath 'dist/MGC-YFC-POS-Setup-v1.16.0.exe' -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$posInstall") -PassThru -Wait
+          $p = Start-Process -WindowStyle Hidden -FilePath 'dist/MGC-YFC-POS-Setup-v1.17.0.exe' -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$posInstall") -PassThru -Wait
           if ($p.ExitCode -ne 0) { throw 'POS install failed' }
           $p = Start-Process -WindowStyle Hidden -FilePath (Join-Path $posInstall 'MGC YFC Point of Sale.exe') -ArgumentList '--smoke-test' -PassThru -Wait
           if ($p.ExitCode -ne 0) { throw 'Installed POS failed' }
@@ -231,4 +232,4 @@ jobs:
             echo "Release already exists; leaving published assets unchanged."
             exit 0
           fi
-          gh release create "$tag" dist/*.exe dist/Store-Dispatch-Update.zip --target "$GITHUB_SHA" --title "CoastYouth Retail Touchscreen DESK $tag" --notes-file RELEASE-NOTES.md
+          gh release create "$tag" dist/*.exe dist/Store-Dispatch-Update.zip --target "$GITHUB_SHA" --title "CoastYouth Retail Startup and Update Fixes $tag" --notes-file RELEASE-NOTES.md

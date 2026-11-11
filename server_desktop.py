@@ -29,7 +29,7 @@ class ServerWindow:
             print('Double-click the YFC icon to reopen. To stop: right-click the YFC icon > Exit server.',flush=True)
         root.protocol('WM_DELETE_WINDOW',self.hide);root.bind('<Unmap>',self.on_minimize)
         style=ttk.Style();style.theme_use('clam');style.configure('TButton',padding=10);style.configure('TLabel',font=('Segoe UI',10))
-        self.admin_panel=None;self.cleanup_checked=False
+        self.admin_panel=None;self.cleanup_checked=False;self.startup_check_started=False
         self.tabs=ttk.Notebook(root);self.tabs.pack(fill='both',expand=True)
         self.server_tab=ttk.Frame(self.tabs);self.admin_tab=ttk.Frame(self.tabs);self.updates_tab=ttk.Frame(self.tabs);self.settings_tab=ttk.Frame(self.tabs)
         self.tabs.add(self.server_tab,text='Server');self.tabs.add(self.admin_tab,text='Administration');self.tabs.add(self.updates_tab,text='Updates');self.tabs.add(self.settings_tab,text='Server settings')
@@ -58,6 +58,8 @@ class ServerWindow:
         bottom=ttk.Frame(f);bottom.pack(fill='x',pady=14)
         ttk.Button(bottom,text='Open server log',command=self.open_log).pack(side='left')
         self.exit_button=ttk.Button(bottom,text='Exit server',command=self.ask_exit);self.exit_button.pack(side='right')
+        self.startup_update_status=tk.StringVar()
+        ttk.Label(f,textvariable=self.startup_update_status,wraplength=700).pack(anchor='w')
         self.icon=pystray.Icon('ThriftMartDispatch',Image.open(ASSETS/'dispatch.png'),NAME,pystray.Menu(
             pystray.MenuItem('Open server console' if self.console else 'Open server window',lambda icon,item:self.queue.put(('show',None)),default=True),
             pystray.MenuItem('Login to Operations',lambda icon,item:self.queue.put(('schedule',None))),
@@ -115,6 +117,27 @@ class ServerWindow:
             from remote.remote_manager import App
             self.admin_panel=App(self.root,local=True,container=self.admin_tab,address=URL,local_control=self.token,session_path=DATA/'native-admin-session.bin',updates_container=self.updates_tab)
         self.root.geometry('820x900');self.tabs.select(self.admin_tab);self.root.deiconify();self.root.lift()
+    def check_startup_update(self):
+        if self.startup_check_started or self.smoke or not getattr(sys,'frozen',False):return
+        self.startup_check_started=True
+        def check():
+            from desktop_startup import check_release
+            try:
+                for attempt in range(40):
+                    try:
+                        session=request('session')
+                        if session.get('application')=='thrift-mart-dispatch':break
+                    except Exception:pass
+                    time.sleep(.5)
+                else:raise ValueError('Wait for the server to finish starting, then use the Updates tab.')
+                offer=check_release('server',session['version'])
+                if offer:self.queue.put(('startup_update',offer))
+            except Exception as exc:self.queue.put(('startup_update_error',str(exc)))
+        threading.Thread(target=check,daemon=True).start()
+    def accept_startup_update(self,version):
+        self.manage();self.tabs.select(self.updates_tab)
+        self.admin_panel.request_startup_update(version)
+        if not self.admin_panel.client:self.tabs.select(self.admin_tab)
     def offer_remote_cleanup(self):
         marker=ROOT/'remove-standalone-manager.pending'
         if self.cleanup_checked or self.smoke or not marker.exists():return
@@ -161,7 +184,12 @@ class ServerWindow:
         try:
             while True:
                 kind,value=self.queue.get_nowait()
-                if kind=='show':self.show()
+                if kind=='startup_update':
+                    from desktop_startup import server_offer
+                    self.root.deiconify();server_offer(self.root,value,self.accept_startup_update)
+                elif kind=='startup_update_error':
+                    self.startup_update_status.set('Update check unavailable. Use the Updates tab to retry. '+value)
+                elif kind=='show':self.show()
                 elif kind=='schedule':self.open_login()
                 elif kind=='manage':self.manage()
                 elif kind=='exit':self.ask_exit()
@@ -174,7 +202,9 @@ class ServerWindow:
             self.status.set('Server stopped. Check the log, then close and reopen the application.');self.show()
         elif self.process and not self.stopping and not self.notice:
             self.status.set('Server running • minimize safely to the system tray')
-        if not self.smoke and self.process and self.process.poll() is None:self.offer_remote_cleanup()
+        if not self.smoke and self.process and self.process.poll() is None:
+            self.check_startup_update()
+            if not self.root.grab_current():self.offer_remote_cleanup()
         if self.smoke and not self.smoke_done:
             try:
                 r=request('session')

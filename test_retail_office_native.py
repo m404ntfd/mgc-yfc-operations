@@ -20,11 +20,24 @@ def run():
  def test():
   try:
    wait("document.querySelector('#login') && typeof officeAction==='function'")
+   w.show()
+   assert not w.events.maximized.is_set(), 'Login should start at the normal window size'
+   w.evaluate_js("document.querySelector('#login [name=name]').value='Admin';document.querySelector('#login [name=password]').value='wrong-test-password';document.querySelector('#login').requestSubmit()")
+   wait("document.querySelector('#authError').textContent.length>0")
+   assert not w.events.maximized.is_set(), 'Failed sign-in must not maximize OFFICE'
    w.evaluate_js("document.querySelector('#login [name=name]').value='Admin';document.querySelector('#login [name=password]').value='testpassword';document.querySelector('#login').requestSubmit()")
    wait("document.querySelector('#officeTiles [data-office-category=staff]') && document.querySelector('#officeTiles [data-office-category=accounts]')")
+   assert w.events.maximized.wait(5), 'Successful sign-in should maximize OFFICE'
    wait("document.querySelector('#nativeTerminalForm')")
    w.evaluate_js("document.querySelector('#nativeTerminalForm').requestSubmit()")
    wait("document.querySelector('#nativeTerminalStatus').textContent.includes('Registered') && !document.querySelector('#nativeTerminalSetup').open")
+   w.restore();w.events.maximized.clear()
+   w.evaluate_js('boot()');time.sleep(.3)
+   assert not w.events.maximized.is_set(), 'Refreshing OFFICE must not override a manually restored window'
+   w.evaluate_js("document.querySelector('#signOut').click()")
+   wait("!document.querySelector('#auth').hidden")
+   w.evaluate_js("document.querySelector('#login [name=name]').value='Admin';document.querySelector('#login [name=password]').value='testpassword';document.querySelector('#login').requestSubmit()")
+   assert w.events.maximized.wait(5), 'A new sign-in should maximize OFFICE again'
    w.evaluate_js("officeAction('users')")
    wait("document.querySelector('#officeUserRows').textContent.includes('Employee')")
    w.evaluate_js("let field=document.querySelector('#officeAddUser [name=name]');field.value='Unsaved sample';field.dispatchEvent(new Event('input',{bubbles:true}))")
@@ -40,7 +53,7 @@ def run():
  try:
   webview.start(test,gui='edgechromium',debug=False,private_mode=True,storage_path=str(Path(tmp.name)/'webview'))
   if errors:raise AssertionError(errors[0])
-  print('PASS native OFFICE login, shared users and unsaved-work close protection')
+  print('PASS native OFFICE sign-in maximizes, failed sign-in stays normal, manual restore is respected, shared users and unsaved-work close protection')
  finally:
   f.close()
   for _ in range(30):
