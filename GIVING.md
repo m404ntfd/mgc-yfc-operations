@@ -15,3 +15,11 @@ Next integration: confirm Clover ecommerce/recurring eligibility and rates; add 
 Validation: `python prepare_web_assets.py`, `python -m unittest test_giving test_giving_storage test_data_integrity test_startup_updates`, `python test_giving_ui.py`, and `python test_office_navigation_ui.py`. The Giving pull-request workflow runs these checks and the populated upgrade/backup/rollback test against the 0.56.0 baseline, and saves synthetic preview screenshots. Tests use isolated temporary databases and synthetic donors. The migration only adds giving tables/indexes/triggers. This branch does not change the version or install an update.
 
 Printed previews and saved copies retain their status labels and saved reference. Received gifts show original recording details and correction history without changing the original ledger entry.
+
+## Donor backend
+
+`GET /api/giving/donor?id=...` retrieves a profile; `GET /api/giving/donors?search=...&limit=50&offset=0` searches name, email and address without loading gifts or plans. Search is case-insensitive and treats wildcard characters literally. Pages have a maximum of 100 records and stable name/ID ordering. The current implementation scans donor profiles in memory; database-indexed search remains future work for larger directories. Shared household emails are allowed and do not merge profiles.
+
+`GET /api/giving/donor_history?donor=...` requires both view_giving and manage_donors. Each successful new profile or edit records immutable before/after values, staff name, timestamp and revision in the same transaction as the profile and retry receipt. A retry does not add history twice. Invalid revisions and unknown edit IDs are rejected. Concurrent donor saves are serialized before checking the revision. Existing donors are unchanged during migration; their first subsequent edit captures the prior profile, without inventing earlier history. No profile deletion or merge is introduced.
+
+These endpoints are backend groundwork; the OFFICE interface does not yet display the directory or change history. The existing profile editor remains compatible. Validate with `python -m unittest test_giving_donors` in addition to the checks above.

@@ -23,7 +23,7 @@ jobs:
       - run: python -m playwright install --with-deps chromium
       - run: python prepare_web_assets.py
       - run: node --check static/pos.js
-      - run: python -m unittest test_giving test_giving_storage test_data_integrity test_startup_updates
+      - run: python -m unittest test_giving_donors test_giving test_giving_storage test_data_integrity test_startup_updates
       - run: python test_giving_ui.py
       - run: python test_office_navigation_ui.py
       - uses: actions/checkout@v4
