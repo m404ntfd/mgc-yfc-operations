@@ -9,6 +9,7 @@ Server 0.54.0 / DESK 1.15.1 / OFFICE 1.13.0 / STORE OPS desktop 1.2.1
 - Preserves unfinished-item warnings when using the new navigation. Settings remain readable in light, dark and liquid-glass themes and on smaller desktop screens.
 - Shows Open price in the bulk catalog, import preview and DESK layout editor for items that prompt the cashier for a price. This changes the label only; it does not change saved prices, tax rules or checkout behavior.
 - Improves Computer Setup diagnostics. If a component installer stops, the message names the application, reports its exit code, lists completed applications and identifies the saved logs. Remaining applications are not started after a failure. Individual installers also write setup logs.
+- Makes onboarding navigation wait for an in-progress form save. Rapid repeated clicks cannot overtake the save, and a failed save keeps the form open for retry.
 - Keeps the existing update size limit by losslessly compressing the embedded web assets in the update package. Application behavior and updater compatibility are preserved.
 
 ## Installation

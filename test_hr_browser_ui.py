@@ -20,7 +20,25 @@ try:
         page.locator('[data-step=deposit]').click();page.locator('#completeBrowserForm').click();expect(page.locator('[data-form-field=name]')).to_be_visible();page.locator('[data-form-field=name]').fill('Jamie Sample');expect(page.locator('#browserSaveStatus')).to_have_text('All changes saved securely')
         page.screenshot(path=str(out/'Employee-Browser-Form.png'),full_page=False)
         # Navigation awaits the encrypted draft, then restores its value.
-        page.locator('[data-form-field=name]').fill('Jamie Sample Updated');page.locator('[data-step=profile]').click();page.locator('[data-step=deposit]').click();page.locator('#completeBrowserForm').click();expect(page.locator('[data-form-field=name]')).to_have_value('Jamie Sample Updated')
+        pending_saves=[]
+        page.route('**/api/hr/browser-save',lambda route:pending_saves.append(route))
+        with page.expect_request('**/api/hr/browser-save'):
+            page.locator('[data-form-field=name]').fill('Jamie Sample Updated')
+        page.wait_for_function('browserWork && !!browserWork.saving')
+        page.locator('[data-step=profile]').click();expect(page.locator('[data-form-field=name]')).to_be_visible()
+        # A second click during the same save cannot overtake the first navigation.
+        page.locator('[data-step=deposit]').click();expect(page.locator('[data-form-field=name]')).to_have_value('Jamie Sample Updated')
+        assert len(pending_saves)==1
+        pending_saves[0].continue_();page.unroute('**/api/hr/browser-save')
+        expect(page.locator('#employeeProfile')).to_be_visible()
+        page.locator('[data-step=deposit]').click();page.locator('#completeBrowserForm').click();expect(page.locator('[data-form-field=name]')).to_have_value('Jamie Sample Updated')
+        # A failed save keeps the form open, and navigation succeeds after retry.
+        page.route('**/api/hr/browser-save',lambda route:route.fulfill(status=503,content_type='application/json',body='{"error":"Temporary save failure"}'))
+        page.locator('[data-form-field=name]').fill('Jamie Sample Retry');page.locator('[data-step=profile]').click()
+        expect(page.locator('#status')).to_contain_text('Your changes are not saved yet')
+        expect(page.locator('[data-form-field=name]')).to_have_value('Jamie Sample Retry')
+        page.unroute('**/api/hr/browser-save');page.locator('[data-step=profile]').click();expect(page.locator('#employeeProfile')).to_be_visible()
+        page.locator('[data-step=deposit]').click();page.locator('#completeBrowserForm').click();expect(page.locator('[data-form-field=name]')).to_have_value('Jamie Sample Retry')
         page.locator('#browserSign [name=reviewedDocument]').check();expect(page.locator('[data-reviewed]')).to_have_count(0)
         page.locator('#browserSign [name=acknowledged]').check();page.locator('#browserSign [name=name]').fill('Jamie Sample');page.locator('#browserSign [name=password]').fill('browser-test-password');page.locator('#browserSign').scroll_into_view_if_needed();page.screenshot(path=str(out/'Employee-Browser-Signing.png'))
         page.locator('#browserSign button').click();expect(page.locator('#status')).to_contain_text('Form signed and saved')

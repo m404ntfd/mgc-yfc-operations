@@ -11,8 +11,9 @@ function hrDisplayFormat(value,kind){
 function hrMaskSsn(value){const n=value.replace(/\D/g,'');return n.length===9?'***-**-'+n.slice(-4):value;}
 document.addEventListener('focusout',e=>{if(e.target.matches('#employeeProfile [name=phone]'))e.target.value=hrDisplayFormat(e.target.value,'phone');});
 async function browserSave(){
- const w=browserWork;if(!w||!w.changed)return;
+ const w=browserWork;if(!w)return;
  if(w.saving){await w.saving;return browserSave();}
+ if(!w.changed)return;
  const values={...w.values};w.changed=false;
  w.saving=api('browser-save',{...w.key,revision:w.revision,values}).then(r=>{w.revision=r.revision;w.error='';}).catch(e=>{w.changed=true;w.error=e.message;throw e;}).finally(()=>{w.saving=null;dirty=w.changed;const el=$('browserSaveStatus');if(el)el.textContent=w.error|| (w.changed?'Saving changes…':'All changes saved securely');});
  await w.saving;if(w.changed)await browserSave();
@@ -50,7 +51,8 @@ async function openBrowserForm(key){
 const hrOriginalEmployee=renderEmployee;
 renderEmployee=function(){hrOriginalEmployee();if(!state?.profile?.password_changed||!state.steps.some(x=>x.id===section))return;const t=state.templates.find(x=>x.kind===section),root=$('employeeSection');root.innerHTML=`<h2>${esc(state.steps.find(x=>x.id===section).title)}</h2>${helpHint}${t?.browser_form?'<p>Complete the form and sign securely here in CoastYouth. No printing or scanning is needed.</p><button id="completeBrowserForm" class="primary">Complete & sign in browser</button>':'<p>HR is preparing this form for browser completion. Use Help if you need assistance.</p>'}<h3>Your submissions</h3>${state.documents.filter(d=>d.kind===section).map(d=>`<p>${esc(d.status)} ${esc(d.review_note)} · Your completed copy will be available at the final step.</p>`).join('')||'<p>No submission yet.</p>'}`;if(t?.browser_form)$('completeBrowserForm').onclick=()=>{const last=state.documents.filter(d=>d.kind===section).at(-1);openBrowserForm({form:t.browser_form,role:'employee',...(last?.status==='needs_correction'&&last.browser_form===t.browser_form?{correction:last.id}:{})});};};
 // Flush drafts before the existing navigation handlers run.
-document.addEventListener('click',async e=>{const target=e.target.closest('[data-step],#refresh,#logout,[data-admin]');if(!target||!browserWork)return;e.preventDefault();e.stopImmediatePropagation();try{await browserSave();browserWork=null;dirty=false;target.click();}catch(err){$('status').textContent='Your changes are not saved yet. '+err.message;}},true);
+let browserNavigationPending=false;
+document.addEventListener('click',async e=>{const target=e.target.closest('[data-step],#refresh,#logout,[data-admin]');if(!target||!browserWork)return;e.preventDefault();e.stopImmediatePropagation();if(browserNavigationPending)return;browserNavigationPending=true;try{await browserSave();browserWork=null;dirty=false;if(target.isConnected)target.click();}catch(err){$('status').textContent='Your changes are not saved yet. '+err.message;}finally{browserNavigationPending=false;}},true);
 window.hasUnfinishedWork=()=>dirty||!!browserWork?.saving||!!browserWork?.changed;
 
 const hrOriginalAdminSection=adminSection;
