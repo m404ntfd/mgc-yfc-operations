@@ -19,9 +19,9 @@ def run():
    def login(page,name):
     page.goto(f'http://127.0.0.1:{f.port}/office');page.locator('#login [name=name]').fill(name);page.locator('#login [name=password]').fill('testpassword');page.locator('#login button').click();expect(page.locator('#officeTiles')).to_be_visible()
    login(p,'Admin')
-   expect(p.locator('#officeTiles [data-office-category]')).to_have_count(6)
+   expect(p.locator('#officeTiles [data-office-category]')).to_have_count(7)
    expect(p.locator('#officeTiles [data-office-action]')).to_have_count(0)
-   expected=['Products','Sales','Customers','Staff','Reports','System']
+   expected=['Products','Sales','Customers','Giving','Staff','Reports','System']
    assert p.locator('#officeTiles strong').all_text_contents()==expected
    # Every available tool has exactly one destination, including search aliases.
    coverage=p.evaluate('''()=>{const actions=officeMenuCards().map(c=>c.action);return actions.map(a=>[a,officeNavigationGroups.filter(g=>g.actions.includes(a)).length]);}''')
