@@ -45,6 +45,24 @@ try:
   expect(d.locator('[data-void]')).to_have_count(0)
   assert d.locator('table script').count()==0
   p.screenshot(path=str(out/'OFFICE-Giving-Correction-History.png'))
+  # Prepare a new emailed copy through the actual server, then cancel it.
+  d.locator('[data-tab=donors]').click();d.locator('[data-edit-donor]').click()
+  d.locator('[name=email]').fill('synthetic@example.test');d.locator('[name=delivery]').select_option('email')
+  d.locator('[type=submit]').click();expect(d.locator('table')).to_contain_text('synthetic@example.test')
+  d.locator('[data-tab=statements]').click();d.locator('[name=period]').fill('2025')
+  d.locator('[type=submit]').click();expect(d.locator('#givingStatementPreview')).to_contain_text('Statement preview')
+  d.locator('#givingSaveStatement').click();expect(d.locator('#givingStatementPreview')).to_contain_text('Saved statement')
+  d.locator('#givingDelivery').click()
+  d.get_by_role('button',name='Prepare email delivery',exact=True).click()
+  expect(d.locator('.givingDeliveryRecord')).to_contain_text('Prepared - not sent')
+  expect(d.locator('.givingDeliveryRecord')).to_contain_text('synthetic@example.test')
+  p.screenshot(path=str(out/'OFFICE-Giving-Delivery-Prepared.png'))
+  d.locator('[name=reason]').fill('Synthetic review cancellation')
+  d.get_by_role('button',name='Cancel preparation',exact=True).click()
+  expect(d.locator('.givingDeliveryRecord')).to_contain_text('Cancelled - not sent')
+  expect(d.locator('.givingDeliveryRecord')).to_contain_text('Synthetic review cancellation')
+  p.screenshot(path=str(out/'OFFICE-Giving-Delivery-Cancelled.png'))
   assert not errors,errors
   b.close()
 finally:f.close()
+

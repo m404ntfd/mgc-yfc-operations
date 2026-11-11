@@ -28,31 +28,67 @@ async function givingOpen(){
   if(tab==='plans')area.innerHTML=`<p>Draft monthly commitments only. Saving a draft does not enroll or charge a donor. Secure donor authorization will be required when Clover is connected.</p>${can('manage_giving_plans')?'<button data-new="plan" type="button">Add monthly draft</button>':''}`+table(['Donor','Monthly amount','Billing day','Status',''],data.plans.map(x=>`<tr><td>${esc(donorName(x.donor))}</td><td>${posMoney(x.amount)}</td><td>${x.billing_day}</td><td>${esc(x.status)}</td><td>${can('manage_giving_plans')?`<button data-edit-plan="${x.id}">Edit draft</button> <button type="button" data-plan-history="${esc(x.id)}">View history</button>`:''}</td></tr>`));
   if(tab==='statements'){
    area.innerHTML=`<p>Preview current gifts or save a permanent copy for your records. Saved copies keep the donor details, gifts and message as they were when saved. No email will be sent.</p><form id="givingStatement">${select('donor','Donor',donors())}${input('period','Period (YYYY-MM or YYYY)',new Date().getFullYear().toString())}<button type="submit">Preview statement</button></form><div id="givingStatementPreview"></div><h3>Saved statement history</h3><div id="givingStatementHistory"></div>`;
-   const form=area.querySelector('form');
+   const form=area.querySelector('form'),version=viewVersion;
+   let statementRequest=0,historyRequest=0;
+   const current=()=>version===viewVersion&&d.isConnected&&form.isConnected;
    const show=s=>{
     const body=`<h2>${esc(s.settings.organization)}</h2><p>${esc(s.settings.address)}<br>EIN: ${esc(s.settings.ein||'Not configured')}</p><h3>Giving statement - ${esc(s.period)}</h3><p>${esc(s.donor.name)}<br>${esc(s.donor.address)}</p><p style="white-space:pre-wrap">${esc(s.message)}</p>`+table(['Date','Fund','Received','Goods/services value'],s.gifts.map(g=>`<tr><td>${esc(g.day)}</td><td>${esc(g.fund)}</td><td>${posMoney(g.amount)}</td><td>${posMoney(g.benefit_value)}</td></tr>`))+`<p><strong>Period received: ${posMoney(s.total)} | Year to date: ${posMoney(s.ytd)}</strong></p>`+s.gifts.map(g=>`<p>${esc(g.day)}: ${g.benefit?`${esc(g.benefit)} - estimated value ${posMoney(g.benefit_value)}.`:'No goods or services were provided in exchange for this contribution.'}</p>`).join('');
     const preview=area.querySelector('#givingStatementPreview');
     const status=(s.saved?`<p><strong>Saved statement - not sent</strong><br>Saved ${esc(s.created_at)} by ${esc(s.actor)}<br>Reference: ${esc(s.id)}</p>`:'<p><strong>Statement preview - not saved or sent</strong></p>');
     preview.innerHTML=status+body+'<button type="button" id="givingPrint">Print / Save PDF</button>'+(s.saved?'':'<button type="button" id="givingSaveStatement">Save current statement copy</button>');
     preview.querySelector('#givingPrint').onclick=()=>thriftPrint('Giving statement '+s.period,status+body);
+    if(s.saved&&can('giving_delivery')){
+     const delivery=document.createElement('button');delivery.type='button';delivery.id='givingDelivery';delivery.textContent='Review delivery preparation';
+     delivery.onclick=()=>{if(!busy&&!pending)showDelivery(s);};preview.append(delivery);
+    }
     const button=preview.querySelector('#givingSaveStatement');
     if(button)button.onclick=async()=>{try{const result=await save('statement_snapshot',{donor:s.donor.id,period:s.period});const fresh=root.querySelector('#givingStatement');fresh.elements.donor.value=s.donor.id;fresh.elements.period.value=s.period;await fresh.loadHistory();await fresh.showSaved(result.id);}catch(e){error(e);}};
    };
-   form.showSaved=async id=>show(await api('giving/statement_snapshot?id='+encodeURIComponent(id)));
+   form.showSaved=async id=>{const request=++statementRequest,donor=form.elements.donor.value;const s=await api('giving/statement_snapshot?id='+encodeURIComponent(id));if(current()&&request===statementRequest&&form.elements.donor.value===donor)show(s);};
    form.loadHistory=async()=>{
-    const id=form.elements.donor.value;
+    const id=form.elements.donor.value,request=++historyRequest;
     if(!id){area.querySelector('#givingStatementHistory').textContent='Add a donor to create statements.';return;}
     const history=await api('giving/statement_history?donor='+encodeURIComponent(id));
-    if(form.elements.donor.value!==id)return;
+    if(!current()||request!==historyRequest||form.elements.donor.value!==id)return;
     const target=area.querySelector('#givingStatementHistory');
     target.innerHTML=table(['Period','Saved','Saved by','Total',''],history.statements.map(x=>`<tr><td>${esc(x.period)}</td><td>${esc(x.created_at)}</td><td>${esc(x.actor)}</td><td>${posMoney(x.total)}</td><td><button type="button" data-snapshot="${esc(x.id)}">View saved copy</button></td></tr>`));
     target.querySelectorAll('[data-snapshot]').forEach(b=>b.onclick=()=>form.showSaved(b.dataset.snapshot).catch(error));
    };
-   form.elements.donor.onchange=()=>{area.querySelector('#givingStatementPreview').innerHTML='';form.loadHistory().catch(error);};
-   form.onsubmit=async e=>{e.preventDefault();try{const f=form.elements;show(await api('giving/statement?donor='+encodeURIComponent(f.donor.value)+'&period='+encodeURIComponent(f.period.value)));changedForms.delete(form);}catch(e){error(e);}};
+   form.elements.donor.onchange=()=>{statementRequest++;area.querySelector('#givingStatementPreview').innerHTML='';form.loadHistory().catch(error);};
+   form.onsubmit=async e=>{e.preventDefault();const request=++statementRequest;try{const f=form.elements,s=await api('giving/statement?donor='+encodeURIComponent(f.donor.value)+'&period='+encodeURIComponent(f.period.value));if(current()&&request===statementRequest){show(s);changedForms.delete(form);}}catch(e){if(current()&&request===statementRequest)error(e);}};
    form.loadHistory().catch(error);
   }
   if(tab==='settings')edit('settings',data.settings);
+ }
+ async function showDelivery(s){
+  if(!s.saved||!can('giving_statements')||!can('giving_delivery'))return;
+  const version=++viewVersion,area=root.querySelector('#givingContent');
+  const current=()=>version===viewVersion&&d.isConnected;
+  const heading=`<h3>Statement delivery preparation</h3><p><strong>Email sending is disabled. Preparing a delivery does not send it.</strong></p><p>${esc(s.donor.name)} | ${esc(s.period)}<br>Saved statement: ${esc(s.id)}<br>Saved delivery preference: ${esc(s.donor.delivery)}<br>Saved recipient: ${esc(s.donor.email||'No email address')}</p><p>Recipient details come from this saved copy. To use different details, update the donor and save a new statement copy.</p><button type="button" data-cancel>Back to statements</button>`;
+  area.innerHTML=heading+'<p role="status">Loading delivery history...</p>';
+  const reload=()=>{if(busy)return;if(pending){error(Error('Retry the pending save first.'));return;}const form=area.querySelector('form');if(form&&changedForms.has(form)&&!confirm('Discard unsaved changes?'))return;if(form)changedForms.delete(form);showDelivery(s);};
+  try{
+   const result=await api('giving/statement_deliveries?statement='+encodeURIComponent(s.id));
+   if(!current())return;
+   const records=result.deliveries;
+   area.innerHTML=heading+'<button type="button" id="givingReloadDelivery">Reload delivery history</button>'+(!records.length?'<p>No delivery has been prepared for this saved statement.</p>':records.map(x=>`<section class="givingDeliveryRecord"><h4>${x.status==='cancelled'?'Cancelled - not sent':'Prepared - not sent'}</h4><p>Recipient: ${esc(x.recipient)}<br>Prepared by ${esc(x.actor)}<br>${esc(x.created_at)}<br>Delivery reference: ${esc(x.id)}</p>${x.cancellation?`<p>Cancelled by ${esc(x.cancellation.actor)}<br>${esc(x.cancellation.at)}<br>Reason: ${esc(x.cancellation.reason)}</p>`:''}</section>`).join(''));
+   area.querySelector('#givingReloadDelivery').onclick=reload;
+   let kind,body;
+   if(!records.length&&s.donor.delivery==='email'&&s.donor.email){
+    kind='queue_statement';body={statement:s.id};
+    area.insertAdjacentHTML('beforeend','<form id="givingDeliveryForm"><button type="submit">Prepare email delivery</button></form>');
+   }else if(!records.length){area.insertAdjacentHTML('beforeend','<p>This copy uses print delivery or has no saved email address. Update the donor and save a new copy to prepare email delivery.</p>');}
+   else if(records[0].status==='prepared'){
+    kind='cancel_statement_delivery';body={delivery:records[0].id};
+    area.insertAdjacentHTML('beforeend','<form id="givingDeliveryForm"><label>Reason for cancellation<input name="reason" required maxlength="500"></label><button type="submit">Cancel preparation</button></form>');
+   }else{area.insertAdjacentHTML('beforeend','<p>This preparation is cancelled. Save a new statement copy if another preparation is needed.</p>');}
+   const form=area.querySelector('#givingDeliveryForm');
+   if(form)form.onsubmit=async e=>{e.preventDefault();if(busy)return;try{const payload={...body};if(kind==='cancel_statement_delivery'){payload.reason=form.elements.reason.value.trim();if(!payload.reason)throw Error('Enter a reason for cancellation.');}await save(kind,payload,form,()=>showDelivery(s));}catch(e){if(current())error(e);}};
+  }catch(e){
+   if(!current())return;
+   area.innerHTML=heading+`<p role="alert">${esc(e.message)}</p><button type="button" id="givingRetryDelivery">Retry delivery history</button>`;
+   area.querySelector('#givingRetryDelivery').onclick=reload;
+  }
  }
  async function showPlanHistory(id){
   if(!can('manage_giving_plans'))return;
@@ -92,10 +128,10 @@ async function givingOpen(){
   const form=area.querySelector('form');form.querySelectorAll('input[name=amount],input[name=benefit_value]').forEach(x=>{x.step='0.01';x.min=x.name==='amount'?'0.01':'0';});
   form.onsubmit=async e=>{e.preventDefault();if(busy)return;try{const raw=Object.fromEntries(new FormData(form));if('amount'in raw)raw.amount=posCents(raw.amount);if('benefit_value'in raw)raw.benefit_value=posCents(raw.benefit_value);if('billing_day'in raw)raw.billing_day=Number(raw.billing_day);if(kind==='replace_gift')raw.gift=item.id;else if(item.id)raw.id=item.id;if(['donor','plan','settings'].includes(kind))raw.revision=item.revision||0;await save(kind,raw,form);}catch(e){error(e);}};
  }
- async function save(kind,body,form){
+ async function save(kind,body,form,afterSave){
   const signature=JSON.stringify([kind,body]);if(pending&&pending.signature!==signature)throw Error('Retry the unchanged pending save before making another change.');
   pending=pending||{signature,request:crypto.randomUUID().replaceAll('-','')};busy=true;
-  try{if(!pending.result)pending.result=await api('giving/'+kind,{...body,request:pending.request});const result=pending.result;Object.assign(data,await api('giving/overview'));pending=null;if(form)changedForms.delete(form);d.querySelector('.flowError').textContent='';render();return result;}
+  try{if(!pending.result)pending.result=await api('giving/'+kind,{...body,request:pending.request});const result=pending.result;Object.assign(data,await api('giving/overview'));pending=null;if(form)changedForms.delete(form);d.querySelector('.flowError').textContent='';if(afterSave)await afterSave();else render();return result;}
   catch(e){if(!pending?.result&&e.status>=400&&e.status<500)pending=null;throw e;}
   finally{busy=false;}
  }
@@ -111,4 +147,5 @@ async function givingOpen(){
  }catch(e){error(e);}};
  render();
 }
+
 
