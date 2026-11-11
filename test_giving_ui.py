@@ -27,6 +27,8 @@ try:
   d.locator('#givingSaveStatement').click();expect(d.locator('#givingStatementPreview')).to_contain_text('Saved statement')
   expect(d.locator('#givingStatementHistory [data-snapshot]')).to_have_count(1)
   d.locator('[data-tab=donors]').click();d.locator('[data-edit-donor]').click();d.locator('[name=name]').fill('Renamed Preview Donor');d.locator('[type=submit]').click()
+  expect(d.locator('#givingEdit')).to_have_count(0)
+  expect(d.locator('table')).to_contain_text('Renamed Preview Donor')
   d.locator('[data-tab=statements]').click();d.locator('[data-snapshot]').click()
   expect(d.locator('#givingStatementPreview')).to_contain_text('Preview Donor')
   expect(d.locator('#givingStatementPreview')).not_to_contain_text('Renamed Preview Donor')
