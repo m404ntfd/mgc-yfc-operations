@@ -120,6 +120,45 @@ def giving_get(c,u,path,q):
                  status='cancelled' if r['cancelled_at'] else 'prepared',
                  cancellation={'reason':r['reason'],'actor':r['cancelled_by'],'at':r['cancelled_at']} if r['cancelled_at'] else None)
             for r in rows]}
+    if path=='gift_history':
+        # Staff-only API. A donor ID is a filter, never proof of donor identity.
+        donor=giving_profile(c,q.get('donor',[''])[0])
+        year=giving_text({'year':q.get('year',[''])[0]},'year',4)
+        if year and (not re.fullmatch(r'[0-9]{4}',year) or not 1<=int(year)<=9999):
+            raise Problem('Choose a valid year.')
+        fund=giving_text({'fund':q.get('fund',[''])[0]},'fund',100)
+        include_voided=q.get('include_voided',['false'])[0]
+        if include_voided not in ('true','false'):
+            raise Problem('Choose true or false for include_voided.')
+        try:
+            limit_text=q.get('limit',['50'])[0];offset_text=q.get('offset',['0'])[0]
+            if not re.fullmatch(r'[0-9]{1,7}',limit_text) or not re.fullmatch(r'[0-9]{1,7}',offset_text):
+                raise ValueError()
+            limit=int(limit_text);offset=int(offset_text)
+            if not 1<=limit<=100:raise ValueError()
+        except (ValueError,TypeError):
+            raise Problem('Choose a limit from 1 to 100 and a nonnegative offset.')
+        clauses=['g.donor=?'];args=[donor['id']]
+        if year:
+            clauses.append('g.day>=? AND g.day<=?')
+            args.extend([year+'-01-01',year+'-12-31'])
+        if fund:
+            clauses.append("json_extract(g.body,'$.fund')=?")
+            args.append(fund)
+        if include_voided=='false':clauses.append('v.gift IS NULL')
+        joined=' FROM giving_gifts g LEFT JOIN giving_voids v ON v.gift=g.id '
+        where=' WHERE '+' AND '.join(clauses)
+        totals=c.execute('SELECT COUNT(*) AS count, '
+            'COALESCE(SUM(CASE WHEN v.gift IS NULL THEN g.amount ELSE 0 END),0) AS amount'
+            +joined+where,args).fetchone()
+        rows=c.execute('SELECT g.*,v.gift AS voided,'
+            '(SELECT replacement FROM giving_gift_replacements WHERE original=g.id) AS replacement,'
+            '(SELECT original FROM giving_gift_replacements WHERE replacement=g.id) AS original'
+            +joined+where+' ORDER BY g.day DESC,g.id LIMIT ? OFFSET ?',args+[limit,offset])
+        gifts=[dict(json.loads(r['body']),id=r['id'],voided=bool(r['voided']),
+                    replacement=r['replacement'],replaces=r['original']) for r in rows]
+        return {'gifts':gifts,'total':totals['count'],'amount':totals['amount'],
+                'limit':limit,'offset':offset,'has_more':offset+len(gifts)<totals['count']}
     if path=='donor':
         return {'donor':giving_profile(c,q.get('id',[''])[0])}
     if path=='donor_history':
