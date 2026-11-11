@@ -11,7 +11,7 @@ class WebAssetTests(unittest.TestCase):
    for name in updater.FILES:
     target=root/name;target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(source/name,target)
    for path in [source/'assets/home-icons.json',source/'assets/hr-reference-forms.json',source/'assets/hr-source-forms.json',*sorted((source/'assets').glob('plug-*.b64'))]:shutil.copyfile(path,root/'assets'/path.name)
-   for name in ('pos.html','pos.js','pos.css','customer-office.js','customer-display.html','customer-display.js','customer-display.css','report-center.js','office-expansion.js','thrift-retail.js','retail-stores.js','fulfillment-print.js','pickup-followup.js','delivery-workspace.js','office-security.js','report-document.css','glass-theme.css','terminal-registration.js','terminal-registration.css','catalog-editor.js','cash-advances.js','office-updates.js','office-search.js','office-navigation.js','office-navigation.css','hr-browser.js','hr.html','hr.js','hr.css'):shutil.copyfile(source/'static'/name,root/'static'/name)
+   for name in ('pos.html','pos.js','pos.css','customer-office.js','customer-display.html','customer-display.js','customer-display.css','report-center.js','office-expansion.js','thrift-retail.js','retail-stores.js','fulfillment-print.js','pickup-followup.js','delivery-workspace.js','office-security.js','report-document.css','glass-theme.css','terminal-registration.js','terminal-registration.css','catalog-editor.js','cash-advances.js','office-updates.js','office-search.js','office-navigation.js','office-navigation.css','desk-touch.js','desk-touch.css','hr-browser.js','hr.html','hr.js','hr.css'):shutil.copyfile(source/'static'/name,root/'static'/name)
    shutil.copyfile(source/'customer_services.py',root/'customer_services.py')
    shutil.copyfile(source/'retail_reports.py',root/'retail_reports.py')
    shutil.copyfile(source/'computer_registry.py',root/'computer_registry.py')
@@ -37,6 +37,7 @@ class WebAssetTests(unittest.TestCase):
    self.assertEqual(decoded,ast.literal_eval(pos.value))
    self.assertIn((source/'static/office-navigation.js').read_text(encoding='utf-8'),decoded['pos.js'])
    self.assertIn((source/'static/office-navigation.css').read_text(encoding='utf-8'),decoded['pos.css'])
+   for name in ('desk-touch.js','desk-touch.css'):self.assertIn((source/'static'/name).read_text(encoding='utf-8-sig'),decoded['pos.'+name.rsplit('.',1)[1]])
    self.assertEqual(release_bytes(root,'server.py'),packed_source)
 
    self.assertIn('nativeTerminalSetup',ast.literal_eval(pos.value)['pos.js'])

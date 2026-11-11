@@ -85,7 +85,7 @@ posPanel.innerHTML=`<h1>Point of Sale</h1>
 <p id="posStatus" role="status"></p><div class="actions"><button id="posNew">New sale</button><button id="posReload">Reload saved carts</button><button id="posRetry" hidden>Retry / check last action</button><button id="posHistory">Sales history</button></div>
 <div class="posLayout"><section><h2>Items</h2><label>Search catalog<input id="posSearch" type="search"></label><div id="posCatalog" class="posCatalog"></div>
 <details><summary>Manual item</summary><form id="posManual"><label>Description<input name="name" maxlength="120" required></label><label>Sub Department<input name="category" maxlength="60" required></label><label>Unit price ($)<input name="price" type="number" min="0.01" max="100000" step="0.01" required></label><label>Quantity<input name="quantity" type="number" min="1" max="999" value="1" required></label><label><input name="taxable" type="checkbox" checked> Taxable</label><button>Add to sale</button></form></details></section>
-<section><h2>Current sale</h2><label>Saved carts<select id="posCarts"><option value="">Choose a cart</option></select></label><div id="posCart"></div><form id="posCash"><label>Cash received ($)<input name="tender" type="number" min="0" step="0.01" required></label><button class="primary">Complete cash sale</button><button type="button" disabled>Credit cards will be added in future updates</button></form><button id="posDiscard">Discard current cart</button></section></div>
+<section><h2>Current sale</h2><label>Saved carts<select id="posCarts"><option value="">Choose a cart</option></select></label><div id="posCart"></div><form id="posCash"><label>Cash received ($)<input name="tender" type="number" min="0" step="0.01" required></label><button class="primary">Complete cash sale</button><button id="posCardsUnavailable" type="button" disabled>Credit cards will be added in future updates</button></form><button id="posDiscard">Discard current cart</button></section></div>
 <details id="posAdmin"><summary>POS setup and catalog</summary><div class="posLayout"><form id="posSetup"><h2>Receipt and tax settings</h2><label>Store name<input name="store" maxlength="120" required></label><label>Sales tax (%)<input name="tax" type="number" min="0" max="100" step="0.01" required></label><label><input name="confirmed" type="checkbox" required> I confirmed this rate for this store.</label><p>USD; tax rounded per line. Changes apply to new carts. One tax rate is supported.</p><button>Save POS settings</button></form>
 <form id="posProduct"><h2>Add catalog item</h2><label>Name<input name="name" maxlength="120" required></label><label>Sub Department<input name="category" maxlength="60" required></label><label>Unit price ($)<input name="price" type="number" min="0.01" max="100000" step="0.01" required></label><label><input name="taxable" type="checkbox" checked> Taxable</label><button>Save catalog item</button></form></div></details>
 <section id="posSales" hidden><h2>Recent sales</h2><p>Latest 100 sales visible to your account.</p><div id="posSaleList"></div></section><section id="posReceipt" hidden></section><button id="posPrint" hidden>Print receipt</button>`;
@@ -139,7 +139,7 @@ function posRender(){
  $('posCatalog').innerHTML=products.map(x=>`<button type="button" data-pos-product="${x.id}" class="${color(x.category)}"><span>${esc(x.name)}</span><small>${esc(categoryLabel(x.category))}</small><strong>${x.rules?.open_priced?'Enter price':posMoney(x.display_price??x.price)+(x.rules?.sold_by_weight?' / lb':'')}</strong></button>`).join('')||'<p class="catalogEmpty">No matching items. Choose another Sub Department, search again, or add a manual item.</p>';
  $('posCarts').innerHTML='<option value="">Choose a cart</option>'+posOverview.carts.map(c=>`<option value="${c.id}">${esc(c.lines[0]?.name||'Empty cart')} · ${posMoney(c.total)} · ${c.id.slice(0,6)}</option>`).join('');
  $('posCarts').value=posCurrent?.id||'';
- $('posCart').innerHTML=posCurrent?`<p><strong>${esc(posCurrent.settings.store)}</strong> · Cart ${posCurrent.id.slice(0,6)} · Saved on server · Tax ${(posCurrent.settings.tax_bps/100).toFixed(2)}%</p><div class="receiptLines"><table><thead><tr><th>Item</th><th>Qty</th><th>Amount</th><th></th></tr></thead><tbody>${posCurrent.lines.map((x,i)=>`<tr><td>${esc(x.name)}<small class="flowLineNote">${esc(flowLineDetails(x)+(x.tag?' · '+x.tag.name+' tag · '+posMoney(x.tag.discount)+' markdown':''))}</small>${x.taxable?'':' (non-taxable)'}</td><td>${x.quantity}</td><td>${posMoney(x.subtotal)}</td><td><button type="button" data-pos-remove="${i}">Remove</button></td></tr>`).join('')}</tbody></table></div><p>Subtotal: ${posMoney(posCurrent.subtotal)}<br>Tax: ${posMoney(posCurrent.tax)}<br><strong>Total: ${posMoney(posCurrent.total)}</strong></p>`:'<p>Start a new sale or reopen a saved cart.</p>';
+ $('posCart').innerHTML=posCurrent?`<p><strong>${esc(posCurrent.settings.store)}</strong> · Cart ${posCurrent.id.slice(0,6)} · Saved on server · Tax ${(posCurrent.settings.tax_bps/100).toFixed(2)}%</p><div class="receiptLines"><table><thead><tr><th>Item</th><th>Qty</th><th>Amount</th><th></th></tr></thead><tbody>${posCurrent.lines.map((x,i)=>`<tr><td>${esc(x.name)}<small class="flowLineNote">${esc(flowLineDetails(x)+(x.tag?' · '+x.tag.name+' tag · '+posMoney(x.tag.discount)+' markdown':''))}</small>${x.taxable?'':' (non-taxable)'}</td><td>${deskQuantityControl(x,i)}</td><td>${posMoney(x.subtotal)}</td><td><button type="button" data-pos-remove="${i}">Remove</button></td></tr>`).join('')}</tbody></table></div><p>Subtotal: ${posMoney(posCurrent.subtotal)}<br>Tax: ${posMoney(posCurrent.tax)}<br><strong>Total: ${posMoney(posCurrent.total)}</strong></p>`:'<p>Tap a product to start a sale, or reopen a saved sale.</p>';
  $('posPayNow').disabled=posBusy||!!posPending||!posCurrent?.lines.length||!$('posReceipt').hidden;
  
  $('posPrintLast').disabled=!posLastReceipt;
@@ -169,7 +169,7 @@ async function posDo(action,data={},retry=false){
  let paidSaleForPickup=null;
  if(!officeMode&&['settings','product'].includes(action)){posMessage('Open CoastYouth Retail OFFICE to change retail setup.');return;}
  if(posBusy)return;
- if(officeMode&&['new','add','remove','cash','credit','discard'].includes(action)){posMessage('Complete checkout in DESK.');return;}
+ if(officeMode&&['new','add','remove','quantity','cash','credit','discard'].includes(action)){posMessage('Complete checkout in DESK.');return;}
  if(posPending&&!retry){posMessage('Check the pending action before starting another.');return;}
  posBusy=true;
  const forms=[...posPanel.querySelectorAll('form')];const active=submittedForm||document.activeElement?.form;
@@ -192,7 +192,7 @@ async function posDo(action,data={},retry=false){
   posMessage(error.message+(posPending?' Your request is retained. Retry to check it safely.':''));
  }finally{
   posBusy=false;for(const el of posPanel.querySelectorAll('button,input,select'))el.disabled=false;
-  $('posCash').querySelector('[type=button]').disabled=true;
+  $('posCardsUnavailable').disabled=true;
   await posLoad();if(officeMode)officeRenderCatalog();
   if(paidSaleForPickup)await pickupAfterPayment(paidSaleForPickup);
  }
@@ -533,7 +533,7 @@ function flowISO(value){return value?new Date(value).toISOString():null;}
 function flowDownload(name,text,type='text/csv'){const url=URL.createObjectURL(new Blob([text],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);}
 function flowCSV(rows){return rows.map(row=>row.map(x=>{let s=String(x??'');if(/^[=+@\-\t\r]/.test(s))s="'"+s;return '"'+s.replaceAll('"','""')+'"';}).join(',')).join('\r\n');}
 function flowParseCSV(text){const rows=[];let row=[],field='',quoted=false;for(let i=0;i<text.length;i++){const c=text[i];if(c==='"'){if(quoted&&text[i+1]==='"'){field+='"';i++;}else if(!quoted&&field==='')quoted=true;else if(quoted)quoted=false;else throw Error('Unexpected quote in CSV.');}else if(c===','&&!quoted){row.push(field);field='';}else if((c==='\n'||c==='\r')&&!quoted){if(c==='\r'&&text[i+1]==='\n')i++;row.push(field);if(row.some(Boolean))rows.push(row);row=[];field='';}else field+=c;}if(quoted)throw Error('CSV contains an unfinished quoted field.');row.push(field);if(row.some(Boolean))rows.push(row);return rows;}
-function flowModal(title,body){const d=document.createElement('dialog');d.className='flowDialog';d.innerHTML=`<div class="flowDialogHeading"><h2>${esc(title)}</h2><button type="button" class="flowClose" aria-label="Close">×</button></div>${body}<p class="flowError" role="status"></p>`;document.body.append(d);const close=()=>{if(writeCount)return;for(const f of d.querySelectorAll('form'))changedForms.delete(f);d.close();d.remove();};d.querySelector('.flowClose').onclick=close;d.oncancel=e=>{e.preventDefault();close();};d.showModal();return d;}
+function flowModal(title,body){const d=document.createElement('dialog');d.className='flowDialog';d.innerHTML=`<div class="flowDialogHeading"><h2>${esc(title)}</h2><button type="button" class="flowClose" aria-label="Close">×</button></div>${body}<p class="flowError" role="status"></p>`;document.body.append(d);const close=()=>{if(writeCount||d.querySelector('form[data-saving]')||d.beforeDismiss?.()===false)return;for(const f of d.querySelectorAll('form'))changedForms.delete(f);d.close();d.remove();d.onDismiss?.();};d.querySelector('.flowClose').onclick=close;d.oncancel=e=>{e.preventDefault();close();};d.showModal();return d;}
 async function flowOffice(action){
  if(action.startsWith('stores-')){if(navigationAllowed()&&!unfinished())try{await storesOffice(action);}catch(e){posMessage(e.message);}return;}
  if(action.startsWith('thrift-')){if(navigationAllowed()&&!unfinished())try{await thriftOffice(action);}catch(e){posMessage(e.message);}return;}
@@ -565,9 +565,75 @@ function flowModifiers(){const r=flowProduct.rules;r.modifiers??=[];$('flowModif
  $('flowModifierGroups').oninput=e=>{const d=e.target.dataset;if(d.groupName!==undefined)r.modifiers[+d.groupName].name=e.target.value;if(d.groupRequired!==undefined)r.modifiers[+d.groupRequired].required=e.target.checked;for(const key of ['optionName','optionPrice'])if(d[key]){const[i,j]=d[key].split(',').map(Number);r.modifiers[i].options[j][key==='optionName'?'name':'price']=key==='optionName'?e.target.value:(/^\d+(\.\d{0,2})?$/.test(e.target.value)?Math.round(Number(e.target.value)*100):-1);}};
  $('flowModifierGroups').onclick=e=>{const d=e.target.dataset;if(d.groupRemove!==undefined)r.modifiers.splice(+d.groupRemove,1);else if(d.optionAdd!==undefined)r.modifiers[+d.optionAdd].options.push({id:flowId(),name:'New option',price:0});else if(d.optionRemove){const[i,j]=d.optionRemove.split(',').map(Number);r.modifiers[i].options.splice(j,1);}else return;changedForms.set($('flowProductForm'),'choices changed');flowModifiers();};}
 function flowComponents(){const parts=flowProduct.rules.components||[];$('flowComponents').innerHTML=parts.map((p,i)=>`<div class="flowToolbar"><strong>${esc(flowConfig.products.find(x=>x.id===p.product)?.name)}</strong><label>Quantity<input type="number" min="1" max="99" data-component-quantity="${i}" value="${p.quantity}"></label><button type="button" data-component-remove="${i}">Remove</button></div>`).join('');$('flowComponents').oninput=e=>{if(e.target.dataset.componentQuantity!==undefined)parts[+e.target.dataset.componentQuantity].quantity=Number(e.target.value);};$('flowComponents').onclick=e=>{if(e.target.dataset.componentRemove!==undefined){parts.splice(+e.target.dataset.componentRemove,1);changedForms.set($('flowProductForm'),'bundle changed');flowComponents();}};}
-async function flowAddProduct(id){const product=posOverview.products.find(x=>x.id===id);if(!product||!posCurrent){posMessage('Start or select a sale first.');return;}if(product.rules?.sold_by_weight)return storesWeightDialog(product);if(product.available===false){posMessage('This product is not currently available.');return;}const groups=product.rules?.modifiers||[];const openPriced=product.rules?.open_priced===true;if(!groups.length&&!openPriced){await posCartAction('add',{product:id,quantity:1});return;}
+// Product selection can start checkout without a separate New sale action.
+let flowProductStarting=false;
+function flowProductReady(){
+ if(officeMode||!user)return false;
+ if(posPending){posMessage('Use Retry / check last action before adding another item.');return false;}
+ if(posBusy||writeCount)return false;
+ if(!posCurrent&&!navigationAllowed())return false;
+ if(!posCurrent&&changedForms.has($('posCash'))){posMessage('Finish or clear the cash amount before starting another sale.');return false;}
+ if(retailTerminal&&!retailTerminal.enabled){posMessage('This terminal is disabled in OFFICE.');return false;}
+ if(posOverview?.settings.tax_bps===null){posMessage('Configure receipt and tax settings before starting a sale.');return false;}
+ return true;
+}
+async function flowEnsureProductSale(){
+ if(posCurrent)return posCurrent;
+ if(!flowProductReady())throw Error($('posStatus').textContent||'Finish the current action before adding an item.');
+ await posDo('new');
+ if(!posCurrent||posPending)throw Error($('posStatus').textContent||'The sale could not be started. Please try again.');
+ return posCurrent;
+}
+function flowPrepareProductPrompt(dialog,product,field=null,kind=''){
+ dialog.dataset.cart=posCurrent?.id||'';
+ // A lost response may already have added the item. Resolve it before announcing cancellation.
+ dialog.beforeDismiss=()=>{
+  const pending=JSON.parse(sessionStorage.getItem('retail-save:'+user.name+':add')||'null');
+  if(pending&&JSON.parse(pending.payload).cart===dialog.dataset.cart){dialog.querySelector('.flowError').textContent='The last save is unconfirmed. Select Add to sale again to check the saved result before closing.';return false;}
+  return true;
+ };
+ if(field)dialog.onDismiss=()=>flowProductCanceled(product,field.value.trim()?'':kind);
+ const cancel=document.createElement('button');cancel.type='button';cancel.className='flowProductCancel';cancel.textContent='Cancel';cancel.onclick=()=>dialog.querySelector('.flowClose').click();dialog.querySelector('form').append(cancel);
+}
+function flowProductCanceled(product,missing){
+ const reason=missing?' because no '+missing+' was entered':'; entry was canceled';
+ const message=product.name+' was not added'+reason+'.';
+ posMessage(message);
+ const d=flowModal('Item not added',`<p>${esc(message)}</p><p>Items already on the sale remain unchanged.</p><button type="button" class="primary" data-product-cancel-ok>Okay</button>`);
+ d.querySelector('[data-product-cancel-ok]').onclick=()=>{d.close();d.remove();};
+}
+async function flowSubmitProduct(form,dialog,product,extra){
+ if(form.dataset.saving)return;
+ form.dataset.saving='true';const button=form.querySelector('button.primary');if(button)button.disabled=true;
+ try{
+  if(!flowProductReady())throw Error($('posStatus').textContent||'Finish the current action before adding an item.');
+  if(dialog.dataset.cart&&dialog.dataset.cart!==posCurrent?.id)throw Error('The selected sale changed. Close this prompt and select the item again.');
+  const cart=await flowEnsureProductSale();dialog.dataset.cart=cart.id;
+  const result=await retailSave('add',{cart:cart.id,revision:cart.revision,product:product.id,quantity:1,...extra});
+  posCurrent=result.cart;$('posReceipt').hidden=true;$('posPrint').hidden=true;
+  changedForms.delete(form);dialog.close();dialog.remove();await posLoad();
+ }catch(error){changedForms.set(form,snapshot(form));dialog.querySelector('.flowError').textContent=error.message;}
+ finally{delete form.dataset.saving;if(button)button.disabled=false;}
+}
+async function flowAddProduct(id){
+ if(flowProductStarting||!flowProductReady())return;
+ const product=posOverview?.products.find(x=>x.id===id);if(!product)return;
+ if(product.available===false){posMessage('This product is not currently available.');return;}
+ if(product.rules?.sold_by_weight)return storesWeightDialog(product);
+ const groups=product.rules?.modifiers||[],openPriced=product.rules?.open_priced===true;
+ if(!groups.length&&!openPriced){
+  flowProductStarting=true;
+  try{await flowEnsureProductSale();await posCartAction('add',{product:id,quantity:1});}
+  catch(error){posMessage(error.message);}
+  finally{flowProductStarting=false;}
+  return;
+ }
  const d=flowModal((openPriced?'Enter price · ':'Choose options · ')+product.name,`<form id="flowChoices">${openPriced?'<label>Unit price ($)<input id="flowOpenPrice" type="number" min="0.01" max="100000" step="0.01" required autofocus></label><p>Enter the price before tax. Any selected add-ons are added to this amount.</p>':''}${groups.map(g=>`<label>${esc(g.name)} ${g.required?'(required)':'(optional)'}<select name="${esc(g.id)}" ${g.required?'required':''}><option value="">Choose an option</option>${g.options.map(o=>`<option value="${esc(o.id)}">${esc(o.name)}${o.price?' + '+posMoney(o.price):''}</option>`).join('')}</select></label>`).join('')}<button class="primary">Add to sale</button></form>`);
- d.querySelector('form').onsubmit=async e=>{e.preventDefault();try{const choices=Object.fromEntries(new FormData(e.target));const result=await retailSave('add',{cart:posCurrent.id,revision:posCurrent.revision,product:id,quantity:1,choices,...(openPriced?{open_price:posCents($('flowOpenPrice').value)}:{})});posCurrent=result.cart;changedForms.delete(e.target);d.close();d.remove();await posLoad();}catch(err){d.querySelector('.flowError').textContent=err.message;}};
+ flowPrepareProductPrompt(d,product,openPriced?d.querySelector('#flowOpenPrice'):null,'price');
+ d.querySelector('form').onsubmit=async e=>{e.preventDefault();try{
+  const choices=Object.fromEntries(new FormData(e.target));
+  await flowSubmitProduct(e.target,d,product,{choices,...(openPriced?{open_price:posCents($('flowOpenPrice').value)}:{})});
+ }catch(error){d.querySelector('.flowError').textContent=error.message;}};
 }
 function flowLineDetails(line){return (line.weight_milli?[`${(line.weight_milli/1000).toFixed(3)} lb × ${posMoney(line.price_per_lb)}/lb`]:[]).concat((line.modifiers||[]).map(o=>`${o.group}: ${o.name}`),(line.components||[]).map(p=>`${p.quantity} × ${p.name}`)).join(' · ');}
 function flowDecorate(){if(!posOverview)return;for(const b of $('posCatalog').querySelectorAll('[data-pos-product]')){const p=posOverview.products.find(x=>x.id===b.dataset.posProduct);if(p?.available===false){b.disabled=true;b.title='Outside availability or inactive';b.append(document.createTextNode(' · Unavailable'));}}if(posCurrent?.held){$('posNew').disabled=false;$('posPayNow').disabled=true;}if($('flowHold'))$('flowHold').disabled=!posCurrent||!!posPending;}
@@ -911,7 +977,8 @@ async function storesPrograms(){
 function storesWeightDialog(product){
  const rate=product.display_price??product.price;const d=thriftModal('Enter weight · '+product.name,`<form id="storeWeight"><h2>${posMoney(rate)} per pound</h2>${thriftField('Net weight (lb)','weight','','number','min="0.001" max="9999.999" step="0.001" required autofocus')}<p>Enter the merchandise weight from the scale, excluding its container.</p><h2 id="storeWeightTotal">Enter a weight</h2><p>Tax is calculated when the item is added.</p><button class="primary">Add to Sale</button></form>`);
  const f=d.querySelector('form');f.oninput=()=>{const w=f.elements.weight.value;const valid=/^(?:0|[1-9][0-9]{0,3})(?:\.[0-9]{1,3})?$/.test(w)&&Number(w)>0;d.querySelector('#storeWeightTotal').textContent=valid?posMoney(Math.floor((Math.round(Number(w)*1000)*rate+500)/1000))+' before tax':'Enter a valid weight';};
- f.onsubmit=async e=>{e.preventDefault();try{const result=await retailSave('add',{cart:posCurrent.id,revision:posCurrent.revision,product:product.id,quantity:1,weight:f.elements.weight.value});posCurrent=result.cart;changedForms.delete(f);thriftClose(d);await posLoad();}catch(e){thriftError(d,e);}};
+ flowPrepareProductPrompt(d,product,f.elements.weight,'weight');
+ f.onsubmit=async e=>{e.preventDefault();await flowSubmitProduct(f,d,product,{weight:f.elements.weight.value});};
 }
 async function storesDrawers(){
  const [data,config]=await Promise.all([api('pos/drawers'),api('pos/stores')]);const d=thriftModal('Cash-drawer reconciliation',`<p>${data.enabled?'Reconciliation is enabled.':'Disabled — enable it under Optional programs when ready.'}</p>${data.enabled?`<form id="drawerOpen" class="flowToolbar"><label>Register<select name="terminal">${config.terminals.filter(t=>t.enabled).map(t=>`<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}</select></label>${thriftField('Opening cash ($)','opening','','number','min="0" step="0.01" required')}<button>Open drawer</button></form>`:''}<div id="drawerRows">${data.drawers.map(r=>`<article><h3>${esc(r.terminal_name)} · ${esc(r.store)} · #${r.id}</h3><p>${esc(r.opened)} · ${r.closed?'Closed':'Open'}</p><p>Opening ${posMoney(r.opening)} · Cash sales ${posMoney(r.cash_sales)} · Cash refunds ${posMoney(r.cash_refunds)} · Cash movements ${signedMoney(r.movements)} (includes employee advances ${posMoney(r.advances||0)})</p><h3>Expected ${posMoney(r.expected)}${r.closed?' · Counted '+posMoney(r.counted)+' · Over / short '+signedMoney(r.variance):''}</h3>${r.closed?`<p>${esc(r.closed_by)} · ${esc(r.note)}</p>`:`<form data-move="${r.id}" class="flowToolbar"><select name="direction"><option value="out">Cash out / safe drop</option><option value="in">Cash in</option></select>${thriftField('Amount ($)','amount','','number','min="0.01" step="0.01" required')}${thriftField('Reason','reason','','text','required')}<button>Record movement</button></form><form data-close-drawer="${r.id}" class="flowToolbar">${thriftField('Counted cash ($)','counted','','number','min="0" step="0.01" required')}${thriftField('Count / discrepancy note','reason','','text','required')}<button>Close & reconcile</button></form>`}</article>`).join('')||'<p>No cash drawer sessions yet.</p>'}</div><button id="drawerPrint">Print / Save PDF</button>`);
@@ -1541,6 +1608,85 @@ if(officeMode){
 })();
 
 // END OFFICE SEARCH
+// BEGIN DESK TOUCH
+// DESK touch controls; OFFICE and printed receipts retain their own layouts.
+function deskQuantityControl(line,index){
+ if(officeMode)return String(line.quantity);
+ const special=line.weight_milli?'By weight':line.intake?'Single item':line.gift_certificate||line.donation?'Fixed amount':'';
+ if(special)return `<span class="deskFixedQuantity">${line.quantity}<small>${special}</small></span>`;
+ const locked=posBusy||!!posPending||posCurrent?.held||posCurrent?.reward||posCurrent?.adjustment;
+ return `<div class="deskQuantity" aria-label="Quantity for ${esc(line.name)}"><button type="button" data-desk-quantity="${index}" data-step="-1" aria-label="Decrease quantity of ${esc(line.name)}" ${locked||line.quantity<=1?'disabled':''}>−</button><output aria-live="polite">${line.quantity}</output><button type="button" data-desk-quantity="${index}" data-step="1" aria-label="Increase quantity of ${esc(line.name)}" ${locked||line.quantity>=999?'disabled':''}>+</button></div>`;
+}
+(function(){
+ if(officeMode)return;
+ document.body.classList.add('deskTouch');
+ const status=document.getElementById('posStatus'),actions=document.querySelector('#posPanel>.actions');
+ const statusRow=document.createElement('div');statusRow.className='deskStatusRow';status.before(statusRow);statusRow.append(status,actions);document.getElementById('posHistory').hidden=true;
+ let scheduled=false;
+ const scrollTargets={groups:()=>document.getElementById('posCategories'),products:()=>document.getElementById('posCatalog'),receipt:()=>document.querySelector('#posCart .receiptLines')};
+ const labels={groups:'Groups',products:'Products',receipt:'Receipt'};
+ function scrollBar(kind,target){
+  if(!target)return;
+  let bar=document.querySelector(`[data-desk-scrollbar="${kind}"]`);
+  if(!bar){
+   bar=document.createElement('div');bar.className='deskScroll';bar.dataset.deskScrollbar=kind;
+   bar.innerHTML=`<button type="button" data-scroll-direction="-1" aria-label="Scroll ${labels[kind].toLowerCase()} up"><span aria-hidden="true">▲</span> Up</button><button type="button" data-scroll-direction="1" aria-label="Scroll ${labels[kind].toLowerCase()} down"><span aria-hidden="true">▼</span> Down</button>`;
+   target.after(bar);
+   bar.onclick=e=>{const button=e.target.closest('[data-scroll-direction]'),area=scrollTargets[kind]();if(!button||!area)return;area.scrollBy({top:Number(button.dataset.scrollDirection)*Math.max(100,area.clientHeight*.7),behavior:'auto'});refreshScroll();};
+  }
+  bar.hidden=target.scrollHeight<=target.clientHeight+2;
+  bar.querySelector('[data-scroll-direction="-1"]').disabled=target.scrollTop<=1;
+  bar.querySelector('[data-scroll-direction="1"]').disabled=target.scrollTop+target.clientHeight>=target.scrollHeight-2;
+ }
+ function refreshScroll(){for(const [kind,get]of Object.entries(scrollTargets))scrollBar(kind,get());}
+ function fieldName(input){
+  return input.getAttribute('aria-label')||[...(input.labels||[])].map(label=>[...label.childNodes].filter(n=>n.nodeType===3).map(n=>n.textContent.trim()).join(' ')).filter(Boolean).join(' ')||'Enter value';
+ }
+ function addKeypads(){
+  for(const input of document.querySelectorAll('#posManual input[type=number],#posCash input[type=number],#flowChoices input[type=number],#storeWeight input[type=number],#creditPay input[type=number]')){
+   if(input.closest('.deskNumberField')||input.closest('#posAdmin')||input.closest('#posSetup')||input.hidden)continue;
+   const wrap=document.createElement('span');wrap.className='deskNumberField';input.before(wrap);wrap.append(input);
+   input.inputMode=input.step&&input.step!=='1'?'decimal':'numeric';
+   const button=document.createElement('button');button.type='button';button.className='deskKeypadOpen';button.textContent='Keypad';button.setAttribute('aria-label','Open keypad for '+fieldName(input));wrap.append(button);
+   button.onclick=e=>{e.preventDefault();if(!input.disabled&&!input.readOnly)openKeypad(input);};
+  }
+ }
+ function openKeypad(input){
+  const name=fieldName(input),decimal=input.step==='any'||(input.step&&Number(input.step)%1!==0);
+  const dialog=flowModal(name,`<form id="deskAmountEntry"><label class="deskKeypadLabel">${esc(name)}<input id="deskKeypadValue" name="value" type="text" inputmode="${decimal?'decimal':'numeric'}" autocomplete="off"></label></form><p class="deskKeypadError" role="alert"></p><div class="deskKeypadGrid">${['7','8','9','4','5','6','1','2','3','clear','0',decimal?'.':'back'].map(key=>`<button type="button" data-key="${key}" aria-label="${key==='clear'?'Clear entry':key==='back'?'Backspace':key==='.'?'Decimal point':key}">${key==='clear'?'Clear':key==='back'?'⌫':key}</button>`).join('')}</div><div class="deskKeypadActions">${decimal?'<button type="button" data-key="back" aria-label="Backspace">⌫ Backspace</button>':''}<button type="button" class="deskKeypadCancel">Cancel</button><button type="button" class="primary deskKeypadApply">Use value</button></div>`);
+  dialog.classList.add('deskAmountPad');const value=dialog.querySelector('#deskKeypadValue'),error=dialog.querySelector('.deskKeypadError');value.value=input.value;const entry=dialog.querySelector("#deskAmountEntry");entry.onsubmit=e=>{e.preventDefault();apply();};changedForms.set(entry,snapshot(entry));value.focus();value.select();
+  const cancel=()=>dialog.querySelector('.flowClose').click();dialog.querySelector('.deskKeypadCancel').onclick=cancel;
+  dialog.querySelectorAll('[data-key]').forEach(button=>button.onclick=()=>{
+   const key=button.dataset.key,start=value.selectionStart??value.value.length,end=value.selectionEnd??start;
+   if(key==='clear'){value.value='';value.dispatchEvent(new Event('input',{bubbles:true}));value.focus();return;}
+   let text=value.value,position=start;
+   if(key==='back'){text=text.slice(0,start===end?Math.max(0,start-1):start)+text.slice(end);position=start===end?Math.max(0,start-1):start;}
+   else{text=text.slice(0,start)+key+text.slice(end);position=start+key.length;}
+   if(text.length<=16&&new RegExp(decimal?'^\\d*(\\.\\d*)?$':'^\\d*$').test(text)){value.value=text;value.dispatchEvent(new Event('input',{bubbles:true}));value.focus();value.setSelectionRange(position,position);error.textContent='';}
+  });
+  function apply(){
+   if(!input.isConnected||input.disabled||input.readOnly){error.textContent='This field is no longer available. Close the keypad and reopen the item.';return;}
+   const text=value.value.trim(),check=input.cloneNode();check.required=true;check.value=text;
+   if(!text||!new RegExp(decimal?'^\\d+(\\.\\d+)?$':'^\\d+$').test(text)||!check.checkValidity()){error.textContent=check.validationMessage||'Enter a valid value for this field.';return;}
+   input.value=text;input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));changedForms.delete(entry);dialog.close();dialog.remove();input.focus();
+  }
+  dialog.querySelector('.deskKeypadApply').onclick=apply;value.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();apply();}};
+ }
+ document.getElementById('posCart').addEventListener('click',async e=>{
+  const b=e.target.closest('[data-desk-quantity]');if(!b)return;
+  if(!posCurrent||posBusy||posPending||writeCount){posMessage('Please finish the current save before changing quantity.');return;}
+  if(changedForms.has(document.getElementById('posCash'))){posMessage('Finish or clear the cash entry before changing quantities.');return;}
+  const index=Number(b.dataset.deskQuantity),line=posCurrent.lines[index];if(!line)return;
+  await posCartAction('quantity',{index,quantity:line.quantity+Number(b.dataset.step)});
+ });
+ function scan(){scheduled=false;addKeypads();refreshScroll();}
+ function schedule(){if(!scheduled){scheduled=true;requestAnimationFrame(scan);}}
+ new MutationObserver(schedule).observe(document.body,{childList:true,subtree:true});
+ window.addEventListener('resize',schedule);document.addEventListener('scroll',schedule,true);
+ scan();
+})();
+
+// END DESK TOUCH
 // BEGIN TERMINAL REGISTRATION
 // Shared native desktop registration; ordinary web browsers keep their current login flow.
 (()=>{

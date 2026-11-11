@@ -21,7 +21,7 @@ def run():
    expect(p.locator('#flowProductStatus')).to_contain_text('Product saved');p.goto(origin+'/pos');p.locator('#posNew').click();expect(p.locator('#posCart')).to_contain_text('Saved on server')
    p.locator('[data-pos-product]').click();expect(p.locator('#posCart')).to_contain_text('$4.28')
    p.locator('summary').filter(has_text='Manual item').click();form=p.locator('#posManual')
-   form.locator('[name=name]').fill('Manual item');form.locator('[name=category]').fill('Housewares');form.locator('[name=price]').fill('2.00');form.locator('[name=taxable]').uncheck();form.locator('button').first.click()
+   form.locator('[name=name]').fill('Manual item');form.locator('[name=category]').fill('Housewares');form.locator('[name=price]').fill('2.00');form.locator('[name=taxable]').uncheck();form.get_by_role('button',name='Add to sale',exact=True).click()
    expect(p.locator('#posCart')).to_contain_text('$6.28');cart=p.locator('#posCarts').input_value()
    p.reload();expect(p.locator('#posPanel')).to_be_visible();p.locator('#posCarts').select_option(cart);expect(p.locator('#posCart')).to_contain_text('$6.28')
    # Lose the response after the server commits cash. Retry must return the same receipt.

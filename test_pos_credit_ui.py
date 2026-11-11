@@ -31,7 +31,7 @@ def run():
    # Server commits, response is lost: retry must retrieve the original sale.
    def lose(route):
     route.fetch();route.abort();p.unroute('**/api/pos/credit',lose)
-   p.route('**/api/pos/credit',lose);p.locator('#creditPay button').first.click();expect(p.locator('#creditRetry')).to_be_visible(timeout=25000)
+   p.route('**/api/pos/credit',lose);p.locator('#creditPay').get_by_role('button',name='Complete store-credit payment',exact=True).click();expect(p.locator('#creditRetry')).to_be_visible(timeout=25000)
    # Pending requests can be safely retried from the account dialog.
    p.locator('#creditRetry').click();expect(p.locator('#creditDialog')).not_to_be_visible();expect(p.locator('#posReceipt')).to_contain_text('Store credit: $20.00');expect(p.locator('#posReceipt')).to_contain_text('Change: $0.07')
    assert len(f.call('pos/sales')[1]['sales'])==1

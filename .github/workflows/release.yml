@@ -24,7 +24,7 @@ jobs:
       - run: node --check static/app.js
       - run: node --check static/pos.js
       - run: python -m unittest test_cash_advances test_thrift_retail.ThriftTests test_retail_stores.StoreTests test_pickup_followup.PickupTests test_hr_catalog test_catalog_hierarchy test_hr_browser test_hr_completion test_hr_formats test_hr_sources
-      - run: python -m unittest test_schedule_redesign test_data_integrity test_update_connections test_update_coordination test_activity_controller test_pos test_pos_credit test_pos_kiosk test_pos_updates
+      - run: python -m unittest test_schedule_redesign test_data_integrity test_update_connections test_update_coordination test_activity_controller test_pos test_pos_quantity.QuantityTests test_pos_credit test_pos_kiosk test_pos_updates
   mobile-browser:
     runs-on: ubuntu-24.04
     steps:
@@ -54,6 +54,8 @@ jobs:
       - run: python test_update_coordination_ui.py
       - run: python test_activity_controller_ui.py
       - run: python test_pos_ui.py
+      - run: python test_pos_product_start_ui.py
+      - run: python test_desk_touch_ui.py
       - run: python test_pos_kiosk_ui.py
       - run: python test_pos_credit_ui.py
       - run: python test_retail_office_ui.py
@@ -139,7 +141,7 @@ jobs:
         shell: pwsh
         run: |
           $baseline = Join-Path $env:RUNNER_TEMP 'retail-upgrade-baseline'
-          git clone --depth 1 --branch v0.53.0 https://github.com/m404ntfd/mgc-yfc-operations.git $baseline
+          git clone --depth 1 --branch v0.54.0 https://github.com/m404ntfd/mgc-yfc-operations.git $baseline
           if ($LASTEXITCODE -ne 0) { throw 'Baseline checkout failed' }
           $env:RETAIL_BASE_SOURCE = $baseline
           python test_retail_release_upgrade.py
@@ -166,7 +168,7 @@ jobs:
           $p = Start-Process -WindowStyle Hidden -FilePath (Join-Path $officeInstall 'CoastYouth Retail OFFICE.exe') -ArgumentList '--smoke-test' -PassThru -Wait
           if ($p.ExitCode -ne 0) { throw 'Installed OFFICE failed' }
           $posInstall = Join-Path $env:RUNNER_TEMP 'PosInstallTest'
-          $p = Start-Process -WindowStyle Hidden -FilePath 'dist/MGC-YFC-POS-Setup-v1.15.1.exe' -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$posInstall") -PassThru -Wait
+          $p = Start-Process -WindowStyle Hidden -FilePath 'dist/MGC-YFC-POS-Setup-v1.16.0.exe' -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$posInstall") -PassThru -Wait
           if ($p.ExitCode -ne 0) { throw 'POS install failed' }
           $p = Start-Process -WindowStyle Hidden -FilePath (Join-Path $posInstall 'MGC YFC Point of Sale.exe') -ArgumentList '--smoke-test' -PassThru -Wait
           if ($p.ExitCode -ne 0) { throw 'Installed POS failed' }
@@ -229,4 +231,4 @@ jobs:
             echo "Release already exists; leaving published assets unchanged."
             exit 0
           fi
-          gh release create "$tag" dist/*.exe dist/Store-Dispatch-Update.zip --target "$GITHUB_SHA" --title "CoastYouth Retail Organized OFFICE Settings $tag" --notes-file RELEASE-NOTES.md
+          gh release create "$tag" dist/*.exe dist/Store-Dispatch-Update.zip --target "$GITHUB_SHA" --title "CoastYouth Retail Touchscreen DESK $tag" --notes-file RELEASE-NOTES.md
