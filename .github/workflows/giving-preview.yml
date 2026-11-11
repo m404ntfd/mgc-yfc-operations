@@ -30,7 +30,7 @@ jobs:
         run: python -m unittest test_giving_history test_giving_donors test_giving_deliveries test_giving test_giving_storage test_web_assets test_data_integrity test_startup_updates
       - uses: actions/checkout@v4
         with:
-          ref: 618e0c4f1120d677d63b865d9d258c61d7a56963
+          ref: d263fb1c97feefb7c1666d7362ccdba60b57738c
           path: .giving-upgrade-baseline
       - name: Verify populated upgrade, backup and rollback
         env:

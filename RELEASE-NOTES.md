@@ -1,13 +1,11 @@
-# CoastYouth Retail Initial Staff Giving — v0.58.0
+# CoastYouth Retail OFFICE Status Bar — v0.58.1
 
-Adds the initial staff Giving workspace in OFFICE, backed by the existing Operations database. Includes donor profiles and audited changes; received gifts with voids and linked corrections; filtered donor giving history; monthly commitment drafts and change history; monthly/yearly statement previews, saved copies and printing; and delivery preparation/cancellation history.
+Adds a compact bottom bar in OFFICE showing the loaded web application version, installed OFFICE launcher version when available, Operations connection status, signed-in user, and local date and live time.
 
-Saved statements display their original donor details and period separately from new preview criteria. Print and save actions appear above the document. Missing organization identity details show a setup notice.
+The bar reserves space below the workspace, uses a two-row layout on narrow screens, and is hidden when printing. Connection status follows existing server checks and waits for confirmation after the network reconnects.
 
-Initial setup: update the Operations server, open OFFICE → Giving → Settings, and enter the organization EIN, mailing address and statement messages. Review staff Giving permissions before entering donor records. Review a statement preview before issuing statements. Existing saved copies retain their original details; save a new copy after correcting settings.
+Install the Operations server update and reopen OFFICE to load the new bar. The native OFFICE launcher remains 1.15.0; the web application shows 0.58.1. DESK remains 1.18.0 and STORE OPS remains 1.4.0.
 
-Clover payments, recurring charges, donor self-service and automatic email delivery are not enabled. Monthly commitments are drafts. Delivery preparation does not send email. Do not enter card numbers or security codes.
+Retains the initial staff Giving features from v0.58.0. Clover payments, recurring charges, donor self-service and automatic emails remain disabled. No database migration or operational data changes are introduced by the status bar.
 
-Preserves v0.57.0 connection and recovery improvements. Uses additive Giving tables with existing operational records retained. Release publication requires Giving endpoint/browser checks, populated upgrade/backup/rollback checks, the existing suite tests and Windows installer verification.
-
-Versions: Operations server, Server Admin and Computer Setup 0.58.0; DESK 1.18.0; OFFICE 1.15.0; STORE OPS 1.4.0. Giving is supplied by the updated Operations server; existing client versions remain compatible.
+Publication is gated on Windows/Linux application tests, browser and packaging checks, Giving checks, and populated upgrade/backup/rollback and installer verification.
