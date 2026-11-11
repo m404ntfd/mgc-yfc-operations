@@ -83,6 +83,39 @@ class GivingTests(unittest.TestCase):
    server.giving_init(c);server.giving_init(c)
    self.assertEqual(before,{t:list(map(tuple,c.execute('SELECT * FROM "'+t+'"'))) for t in tables})
 
+ def test_monthly_commitment_history(self):
+  draft = dict(donor=self.d, amount=2500, start='2026-12-01',
+               billing_day=1, fund='Ministry', status='draft')
+  code, result = self.post('plan', **draft)
+  self.assertEqual(code, 200)
+  plan = result['id']
+  history_path = 'giving/plan_history?id=' + plan
+  edit = dict(draft, id=plan, revision=1, amount=4000, status='cancelled')
+  request = uuid.uuid4().hex
+  self.assertEqual(self.post('plan', request=request, **edit), (200, result))
+  self.assertEqual(self.post('plan', request=request, **edit), (200, result))
+  self.assertEqual(self.post('plan', **edit)[0], 409)
+  self.assertEqual(self.post('plan', **dict(edit, revision=True))[0], 400)
+  self.assertEqual(self.post('plan', **dict(edit, id=uuid.uuid4().hex, revision=0))[0], 404)
+  self.assertEqual(self.post('plan', **dict(edit, revision=2, status='active'))[0], 400)
+  history = self.f.call(history_path)[1]['history']
+  self.assertEqual([row['revision'] for row in history], [2, 1])
+  self.assertEqual(history[0]['before'], history[1]['after'])
+  self.assertEqual(history[0]['after']['status'], 'cancelled')
+  self.assertEqual(history[0]['after']['amount'], 4000)
+  self.assertEqual(history[0]['actor'], 'Admin')
+  self.assertTrue(history[0]['at'])
+  self.assertIsNone(history[1]['before'])
+  employee = self.f.client('e')
+  self.f.call('login', dict(name='Employee', password='testpassword'), employee)
+  self.f.call('admin/permissions', dict(name='Employee', grants={'view_giving': True},
+                                      can_create=False, see_requests=False))
+  self.assertEqual(self.f.call(history_path, client=employee)[0], 403)
+  with server.connect() as c:
+   for sql in ('DELETE FROM giving_plan_history', 'UPDATE giving_plan_history SET actor=actor'):
+    with self.assertRaises(sqlite3.IntegrityError), c:
+     c.execute(sql)
+
  def test_saved_statement_is_frozen_and_retry_is_idempotent(self):
   gift=self.gift()[1]['id'];request=uuid.uuid4().hex
   code,saved=self.post('statement_snapshot',donor=self.d,period='2025',request=request)

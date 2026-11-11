@@ -29,3 +29,9 @@ These endpoints are backend groundwork; the OFFICE interface does not yet displa
 `POST /api/giving/replace_gift` takes the same fields as a received gift plus the original gift ID (`gift`) and a correction `reason`. It requires `view_giving`, `record_gifts`, and `adjust_gifts`. The original entry, its void, the replacement and the link between them are preserved in the ledger. The void, replacement, audit entry and retry receipt commit together. A repeated request returns the same replacement ID. An original that is already voided returns a conflict. Use `POST /api/giving/void` for a correction that requires no replacement.
 
 The overview includes `replaces` and `replacement` gift IDs when linked. Current statements include the replacement according to its donor and gift date. Saved statement copies retain the original entries and totals. The replacement endpoint is ready for an OFFICE correction form.
+
+## Monthly commitment backend
+
+`POST /api/giving/plan` records each draft creation, edit or cancellation with its before and after values, revision, staff name and timestamp. The draft, history and retry receipt commit together. Retrying a save returns the original result. Edits require an existing draft ID and its current revision. Existing drafts keep their saved values and revisions, and the first subsequent edit captures the prior values.
+
+`GET /api/giving/plan_history?id=...` returns newest changes first and requires both `view_giving` and `manage_giving_plans`. The existing OFFICE editor can continue creating, editing and cancelling drafts. The history endpoint is ready for an OFFICE history view. Drafts carry no payment authorization.
