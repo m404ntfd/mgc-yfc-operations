@@ -140,7 +140,7 @@ def computer_self(handler,c,u,d):
     computer_heartbeat(handler,app,d)
     row=c.execute('SELECT * FROM retail_computers WHERE id=?',(meta['id'],)).fetchone()
     terminal=c.execute('SELECT id,name,enabled FROM retail_terminals WHERE device=?',(device,)).fetchone() if app=='pos' else None
-    result={'computer':{k:row[k] for k in ('id','name','hostname','role','registered','revision')},'terminal':dict(terminal) if terminal else None}
+    result={'computer':{k:row[k] for k in ('id','name','hostname','role','registered','revision')},'terminal':stores_terminal_details(c,terminal)}
     return handler.send(computer_client_state(app,device,result))
 
 def computer_link_terminal(c,ident,d,name,hostname):
@@ -158,4 +158,6 @@ def computer_link_terminal(c,ident,d,name,hostname):
         c.execute('UPDATE retail_terminals SET device=?,hostname=?,revision=revision+1 WHERE id=?',(device,hostname,target))
     else:
         if len(name)>60 or c.execute('SELECT 1 FROM retail_terminals WHERE name=? COLLATE NOCASE',(name,)).fetchone():raise Problem('Choose the existing terminal or enter a unique name of 60 characters or fewer.',409)
-        c.execute('INSERT INTO retail_terminals VALUES(?,?,?,?,?,?,?)',(secrets.token_hex(16),name,device,None,1,1,hostname))
+        store=stores_profile(c,d.get('store_id') or 'thrift-mart')['id'];terminal_id=secrets.token_hex(16)
+        c.execute('INSERT INTO retail_terminals VALUES(?,?,?,?,?,?,?)',(terminal_id,name,device,None,1,1,hostname))
+        c.execute('INSERT INTO retail_terminal_stores VALUES(?,?)',(terminal_id,store))

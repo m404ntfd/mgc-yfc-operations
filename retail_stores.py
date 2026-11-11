@@ -40,7 +40,12 @@ def stores_id(body):return body.get('store_id','thrift-mart')
 
 def stores_profile(c,ident='thrift-mart'):
     row=c.execute('SELECT * FROM retail_stores WHERE id=?',(ident,)).fetchone()
-    if row:return dict(json.loads(row['body']),id=ident,revision=row['revision'])
+    if row:
+        profile=dict(json.loads(row['body']),id=ident,revision=row['revision'])
+        # Receipt-only legacy profiles may predate the confirmed shared tax setup.
+        if ident=='thrift-mart' and profile.get('tax_bps') is None:
+            profile['tax_bps']=pos_settings(c)['tax_bps']
+        return profile
     if ident not in ('thrift-mart','binopoly'):raise Problem('Store not found.',404)
     legacy=pos_settings(c)
     return dict(id=ident,revision=0,name=(legacy.get('store') or 'Thrift Mart') if ident=='thrift-mart' else 'Binopoly',tax_bps=legacy['tax_bps'] if ident=='thrift-mart' else None,receipt=customer_settings(c,'receipt') if ident=='thrift-mart' else dict(CUSTOMER_DEFAULTS['receipt']))
@@ -52,6 +57,26 @@ def stores_list(c):
 def stores_terminal(c,device):
     r=c.execute('SELECT t.*,s.store AS store_id FROM retail_terminals t LEFT JOIN retail_terminal_stores s ON s.terminal=t.id WHERE t.device=?',(device or '',)).fetchone()
     return dict(r,store_id=r['store_id'] or 'thrift-mart') if r else None
+
+def stores_terminal_details(c,terminal):
+    if not terminal:return None
+    terminal=dict(terminal)
+    assignment=c.execute('SELECT store FROM retail_terminal_stores WHERE terminal=?',(terminal['id'],)).fetchone()
+    profile=stores_profile(c,assignment[0] if assignment else 'thrift-mart')
+    return dict(terminal,store_id=profile['id'],store_name=profile['name'])
+
+def stores_assign_terminal(c,terminal,store,previous=None,check_previous=False):
+    profile=stores_profile(c,store)
+    current=stores_terminal_details(c,terminal)['store_id']
+    if check_previous and previous!=current:raise Problem('Assignment changed. Reopen before saving.',409)
+    if current==store:return False
+    if c.execute('SELECT 1 FROM retail_drawers WHERE terminal=? AND closed IS NULL',(terminal['id'],)).fetchone():raise Problem('Close this terminal’s cash drawer before reassigning it.')
+    for row in c.execute("SELECT body FROM pos_carts WHERE status='open'"):
+        cart=json.loads(row[0])
+        if cart.get('terminal_id')==terminal['id'] or (not cart.get('terminal_id') and cart.get('terminal')==terminal['name']):
+            raise Problem('Complete or cancel this terminal’s saved sales before reassigning it.')
+    c.execute('INSERT INTO retail_terminal_stores VALUES(?,?) ON CONFLICT(terminal) DO UPDATE SET store=excluded.store',(terminal['id'],profile['id']))
+    return True
 
 def stores_context(c,u,d):
     terminal=stores_terminal(c,d.get('device'))
@@ -128,7 +153,8 @@ def stores_weight_line(c,cart,d):
     if not retail_available(rule):raise Problem('Product is not available.',409)
     weight=stores_weight(d.get('weight'));rate=p['display_price'];amount=(weight*rate+500)//1000
     if not 1<=amount<=10000000:raise Problem('The calculated price must be between $0.01 and $100,000.')
-    return dict(pickup_slip=rule.get('pickup_slip',False),product=ident,name=p['name'],category=p['category'],taxable=p['taxable'],price=amount,quantity=1,subtotal=amount,tax=(amount*cart['settings']['tax_bps']+5000)//10000 if p['taxable'] else 0,weight_milli=weight,weight_unit='lb',price_per_lb=rate,weight_source='manual',modifiers=[],print_category=rule.get('print_category',''))
+    line=dict(pickup_slip=rule.get('pickup_slip',False),product=ident,name=p['name'],category=p['category'],taxable=p['taxable'],price=amount,quantity=1,subtotal=amount,weight_milli=weight,weight_unit='lb',price_per_lb=rate,weight_source='manual',modifiers=[],print_category=rule.get('print_category',''))
+    return catalog_stamp(c,line,cart['settings']['tax_bps'])
 
 def stores_drawer(c,ident):
     row=c.execute('SELECT * FROM retail_drawers WHERE id=?',(ident,)).fetchone()
@@ -205,11 +231,8 @@ def stores_post(c,u,path,d,finish):
         thrift_require(u,'manage_pos');ident=pos_text(d.get('terminal'),'terminal');store=stores_profile(c,d.get('store_id'))['id']
         terminal=c.execute('SELECT * FROM retail_terminals WHERE id=?',(ident,)).fetchone()
         if not terminal:raise Problem('Register this terminal first.')
-        current=c.execute('SELECT store FROM retail_terminal_stores WHERE terminal=?',(ident,)).fetchone();current=current[0] if current else 'thrift-mart'
-        if d.get('previous')!=current:raise Problem('Assignment changed. Reopen before saving.',409)
-        if c.execute('SELECT 1 FROM retail_drawers WHERE terminal=? AND closed IS NULL',(ident,)).fetchone():raise Problem('Close this terminal’s cash drawer before reassigning it.')
-        if any(json.loads(r[0]).get('terminal')==terminal['name'] for r in c.execute("SELECT body FROM pos_carts WHERE status='open'")):raise Problem('Complete or cancel this terminal’s saved sales before reassigning it.')
-        c.execute('INSERT INTO retail_terminal_stores VALUES(?,?) ON CONFLICT(terminal) DO UPDATE SET store=excluded.store',(ident,store))
+        if stores_assign_terminal(c,terminal,store,d.get('previous'),True):
+            c.execute('UPDATE retail_terminals SET revision=revision+1 WHERE id=?',(ident,))
         return finish(dict(ok=True),'Terminal store assigned')
     if path=='programs-save':
         thrift_require(u,'manage_pos');old=stores_programs(c)

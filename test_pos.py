@@ -16,7 +16,9 @@ class PosTests(unittest.TestCase):
  def add(self,cart,**extra):
   return self.post('add',cart=cart['id'],revision=cart['revision'],name='Test item',category='General',price=1001,quantity=2,taxable=True,**extra)
  def test_cash_totals_retry_and_immutable_receipt(self):
-  self.assertEqual(self.post('new')[0],409)
+  unconfigured=self.post('new')[1]['cart']
+  self.assertIsNone(unconfigured['settings']['tax_bps'])
+  self.assertEqual(self.add(unconfigured)[0],409)
   cart=self.configured();cart=self.add(cart)[1]['cart']
   self.assertEqual((cart['subtotal'],cart['tax'],cart['total']),(2002,145,2147))
   self.assertEqual(self.post('cash',cart=cart['id'],revision=cart['revision'],tender=2000)[0],400)

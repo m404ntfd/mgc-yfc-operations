@@ -18,7 +18,7 @@ document.addEventListener('reset',e=>changedForms.delete(e.target),true);
 document.addEventListener('submit',e=>{submittedForm=e.target;setTimeout(()=>submittedForm=null,0);},true);
 function unfinished(){return writeCount>0||posBusy||!!posPending||changedForms.size>0;}
 async function api(path,data){
- const form=submittedForm,stamp=form?snapshot(form):null,mutation=!!data&&!['account/activity','account/connection','pos-update/heartbeat','office-update/heartbeat','pos/display-state'].includes(path)&&!path.startsWith('update-flow');
+ const form=submittedForm,stamp=form?snapshot(form):null,mutation=!!data&&!['account/activity','account/connection','pos-update/heartbeat','office-update/heartbeat','pos/display-state','computers/self'].includes(path)&&!path.startsWith('update-flow');
  if(mutation)writeCount++;
  try{
   const r=await fetch('/api/'+path,{method:data?'POST':'GET',headers:{'X-Dispatch-Connection':connectionId,...(data?{'Content-Type':'application/json','X-Dispatch':'1'}:{})},body:data?JSON.stringify(data):undefined,signal:AbortSignal.timeout(20000)});
@@ -139,7 +139,7 @@ function posRender(){
  $('posCatalog').innerHTML=products.map(x=>`<button type="button" data-pos-product="${x.id}" class="${color(x.category)}"><span>${esc(x.name)}</span><small>${esc(categoryLabel(x.category))}</small><strong>${x.rules?.open_priced?'Enter price':posMoney(x.display_price??x.price)+(x.rules?.sold_by_weight?' / lb':'')}</strong></button>`).join('')||'<p class="catalogEmpty">No matching items. Choose another Sub Department, search again, or add a manual item.</p>';
  $('posCarts').innerHTML='<option value="">Choose a cart</option>'+posOverview.carts.map(c=>`<option value="${c.id}">${esc(c.lines[0]?.name||'Empty cart')} · ${posMoney(c.total)} · ${c.id.slice(0,6)}</option>`).join('');
  $('posCarts').value=posCurrent?.id||'';
- $('posCart').innerHTML=posCurrent?`<p><strong>${esc(posCurrent.settings.store)}</strong> · Cart ${posCurrent.id.slice(0,6)} · Saved on server · Tax ${(posCurrent.settings.tax_bps/100).toFixed(2)}%</p><div class="receiptLines"><table><thead><tr><th>Item</th><th>Qty</th><th>Amount</th><th></th></tr></thead><tbody>${posCurrent.lines.map((x,i)=>`<tr><td>${esc(x.name)}<small class="flowLineNote">${esc(flowLineDetails(x)+(x.tag?' · '+x.tag.name+' tag · '+posMoney(x.tag.discount)+' markdown':''))}</small>${x.taxable?'':' (non-taxable)'}</td><td>${deskQuantityControl(x,i)}</td><td>${posMoney(x.subtotal)}</td><td><button type="button" data-pos-remove="${i}">Remove</button></td></tr>`).join('')}</tbody></table></div><p>Subtotal: ${posMoney(posCurrent.subtotal)}<br>Tax: ${posMoney(posCurrent.tax)}<br><strong>Total: ${posMoney(posCurrent.total)}</strong></p>`:'<p>Tap a product to start a sale, or reopen a saved sale.</p>';
+ $('posCart').innerHTML=posCurrent?`<p><strong>${esc(posCurrent.settings.store)}</strong> · Cart ${posCurrent.id.slice(0,6)} · Saved on server · ${posCurrent.settings.tax_bps===null?'Product-specific taxes':'Default tax '+(posCurrent.settings.tax_bps/100).toFixed(2)+'%'}</p><div class="receiptLines"><table><thead><tr><th>Item</th><th>Qty</th><th>Amount</th><th></th></tr></thead><tbody>${posCurrent.lines.map((x,i)=>`<tr><td>${esc(x.name)}<small class="flowLineNote">${esc(flowLineDetails(x)+(x.tag?' · '+x.tag.name+' tag · '+posMoney(x.tag.discount)+' markdown':''))}</small>${x.taxable?'':' (non-taxable)'}</td><td>${deskQuantityControl(x,i)}</td><td>${posMoney(x.subtotal)}</td><td><button type="button" data-pos-remove="${i}">Remove</button></td></tr>`).join('')}</tbody></table></div><p>Subtotal: ${posMoney(posCurrent.subtotal)}<br>Tax: ${posMoney(posCurrent.tax)}<br><strong>Total: ${posMoney(posCurrent.total)}</strong></p>`:'<p>Tap a product to start a sale, or reopen a saved sale.</p>';
  $('posPayNow').disabled=posBusy||!!posPending||!posCurrent?.lines.length||!$('posReceipt').hidden;
  
  $('posPrintLast').disabled=!posLastReceipt;
@@ -148,9 +148,8 @@ function posRender(){
  $('posCashDetails').hidden=!posCurrent?.lines.length||!$('posReceipt').hidden;
  $('posCash').hidden=!posCurrent?.lines.length;$('posDiscard').hidden=!posCurrent;
  $('posRetry').hidden=!posPending;$('creditRetry').hidden=!posPending;
- $('posNew').disabled=posBusy||!!posPending||posOverview.settings.tax_bps===null;
+ $('posNew').disabled=posBusy||!!posPending;
  if(!officeMode){retailRenderDesk();flowDecorate();financeCashPreview();}
- if(posOverview.settings.tax_bps===null)posMessage('Configure receipt and tax settings before starting a sale.');
 }
 async function posLoad(){
  if(posBusy)return;
@@ -204,7 +203,7 @@ $('posCategories').onclick=e=>{const b=e.target.closest('[data-category]');if(b)
 $('posCatalog').onclick=e=>{const b=e.target.closest('[data-pos-product]');if(b)posCartAction('add',{product:b.dataset.posProduct,quantity:1});};
 $('posCart').onclick=e=>{const b=e.target.closest('[data-pos-remove]');if(b)posCartAction('remove',{index:Number(b.dataset.posRemove)});};
 $('posDiscard').onclick=()=>{if(confirm('Discard this saved cart? Completed sales are not affected.'))posCartAction('discard',{});};
-for(const [id,action]of [['posManual','add'],['posProduct','product'],['posSetup','settings'],['posCash','cash']])$(id).onsubmit=e=>{e.preventDefault();try{const f=e.target.elements;const data=action==='settings'?{store:f.store.value,tax_bps:posCents(f.tax.value),confirmed:f.confirmed.checked}:action==='cash'?{tender:posCents(f.tender.value)}:{name:f.name.value,category:f.category.value,price:posCents(f.price.value),taxable:f.taxable.checked,...(action==='add'?{quantity:Number(f.quantity.value)}:{})};if(['add','cash'].includes(action))posCartAction(action,data);else posDo(action,data);}catch(error){posMessage(error.message);}};
+for(const [id,action]of [['posManual','add'],['posProduct','product'],['posSetup','settings'],['posCash','cash']])$(id).onsubmit=e=>{e.preventDefault();try{const f=e.target.elements;const data=action==='settings'?{store:f.store.value,store_id:retailStoreChoice,tax_bps:posCents(f.tax.value),confirmed:f.confirmed.checked}:action==='cash'?{tender:posCents(f.tender.value)}:{name:f.name.value,category:f.category.value,price:posCents(f.price.value),taxable:f.taxable.checked,...(action==='add'?{quantity:Number(f.quantity.value)}:{})};if(['add','cash'].includes(action))posCartAction(action,data);else posDo(action,data);}catch(error){posMessage(error.message);}};
 $('posHistory').onclick=async()=>{try{const {sales}=await api('pos/sales?store_id='+stores_id_js());$('posSales').hidden=false;$('posSaleList').replaceChildren();for(const sale of sales){const b=document.createElement('button');b.textContent=`#${sale.id} · ${sale.at} · ${posMoney(sale.total)} · ${sale.cashier}`;b.onclick=()=>posReceipt(sale);$('posSaleList').append(b);}if(!sales.length)$('posSaleList').textContent='No completed sales.';}catch(error){posMessage(error.message);}};
 $('posPrint').onclick=()=>{document.body.classList.add('printingPos');window.print();};window.addEventListener('afterprint',()=>document.body.classList.remove('printingPos'));
 
@@ -323,7 +322,7 @@ async function refreshKiosk(){
  const info=await (officeMode&&native.office_kiosk_info?native.office_kiosk_info():native.kiosk_info());
  if(info.unavailable)return;if(info.error){$('authError').textContent=info.error;return;}
  document.querySelector('.operationsLinks p').textContent='Open Operations here, then use Return to POS. Your cart stays saved.';
- kioskInfo=info;if(!officeMode&&user&&can('use_pos')){await retailLoadTerminal();posRender();}document.body.dataset.kiosk=officeMode||info.configured?'ready':'setup';kioskExitButton.hidden=officeMode&&!!native.office_kiosk_info;
+ const changedDevice=kioskInfo?.device!==info.device;kioskInfo=info;if(!officeMode&&user&&can('use_pos')){if(changedDevice)await posLoad();else{await retailLoadTerminal();posRender();}}document.body.dataset.kiosk=officeMode||info.configured?'ready':'setup';kioskExitButton.hidden=officeMode&&!!native.office_kiosk_info;
  kioskSettings.hidden=!officeMode||!user?.admin;$('changeKioskPasscode').hidden=!info.configured;
  if(!info.configured&&!officeMode){
   if(user?.admin){$('kioskSetupCancel').hidden=true;$('kioskSetupError').textContent='';if(!kioskDialog.open&&!kioskExitDialog.open)kioskDialog.showModal();}
@@ -490,14 +489,28 @@ boot();
 })();
 // Shared terminal registry and OFFICE-only layout configuration.
 let retailState=null,retailDraft=null,retailGroup=0,retailTerminal=null,retailLayout=null,retailScreen=0;
+let retailNativeDevice=null;
 async function retailDevice(){
  if(kioskInfo?.device)return kioskInfo.device;
+ if(kioskRequested&&!officeMode){
+  if(!retailNativeDevice)retailNativeDevice=(async()=>{
+   if(!window.pywebview?.api?.kiosk_info)await new Promise(resolve=>{
+    const ready=()=>{clearTimeout(timer);window.removeEventListener('pywebviewready',ready);resolve();};
+    const timer=setTimeout(ready,8000);window.addEventListener('pywebviewready',ready,{once:true});
+   });
+   if(!window.pywebview?.api?.kiosk_info)throw Error('DESK is still connecting to this computer. Select Refresh to try again.');
+   const info=await window.pywebview.api.kiosk_info();
+   if(info.error||info.unavailable||!/^[a-f0-9]{32}$/.test(info.device||''))throw Error(info.error||'Unable to read this checkout’s registration. Select Refresh to try again.');
+   kioskInfo=info;return info.device;
+  })().finally(()=>{retailNativeDevice=null;});
+  return retailNativeDevice;
+ }
  let id=localStorage.getItem('coastyouth-retail-device');if(!id){id=Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');localStorage.setItem('coastyouth-retail-device',id);}return id;
 }
 async function retailLoadTerminal(){const data=await api('pos/terminal?device='+await retailDevice());retailTerminal=data.terminal;retailLayout=data.layout;}
 function retailRenderDesk(){
  let bar=$('retailScreenBar');if(!bar){bar=document.createElement('div');bar.id='retailScreenBar';items.prepend(bar);}
- bar.innerHTML=`<span>${esc(retailTerminal?.name||'Unregistered checkout')}</span><button id="retailPrevious" type="button" aria-label="Previous product screen">‹</button><select id="retailScreen" aria-label="Product screen"></select><button id="retailNext" type="button" aria-label="Next product screen">›</button><button id="retailEnroll" type="button">Terminal setup</button>`;
+ bar.innerHTML=`<span>${esc(retailTerminal?.name||'Unregistered checkout')}${retailTerminal?' · '+esc(posOverview.settings.store)+' · Registered':''}</span><button id="retailPrevious" type="button" aria-label="Previous product screen">‹</button><select id="retailScreen" aria-label="Product screen"></select><button id="retailNext" type="button" aria-label="Next product screen">›</button><button id="retailEnroll" type="button">Terminal setup</button>`;
  $('retailEnroll').hidden=!can('manage_pos');$('retailEnroll').onclick=retailEnroll;
  if(retailTerminal&&!retailTerminal.enabled){$('posCatalog').innerHTML='<p>This terminal is disabled in OFFICE.</p>';$('posNew').disabled=true;return;}
  const groups=retailLayout?.groups;if(!groups){$('posCatalog').style.gridTemplateColumns='';$('posCategories').onclick=e=>{const b=e.target.closest('[data-category]');if(b){posCategory=b.dataset.category;posRender();}};$('retailScreen').innerHTML='<option>All catalog groups</option>';$('retailPrevious').disabled=true;$('retailNext').disabled=true;return;}
@@ -524,7 +537,7 @@ async function retailSave(action,data){
 async function retailEnroll(){
  if(window.nativeTerminalAvailable){await window.openTerminalRegistration();return;}
  if(unfinished()){posMessage('Finish the current transaction or form before changing terminal setup.');return;}
- try{const config=await api('pos/retail-config');const dialog=document.createElement('dialog');dialog.innerHTML=`<form><h2>Register this checkout</h2><p>Connect this device to the shared server terminal list.</p><label>Terminal<select name="terminal"><option value="">Create new terminal</option>${config.terminals.filter(t=>!t.device||t.device===retailTerminal?.device).map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select></label><label>Name for a new terminal<input name="name" placeholder="Front counter 1" maxlength="60"></label><label>Layout<select name="layout"><option value="">Standard catalog</option>${config.layouts.map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select></label><p class="retailError" role="status"></p><button>Register</button><button type="button" class="cancel">Cancel</button></form>`;document.body.append(dialog);dialog.querySelector('.cancel').onclick=()=>{changedForms.delete(dialog.querySelector('form'));dialog.close();dialog.remove();};dialog.oncancel=()=>{changedForms.delete(dialog.querySelector('form'));dialog.remove();};dialog.querySelector('form').onsubmit=async e=>{e.preventDefault();const f=e.target.elements;try{const old=config.terminals.find(t=>t.id===f.terminal.value);await retailSave('terminal-save',{...(old||{}),name:old?.name||f.name.value,device:await retailDevice(),layout:f.layout.value||old?.layout||'',enabled:true});changedForms.delete(e.target);dialog.close();dialog.remove();await retailLoadTerminal();posRender();}catch(err){dialog.querySelector('.retailError').textContent=err.message;}};dialog.showModal();}catch(e){posMessage(e.message);}
+ try{const config=await api('pos/retail-config');const dialog=document.createElement('dialog');dialog.innerHTML=`<form><h2>Register this checkout</h2><p>Connect this device to the shared server terminal list.</p><label>Terminal<select name="terminal"><option value="">Create new terminal</option>${config.terminals.filter(t=>!t.device||t.device===retailTerminal?.device).map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select></label><label>Name for a new terminal<input name="name" placeholder="Front counter 1" maxlength="60"></label><label>Store for a new terminal<select name="store_id">${config.stores.map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('')}</select></label><p>Existing terminals keep their assigned store. Receipt settings and taxes come from that store.</p><label>Layout<select name="layout"><option value="">Standard catalog</option>${config.layouts.map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select></label><p class="retailError" role="status"></p><button>Register</button><button type="button" class="cancel">Cancel</button></form>`;document.body.append(dialog);dialog.querySelector('.cancel').onclick=()=>{changedForms.delete(dialog.querySelector('form'));dialog.close();dialog.remove();};dialog.oncancel=()=>{changedForms.delete(dialog.querySelector('form'));dialog.remove();};dialog.querySelector('form').onsubmit=async e=>{e.preventDefault();const f=e.target.elements;try{const old=config.terminals.find(t=>t.id===f.terminal.value);await retailSave('terminal-save',{...(old||{}),name:old?.name||f.name.value,store_id:old?.store_id||f.store_id.value,previous_store:old?.store_id,device:await retailDevice(),layout:f.layout.value||old?.layout||'',enabled:true});changedForms.delete(e.target);dialog.close();dialog.remove();await posLoad();}catch(err){dialog.querySelector('.retailError').textContent=err.message;}};dialog.showModal();}catch(e){posMessage(e.message);}
 }
 async function retailEditor(kind){if($('flowOffice'))$('flowOffice').hidden=true;
  if(!navigationAllowed()||unfinished()){posMessage('Save or clear the current form first.');return;}
@@ -553,7 +566,13 @@ function retailTabs(){$('layoutGroups').innerHTML=retailDraft.groups.map((g,i)=>
 function retailGroupForm(){const g=retailDraft.groups[retailGroup];$('groupName').value=g.name;$('groupColor').value=g.color;$('layoutGroups').innerHTML=retailDraft.groups.map((g,i)=>`<button type="button" data-group="${i}" aria-pressed="${i===retailGroup}">${esc(g.name)}</button>`).join('');retailProducts();}
 function retailProducts(){const g=retailDraft.groups[retailGroup];const products=posOverview.products;const search=$('layoutSearch').value.toLowerCase();$('layoutAvailable').innerHTML=products.filter(p=>!g.products.includes(p.id)&&p.name.toLowerCase().includes(search)).map(p=>`<button type="button" data-product-add="${p.id}">${esc(p.name)} · ${flowCatalogPrice(p)} <b>＋</b></button>`).join('');$('layoutSelected').innerHTML=g.products.map(id=>{const p=products.find(p=>p.id===id);return `<div>${esc(p?.name||'Unavailable product')}<span><button type="button" data-product-up="${id}" aria-label="Move ${esc(p?.name)} up">↑</button><button type="button" data-product-remove="${id}" aria-label="Remove ${esc(p?.name)}">×</button></span></div>`;}).join('');retailPreview();}
 function retailPreview(){const g=retailDraft.groups[retailGroup];$('layoutPreview').style.gridTemplateColumns=`repeat(${retailDraft.columns},minmax(0,1fr))`;$('layoutPreview').innerHTML=g.products.map(id=>{const p=posOverview.products.find(p=>p.id===id);return `<div style="--retail-color:${g.color};background:${g.color}"><strong>${esc(p?.name||'Unavailable')}</strong><span>${p?flowCatalogPrice(p):posMoney(0)}</span></div>`;}).join('')||'<p>Add products to preview their buttons.</p>';for(const b of $('layoutPreview').querySelectorAll(':scope>div'))b.style.backgroundColor=g.color;}
-function retailTerminals(){const root=$('retailEditor');root.innerHTML=`<p>All terminals use the existing Operations server. Registration links a device to one terminal; changing its display name preserves its identity.</p><table><thead><tr><th>Terminal</th><th>Device</th><th>Layout</th><th>Status</th><th></th></tr></thead><tbody>${retailState.terminals.map(t=>`<tr><td>${esc(t.name)}</td><td>${t.device?'Registered':'Awaiting setup'}</td><td>${esc(retailState.layouts.find(l=>l.id===t.layout)?.name||'Standard catalog')}</td><td>${t.enabled?'Enabled':'Disabled'}</td><td><button type="button" data-terminal="${t.id}">Edit</button></td></tr>`).join('')}</tbody></table><form id="terminalForm"><h3 id="terminalHeading">Add terminal</h3><label>Terminal name<input name="name" maxlength="60" required></label><label>DESK layout<select name="layout"><option value="">Standard catalog</option>${retailState.layouts.map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select></label><label><input type="checkbox" name="enabled" checked> Enabled</label><p>On the checkout PC, sign in as an administrator and choose Terminal setup to register it.</p><button>Save terminal</button><button type="button" id="terminalClear">Clear</button><p id="terminalStatus" role="status"></p></form>`;let selected=null;root.onclick=e=>{const b=e.target.closest('[data-terminal]');if(!b)return;if(changedForms.has($('terminalForm'))){posMessage('Save or clear changes first.');return;}selected=retailState.terminals.find(t=>t.id===b.dataset.terminal);const f=$('terminalForm').elements;f.name.value=selected.name;f.layout.value=selected.layout||'';f.enabled.checked=!!selected.enabled;$('terminalHeading').textContent='Edit '+selected.name;};$('terminalClear').onclick=()=>{changedForms.delete($('terminalForm'));retailTerminals();};$('terminalForm').onsubmit=async e=>{e.preventDefault();const f=e.target.elements;try{await retailSave('terminal-save',{...(selected||{}),name:f.name.value,layout:f.layout.value,enabled:f.enabled.checked});changedForms.delete(e.target);retailState=await api('pos/retail-config');retailTerminals();$('terminalStatus').textContent='Terminal saved.';}catch(err){$('terminalStatus').textContent=err.message;}};}
+function retailTerminals(){
+ const root=$('retailEditor');root.innerHTML=`<p>Each terminal belongs to a store. Products, prices, taxes and receipt branding are shared by all terminals in that store. Layout and device registration remain terminal settings.</p><table><thead><tr><th>Terminal</th><th>Store</th><th>Device</th><th>Layout</th><th>Status</th><th></th></tr></thead><tbody>${retailState.terminals.map(t=>`<tr><td>${esc(t.name)}</td><td>${esc(t.store_name)}</td><td>${t.device?'Registered':'Awaiting setup'}</td><td>${esc(retailState.layouts.find(l=>l.id===t.layout)?.name||'Standard catalog')}</td><td>${t.enabled?'Enabled':'Disabled'}</td><td><button type="button" data-terminal="${t.id}">Edit</button></td></tr>`).join('')}</tbody></table><form id="terminalForm"><h3 id="terminalHeading">Add terminal</h3><label>Terminal name<input name="name" maxlength="60" required></label><label>Store<select name="store_id">${retailState.stores.map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('')}</select></label><p>Receipt settings and taxes follow this store automatically. Complete saved sales and close the cash drawer before moving a terminal to another store.</p><label>DESK layout<select name="layout"><option value="">Standard catalog</option>${retailState.layouts.map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select></label><label><input type="checkbox" name="enabled" checked> Enabled</label><p>On the checkout PC, sign in as an administrator and choose Terminal setup to register it.</p><button>Save terminal</button><button type="button" id="terminalClear">Clear</button><p id="terminalStatus" role="status"></p></form>`;
+ let selected=null;$('terminalForm').elements.store_id.value=retailStoreChoice;
+ root.onclick=e=>{const b=e.target.closest('[data-terminal]');if(!b)return;if(changedForms.has($('terminalForm'))){posMessage('Save or clear changes first.');return;}selected=retailState.terminals.find(t=>t.id===b.dataset.terminal);const f=$('terminalForm').elements;f.name.value=selected.name;f.store_id.value=selected.store_id;f.layout.value=selected.layout||'';f.enabled.checked=!!selected.enabled;$('terminalHeading').textContent='Edit '+selected.name;};
+ $('terminalClear').onclick=()=>{changedForms.delete($('terminalForm'));retailTerminals();};
+ $('terminalForm').onsubmit=async e=>{e.preventDefault();const f=e.target.elements;try{await retailSave('terminal-save',{...(selected||{}),name:f.name.value,store_id:f.store_id.value,previous_store:selected?.store_id,layout:f.layout.value,enabled:f.enabled.checked});changedForms.delete(e.target);retailState=await api('pos/retail-config');retailTerminals();$('terminalStatus').textContent='Terminal saved. Store settings apply automatically.';}catch(err){$('terminalStatus').textContent=err.message;}};
+}
 
 
 // Product configuration, sale assistance and reporting.
@@ -610,15 +629,26 @@ function flowModifiers(){const r=flowProduct.rules;r.modifiers??=[];$('flowModif
 function flowComponents(){const parts=flowProduct.rules.components||[];$('flowComponents').innerHTML=parts.map((p,i)=>`<div class="flowToolbar"><strong>${esc(flowConfig.products.find(x=>x.id===p.product)?.name)}</strong><label>Quantity<input type="number" min="1" max="99" data-component-quantity="${i}" value="${p.quantity}"></label><button type="button" data-component-remove="${i}">Remove</button></div>`).join('');$('flowComponents').oninput=e=>{if(e.target.dataset.componentQuantity!==undefined)parts[+e.target.dataset.componentQuantity].quantity=Number(e.target.value);};$('flowComponents').onclick=e=>{if(e.target.dataset.componentRemove!==undefined){parts.splice(+e.target.dataset.componentRemove,1);changedForms.set($('flowProductForm'),'bundle changed');flowComponents();}};}
 // Product selection can start checkout without a separate New sale action.
 let flowProductStarting=false;
-function flowProductReady(){
+function flowProductReady(product=null){
  if(officeMode||!user)return false;
  if(posPending){posMessage('Use Retry / check last action before adding another item.');return false;}
- if(posBusy||writeCount)return false;
+ if(posBusy||writeCount){posMessage('Saving the current action. Please wait, then select the item.');return false;}
  if(!posCurrent&&!navigationAllowed())return false;
  if(!posCurrent&&changedForms.has($('posCash'))){posMessage('Finish or clear the cash amount before starting another sale.');return false;}
  if(retailTerminal&&!retailTerminal.enabled){posMessage('This terminal is disabled in OFFICE.');return false;}
- if(posOverview?.settings.tax_bps===null){posMessage('Configure receipt and tax settings before starting a sale.');return false;}
+ if(product&&posOverview?.settings.tax_bps===null){
+  const parts=product.rules?.components?.length?product.rules.components.map(part=>posOverview.products.find(p=>p.id===part.product)): [product];
+  if(parts.some(p=>p&&p.taxable&&(!Array.isArray(p.rules?.tax_ids)||p.rules.tax_ids.includes('legacy')))){flowCheckoutSetup(product);return false;}
+ }
  return true;
+}
+function flowCheckoutSetup(product){
+ const store=posOverview?.settings.store||'this store';
+ posMessage('Choose a tax for '+product.name+' in OFFICE, or confirm the default tax rate for '+store+'.');
+ if($('checkoutSetupRequired')?.open)return;
+ const d=flowModal('Store checkout setup required',`<p><strong>${esc(product.name)}</strong> uses the default store tax, but <strong>${esc(store)}</strong> does not have a confirmed default rate.</p><p>In OFFICE, select the appropriate tax on this product, or open Stores & receipt branding and confirm the store’s default tax rate. Save once for every checkout registered to this store.</p><p>No item was added. Existing sales remain unchanged.</p><button class="primary" id="checkoutSetupRefresh" type="button">Refresh store settings</button><button id="checkoutSetupClose" type="button">Close</button>`);
+ d.id='checkoutSetupRequired';d.querySelector('#checkoutSetupClose').onclick=()=>{d.close();d.remove();};
+ d.querySelector('#checkoutSetupRefresh').onclick=async()=>{d.close();d.remove();await posLoad();};
 }
 async function flowEnsureProductSale(){
  if(posCurrent)return posCurrent;
@@ -649,18 +679,18 @@ async function flowSubmitProduct(form,dialog,product,extra){
  if(form.dataset.saving)return;
  form.dataset.saving='true';const button=form.querySelector('button.primary');if(button)button.disabled=true;
  try{
-  if(!flowProductReady())throw Error($('posStatus').textContent||'Finish the current action before adding an item.');
+  if(!flowProductReady(product))throw Error($('posStatus').textContent||'Finish the current action before adding an item.');
   if(dialog.dataset.cart&&dialog.dataset.cart!==posCurrent?.id)throw Error('The selected sale changed. Close this prompt and select the item again.');
   const cart=await flowEnsureProductSale();dialog.dataset.cart=cart.id;
   const result=await retailSave('add',{cart:cart.id,revision:cart.revision,product:product.id,quantity:1,...extra});
   posCurrent=result.cart;$('posReceipt').hidden=true;$('posPrint').hidden=true;
-  changedForms.delete(form);dialog.close();dialog.remove();await posLoad();
+  changedForms.delete(form);dialog.close();dialog.remove();posMessage(product.name+' added to the sale and saved.');await posLoad();
  }catch(error){changedForms.set(form,snapshot(form));dialog.querySelector('.flowError').textContent=error.message;}
  finally{delete form.dataset.saving;if(button)button.disabled=false;}
 }
 async function flowAddProduct(id){
- if(flowProductStarting||!flowProductReady())return;
  const product=posOverview?.products.find(x=>x.id===id);if(!product)return;
+ if(flowProductStarting||!flowProductReady(product))return;
  if(product.available===false){posMessage('This product is not currently available.');return;}
  if(product.rules?.sold_by_weight)return storesWeightDialog(product);
  const groups=product.rules?.modifiers||[],openPriced=product.rules?.open_priced===true;
@@ -1746,21 +1776,26 @@ function deskQuantityControl(line,index){
   if(!state)return;
   dialog ||= document.createElement('dialog');dialog.id='nativeTerminalSetup';dialog.className='nativeTerminalSetup';
   if(!dialog.isConnected)document.body.append(dialog);
-  let choices=[],editRevision=state.computer.revision;
+  let choices=[],stores=[],editRevision=state.computer.revision;
   if(user.admin&&info.app==='pos'&&!state.terminal){
-   try{const config=await api('pos/retail-config');choices=config.terminals.filter(t=>!t.device&&t.enabled);}
+   try{const config=await api('pos/retail-config');choices=config.terminals.filter(t=>!t.device&&t.enabled);stores=config.stores;}
    catch(error){
     dialog.dataset.verifying='true';dialog.innerHTML='<h2>Terminal setup</h2><p>Unable to load checkout assignments. Reconnect to the server to finish registration.</p><p id="nativeTerminalError" role="status"></p><button id="nativeTerminalRetry" type="button">Retry connection</button><button id="nativeTerminalSignOut" type="button">Sign out</button>';
     get('nativeTerminalError').textContent=error.message;dialog.oncancel=e=>e.preventDefault();get('nativeTerminalRetry').onclick=()=>refresh(true);get('nativeTerminalSignOut').onclick=async()=>{await api('logout',{});location.reload();};dialog.showModal();return;
    }
   }
-  dialog.innerHTML=`<h2>Terminal setup</h2><p><strong>${state.computer.registered?'Registered: '+safe(state.computer.name):'Register this computer'}</strong></p><p>Server: ${safe(location.origin)}<br>Computer: ${safe(state.computer.hostname)}</p>${state.terminal?`<p>Checkout terminal: <strong>${safe(state.terminal.name)}</strong> · Registered</p>`:''}<p>Registration stays on the shared server when this computer restarts, changes IP address or receives an update.</p>${user.admin?`<form id="nativeTerminalForm"><label>Registered computer name<input name="name" maxlength="60" required value="${safe(state.computer.name||state.terminal?.name||state.computer.hostname)}"></label><label>Computer role<select name="role">${[['pos','POS checkout'],['office','Office computer'],['server','Server computer'],['other','Other / STORE OPS']].map(([v,t])=>`<option value="${v}" ${v===(state.computer.registered?state.computer.role:info.app==='pos'?'pos':info.app==='ops'?'other':'office')?'selected':''}>${t}</option>`).join('')}</select></label>${info.app==='pos'&&!state.terminal?`<label>Checkout assignment<select name="terminal"><option value="">Create a checkout using this name</option>${choices.map(t=>`<option value="${safe(t.id)}">${safe(t.name)}</option>`).join('')}</select></label>`:''}<button class="primary">${state.computer.registered?'Save registration':'Register terminal'}</button></form>`:'<p>An administrator must sign in to complete registration before staff use this desktop application.</p>'}<p id="nativeTerminalError" role="status"></p><div class="actions"><button id="nativeTerminalSignOut" type="button">Sign out${user.admin?'':' and sign in as administrator'}</button>${required()?'':'<button id="nativeTerminalClose" type="button">Close</button>'}</div>`;
+  dialog.innerHTML=`<h2>Terminal setup</h2><p><strong>${state.computer.registered?'Registered: '+safe(state.computer.name):'Register this computer'}</strong></p><p>Server: ${safe(location.origin)}<br>Computer: ${safe(state.computer.hostname)}</p>${state.terminal?`<p>Checkout terminal: <strong>${safe(state.terminal.name)}</strong> · Registered<br>Store: <strong>${safe(state.terminal.store_name)}</strong></p><p>Receipt settings, prices and taxes are shared with all checkouts in this store. Manage them in OFFICE.</p>`:''}<p>Registration stays on the shared server when this computer restarts, changes IP address or receives an update.</p>${user.admin?`<form id="nativeTerminalForm"><label>Registered computer name<input name="name" maxlength="60" required value="${safe(state.computer.name||state.terminal?.name||state.computer.hostname)}"></label><label>Computer role<select name="role">${[['pos','POS checkout'],['office','Office computer'],['server','Server computer'],['other','Other / STORE OPS']].map(([v,t])=>`<option value="${v}" ${v===(state.computer.registered?state.computer.role:info.app==='pos'?'pos':info.app==='ops'?'other':'office')?'selected':''}>${t}</option>`).join('')}</select></label>${info.app==='pos'&&!state.terminal?`<label>Checkout assignment<select name="terminal"><option value="">Create a checkout using this name</option>${choices.map(t=>`<option value="${safe(t.id)}">${safe(t.name)} · ${safe(t.store_name)}</option>`).join('')}</select></label><label>Store<select name="store_id">${stores.map(s=>`<option value="${safe(s.id)}">${safe(s.name)}</option>`).join('')}</select></label><p id="nativeStoreHelp">Receipt settings, prices and taxes come from this store.</p>`:''}<button class="primary">${state.computer.registered?'Save registration':'Register terminal'}</button></form>`:'<p>An administrator must sign in to complete registration before staff use this desktop application.</p>'}<p id="nativeTerminalError" role="status"></p><div class="actions"><button id="nativeTerminalSignOut" type="button">Sign out${user.admin?'':' and sign in as administrator'}</button>${required()?'':'<button id="nativeTerminalClose" type="button">Close</button>'}</div>`;
   dialog.oncancel=e=>{if(required()||!discard())e.preventDefault();else clearForm(get('nativeTerminalForm'));};
   get('nativeTerminalSignOut').onclick=async()=>{if(!discard())return;const form=get('nativeTerminalForm');if(form)clearForm(form);await api('logout',{});location.reload();};
   if(get('nativeTerminalClose'))get('nativeTerminalClose').onclick=()=>{if(!discard())return;const form=get('nativeTerminalForm');if(form)clearForm(form);dialog.close();};
+  const setupForm=get('nativeTerminalForm');
+  if(setupForm?.elements.terminal){
+   const selection=setupForm.elements.terminal,store=setupForm.elements.store_id;
+   selection.onchange=()=>{const terminal=choices.find(t=>t.id===selection.value);store.disabled=!!terminal;if(terminal)store.value=terminal.store_id;get('nativeStoreHelp').textContent=terminal?'This existing checkout keeps its registered store. Receipt settings and taxes follow that store.':'Receipt settings, prices and taxes come from this store.';};
+  }
   if(user.admin)get('nativeTerminalForm').onsubmit=async e=>{
    e.preventDefault();const form=e.target;const submit=form.querySelector('button');submit.disabled=true;
-   try{await api('computers/register',{id:state.computer.id,revision:editRevision,name:form.elements.name.value,role:form.elements.role.value,app:info.app,device:info.device,terminal:form.elements.terminal?.value||''});clearForm(form);dialog.close();await refresh(true);if(info.app==='pos'&&typeof retailLoadTerminal==='function'){await retailLoadTerminal();posRender();}}
+   try{await api('computers/register',{id:state.computer.id,revision:editRevision,name:form.elements.name.value,role:form.elements.role.value,app:info.app,device:info.device,terminal:form.elements.terminal?.value||'',store_id:form.elements.store_id?.value});clearForm(form);dialog.close();await refresh(true);if(info.app==='pos'&&typeof retailLoadTerminal==='function'){await posLoad();}}
    catch(error){get('nativeTerminalError').textContent=error.message;if(error.status===409){try{state=await api('computers/self',{...info,status:lastStatus});editRevision=state.computer.revision;label();}catch{}}}finally{submit.disabled=false;}
   };
   dialog.showModal();

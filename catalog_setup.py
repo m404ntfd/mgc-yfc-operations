@@ -139,7 +139,10 @@ def catalog_tax(line,legacy):
     if 'tax_rates' in line:
         line['tax_details']=[dict(t,amount=(line['subtotal']*t['bps']+5000)//10000) for t in line['tax_rates']]
         line['tax']=sum(t['amount'] for t in line['tax_details'])
-    else:line['tax']=(line['subtotal']*legacy+5000)//10000 if line['taxable'] else 0
+    else:
+        if line['taxable'] and legacy is None:
+            raise Problem('Select a tax for this item in OFFICE or confirm the default tax rate for this store. No item was added.',409)
+        line['tax']=(line['subtotal']*legacy+5000)//10000 if line['taxable'] else 0
     return line['tax']
 
 def catalog_stamp(c,line,legacy):
