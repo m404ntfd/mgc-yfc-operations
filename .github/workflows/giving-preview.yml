@@ -7,6 +7,7 @@ on:
       - 'static/**'
       - 'prepare_web_assets.py'
       - 'test_giving*'
+      - 'test_office_status_ui.py'
       - '.github/workflows/giving-preview.yml'
   workflow_dispatch:
   workflow_call:
@@ -40,6 +41,7 @@ jobs:
       - run: python -m unittest test_giving_donor_review_ui test_giving_plan_history_ui test_giving_correction_ui test_giving_delivery_ui -v
       - run: python test_giving_ui.py
       - run: python test_office_navigation_ui.py
+      - run: python test_office_status_ui.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
