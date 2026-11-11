@@ -150,7 +150,7 @@ jobs:
         shell: pwsh
         run: |
           $baseline = Join-Path $env:RUNNER_TEMP 'retail-upgrade-baseline'
-          git clone --depth 1 --branch v0.58.0 https://github.com/m404ntfd/mgc-yfc-operations.git $baseline
+          git clone --depth 1 --branch v0.58.1 https://github.com/m404ntfd/mgc-yfc-operations.git $baseline
           if ($LASTEXITCODE -ne 0) { throw 'Baseline checkout failed' }
           $env:RETAIL_BASE_SOURCE = $baseline
           python test_retail_release_upgrade.py
