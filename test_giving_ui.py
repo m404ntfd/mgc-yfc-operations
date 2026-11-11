@@ -13,6 +13,11 @@ try:
   p=b.new_page(viewport={'width':1440,'height':1000});errors=[];p.on('pageerror',lambda e:errors.append(str(e)))
   p.goto(f'http://127.0.0.1:{f.port}/office');p.locator('#login [name=name]').fill('Admin');p.locator('#login [name=password]').fill('testpassword');p.locator('#login button').click()
   expect(p.locator('#officeTiles [data-office-category]')).to_have_count(7)
+  expect(p.locator('#officeStatusBar')).to_contain_text('Signed in: Admin')
+  expect(p.locator('#officeStatusBar')).to_have_attribute('data-state','connected')
+  assert p.locator('.workspace').bounding_box()['y']+p.locator('.workspace').bounding_box()['height'] <= p.locator('#officeStatusBar').bounding_box()['y']+1
+  Path('output/preview').mkdir(parents=True,exist_ok=True)
+  p.screenshot(path='output/preview/OFFICE-Giving-Status-Bar.png')
   p.locator('#officeNav [data-office-section=giving]').click();p.locator('[data-office-action=giving-workspace]').click()
   d=p.locator('#givingDialog');expect(d).to_be_visible()
   d.locator('[data-new=donor]').click();d.locator('[name=name]').fill('Preview Donor');d.locator('[type=submit]').click();expect(d.locator('table')).to_contain_text('Preview Donor')

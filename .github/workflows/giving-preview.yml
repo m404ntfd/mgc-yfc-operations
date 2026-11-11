@@ -7,6 +7,7 @@ on:
       - 'static/**'
       - 'prepare_web_assets.py'
       - 'test_giving*'
+      - 'test_office_status_ui.py'
       - '.github/workflows/giving-preview.yml'
   workflow_dispatch:
   workflow_call:
@@ -26,10 +27,10 @@ jobs:
       - run: node --check static/pos.js
       - run: node --check static/giving-office.js
       - name: Verify Giving endpoints, history and data integrity
-        run: python -m unittest test_giving_history test_giving_donors test_giving_deliveries test_giving test_giving_storage test_data_integrity test_startup_updates
+        run: python -m unittest test_giving_history test_giving_donors test_giving_deliveries test_giving test_giving_storage test_web_assets test_data_integrity test_startup_updates
       - uses: actions/checkout@v4
         with:
-          ref: 618e0c4f1120d677d63b865d9d258c61d7a56963
+          ref: d263fb1c97feefb7c1666d7362ccdba60b57738c
           path: .giving-upgrade-baseline
       - name: Verify populated upgrade, backup and rollback
         env:
@@ -40,6 +41,7 @@ jobs:
       - run: python -m unittest test_giving_donor_review_ui test_giving_plan_history_ui test_giving_correction_ui test_giving_delivery_ui -v
       - run: python test_giving_ui.py
       - run: python test_office_navigation_ui.py
+      - run: python test_office_status_ui.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:

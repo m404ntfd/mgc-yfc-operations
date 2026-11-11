@@ -11,7 +11,7 @@ class WebAssetTests(unittest.TestCase):
    for name in updater.FILES:
     target=root/name;target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(source/name,target)
    for path in [source/'assets/home-icons.json',source/'assets/hr-reference-forms.json',source/'assets/hr-source-forms.json',*sorted((source/'assets').glob('plug-*.b64'))]:shutil.copyfile(path,root/'assets'/path.name)
-   for name in ('pos.html','pos.js','pos.css','customer-office.js','customer-display.html','customer-display.js','customer-display.css','report-center.js','office-expansion.js','thrift-retail.js','retail-stores.js','fulfillment-print.js','pickup-followup.js','delivery-workspace.js','office-security.js','report-document.css','glass-theme.css','terminal-registration.js','terminal-registration.css','catalog-editor.js','cash-advances.js','office-updates.js','giving-office.js','office-search.js','office-navigation.js','office-navigation.css','desk-touch.js','desk-touch.css','hr-browser.js','hr.html','hr.js','hr.css'):shutil.copyfile(source/'static'/name,root/'static'/name)
+   for name in ('pos.html','pos.js','pos.css','customer-office.js','customer-display.html','customer-display.js','customer-display.css','report-center.js','office-expansion.js','thrift-retail.js','retail-stores.js','fulfillment-print.js','pickup-followup.js','delivery-workspace.js','office-security.js','report-document.css','glass-theme.css','terminal-registration.js','terminal-registration.css','catalog-editor.js','cash-advances.js','office-updates.js','giving-office.js','office-status.js','office-search.js','office-navigation.js','office-navigation.css','desk-touch.js','desk-touch.css','hr-browser.js','hr.html','hr.js','hr.css'):shutil.copyfile(source/'static'/name,root/'static'/name)
    shutil.copyfile(source/'customer_services.py',root/'customer_services.py')
    shutil.copyfile(source/'retail_reports.py',root/'retail_reports.py')
    shutil.copyfile(source/'computer_registry.py',root/'computer_registry.py')
@@ -27,6 +27,8 @@ class WebAssetTests(unittest.TestCase):
    self.assertEqual({k:assets[k] for k in ('180','192','512','ico')},__import__('json').loads((source/'assets/home-icons.json').read_text()))
    pos=next(node for node in module.body if isinstance(node,ast.Assign) and any(isinstance(target,ast.Name) and target.id=='POS_ASSETS' for target in node.targets))
    self.assertEqual(set(ast.literal_eval(pos.value)),{'pos.html','pos.js','pos.css','customer-display.html','customer-display.js','customer-display.css','hr.html','hr.js','hr.css'})
+   self.assertIn('officeStatusBar',ast.literal_eval(pos.value)['pos.js'])
+   self.assertNotIn('__OFFICE_WEB_VERSION__',ast.literal_eval(pos.value)['pos.js'])
    self.assertIn('function thriftDesk()',ast.literal_eval(pos.value)['pos.js'])
    self.assertIn((source/'static/giving-office.js').read_text(encoding='utf-8'),ast.literal_eval(pos.value)['pos.js'])
    self.assertTrue(any(isinstance(node,ast.FunctionDef) and node.name=='giving_init' for node in module.body))
