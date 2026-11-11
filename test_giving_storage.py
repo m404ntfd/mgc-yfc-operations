@@ -74,6 +74,29 @@ class GivingStorageTests(unittest.TestCase):
         self.assertEqual(problem.exception.status,409)
         self.assertEqual(len(self.get('statement_history',donor=self.donor)['statements']),1)
 
+    def test_legacy_commitment_and_failed_history_write(self):
+        plan = uuid.uuid4().hex
+        original = dict(donor=self.donor, amount=2500, start='2026-12-01',
+                        billing_day=1, fund='Ministry', status='draft')
+        self.c.execute('INSERT INTO giving_plans VALUES(?,?,?)', (plan, 4, json.dumps(original)))
+        self.c.commit()
+        server.giving_init(self.c)
+        self.assertEqual(self.get('plan_history', id=plan)['history'], [])
+        edit = dict(original, id=plan, revision=4, amount=3500)
+        request = uuid.uuid4().hex
+        self.c.execute("""CREATE TRIGGER fail_plan_history BEFORE INSERT ON giving_plan_history
+                          BEGIN SELECT RAISE(ABORT,'Test failure'); END""")
+        self.c.commit()
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.post('plan', request=request, **edit)
+        self.assertEqual(self.get('overview')['plans'], [dict(original, id=plan, revision=4)])
+        self.c.execute('DROP TRIGGER fail_plan_history')
+        self.post('plan', request=request, **edit)
+        history = self.get('plan_history', id=plan)['history']
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0]['before'], dict(original, id=plan, revision=4))
+        self.assertEqual(history[0]['after'], dict(edit, revision=5))
+
     def test_additive_migration_preserves_populated_operational_tables(self):
         server.init_workforce(self.c)
         self.c.executescript('''

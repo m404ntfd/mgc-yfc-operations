@@ -26,6 +26,16 @@ CREATE TABLE IF NOT EXISTS giving_gift_replacements(
 CREATE TRIGGER IF NOT EXISTS giving_gift_replacements_no_update BEFORE UPDATE ON giving_gift_replacements BEGIN SELECT RAISE(ABORT,'Gift replacement history is immutable'); END;
 CREATE TRIGGER IF NOT EXISTS giving_gift_replacements_no_delete BEFORE DELETE ON giving_gift_replacements BEGIN SELECT RAISE(ABORT,'Gift replacement history is immutable'); END;
 CREATE TABLE IF NOT EXISTS giving_plans(id TEXT PRIMARY KEY,revision INTEGER NOT NULL,body TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS giving_plan_history(
+    plan TEXT NOT NULL REFERENCES giving_plans(id),
+    revision INTEGER NOT NULL,
+    at TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    body TEXT NOT NULL,
+    PRIMARY KEY(plan,revision)
+);
+CREATE TRIGGER IF NOT EXISTS giving_plan_history_no_update BEFORE UPDATE ON giving_plan_history BEGIN SELECT RAISE(ABORT,'Commitment history is immutable'); END;
+CREATE TRIGGER IF NOT EXISTS giving_plan_history_no_delete BEFORE DELETE ON giving_plan_history BEGIN SELECT RAISE(ABORT,'Commitment history is immutable'); END;
 CREATE TABLE IF NOT EXISTS giving_settings(id INTEGER PRIMARY KEY CHECK(id=1),revision INTEGER NOT NULL,body TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS giving_requests(id TEXT PRIMARY KEY,actor TEXT NOT NULL,payload TEXT NOT NULL,result TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS giving_statements(id TEXT PRIMARY KEY,donor TEXT NOT NULL,period TEXT NOT NULL,created_at TEXT NOT NULL,actor TEXT NOT NULL,body TEXT NOT NULL);
@@ -95,6 +105,18 @@ def giving_get(c,u,path,q):
         donors=[d for d in donors if not search or any(search in d.get(k,'').casefold() for k in ('name','email','address'))]
         donors.sort(key=lambda d:(d['name'].casefold(),d['id']))
         return {'donors':donors[offset:offset+limit],'total':len(donors),'limit':limit,'offset':offset}
+    if path == 'plan_history':
+        giving_require(u, 'manage_giving_plans')
+        ident = q.get('id', [''])[0]
+        if not c.execute('SELECT 1 FROM giving_plans WHERE id=?', (ident,)).fetchone():
+            raise Problem('Monthly commitment not found.', 404)
+        rows = c.execute(
+            'SELECT * FROM giving_plan_history WHERE plan=? ORDER BY revision DESC', (ident,)
+        )
+        return {'history': [
+            dict(json.loads(row['body']), revision=row['revision'], at=row['at'], actor=row['actor'])
+            for row in rows
+        ]}
     if path in ('statement_history','statement_snapshot'):
         giving_require(u,'giving_statements')
         if path=='statement_snapshot':
@@ -179,6 +201,15 @@ def giving_post(c,u,path,d):
         if body['delivery']=='email' and not body['email']:raise Problem('An email address is required for email statements.')
         table='giving_donors'
     elif path=='plan':
+        revision = d.get('revision', 0)
+        if type(revision) is not int or revision < 0:
+            raise Problem('Invalid monthly commitment revision.')
+        previous = None
+        if d.get('id'):
+            row = c.execute('SELECT * FROM giving_plans WHERE id=?', (ident,)).fetchone()
+            if row is None:
+                raise Problem('Monthly commitment not found.', 404)
+            previous = dict(json.loads(row['body']), id=ident, revision=row['revision'])
         donor=giving_profile(c,giving_text(d,'donor',32,True))
         body={'donor':donor['id'],'amount':giving_amount(d),'start':giving_day(d,'start'),'billing_day':d.get('billing_day'),'fund':giving_text(d,'fund',100,True),'status':giving_text(d,'status',20,True)}
         if type(body['billing_day']) is not int or not 1<=body['billing_day']<=28:raise Problem('Choose a billing day from 1 to 28.')
@@ -211,6 +242,12 @@ def giving_post(c,u,path,d):
         if path=='donor':
             history={'before':previous,'after':dict(body,id=ident,revision=revision+1)}
             c.execute('INSERT INTO giving_donor_history VALUES(?,?,?,?,?)',(ident,revision+1,now,u['name'],json.dumps(history)))
+        elif path == 'plan':
+            history = {'before': previous, 'after': dict(body, id=ident, revision=revision+1)}
+            c.execute(
+                'INSERT INTO giving_plan_history VALUES(?,?,?,?,?)',
+                (ident, revision+1, now, u['name'], json.dumps(history))
+            )
     result={'id':ident,'ok':True}
     c.execute('INSERT INTO giving_requests VALUES(?,?,?,?)',(request,actor,payload,json.dumps(result)))
     c.execute('INSERT INTO audit VALUES(?,?,?,?)',(now,u['name'],'Giving '+path, str(ident)))
