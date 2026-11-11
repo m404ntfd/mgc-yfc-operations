@@ -40,6 +40,23 @@ class GivingStorageTests(unittest.TestCase):
         for sql in ('DELETE FROM giving_statements','UPDATE giving_statements SET period=period'):
             with self.assertRaises(sqlite3.IntegrityError),self.c:self.c.execute(sql)
 
+    def test_correction_details_preserve_original_entry(self):
+        gift=self.post('gift',donor=self.donor,day='2025-12-15',amount=10000,method='check',reference='Test 1',fund='Ministry',benefit='',benefit_value=0)
+        original=self.get('overview')['gifts'][0]
+        self.assertIsNone(original['correction'])
+        self.post('void',gift=gift['id'],reason='Duplicate deposit entry')
+        self.user={'name':'Viewer','admin':False,'grants':{'view_giving':True}}
+        corrected=self.get('overview')['gifts'][0]
+        self.assertTrue(corrected['voided'])
+        self.assertEqual(corrected['correction']['reason'],'Duplicate deposit entry')
+        self.assertEqual(corrected['correction']['actor'],'Test administrator')
+        self.assertTrue(corrected['correction']['at'])
+        for key in ('id','donor','amount','day','reference','actor','at'):
+            self.assertEqual(corrected[key],original[key])
+        self.user['grants']={}
+        with self.assertRaises(server.Problem) as problem:self.get('overview')
+        self.assertEqual(problem.exception.status,403)
+
     def test_permissions_validation_and_rollback(self):
         self.user={'name':'Viewer','admin':False,'grants':{'view_giving':True}}
         for path in ('statement_snapshot','statement_history'):

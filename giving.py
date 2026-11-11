@@ -76,7 +76,9 @@ def giving_get(c,u,path,q):
         return {'statements':[dict(id=r['id'],period=r['period'],created_at=r['created_at'],actor=r['actor'],total=json.loads(r['body'])['total']) for r in c.execute('SELECT * FROM giving_statements WHERE donor=? ORDER BY created_at DESC,id DESC',(donor['id'],))]}
     if path=='overview':
         donors=[dict(json.loads(r['body']),id=r['id'],revision=r['revision']) for r in c.execute('SELECT * FROM giving_donors')]
-        gifts=[dict(json.loads(r['body']),id=r['id'],voided=bool(r['voided'])) for r in c.execute('SELECT g.*,v.gift AS voided FROM giving_gifts g LEFT JOIN giving_voids v ON v.gift=g.id ORDER BY g.day DESC,g.id')]
+        gifts=[dict(json.loads(r['body']),id=r['id'],voided=bool(r['voided']),
+          correction={'reason':r['void_reason'],'actor':r['void_actor'],'at':r['void_at']} if r['voided'] else None)
+          for r in c.execute('SELECT g.*,v.gift AS voided,v.reason AS void_reason,v.actor AS void_actor,v.at AS void_at FROM giving_gifts g LEFT JOIN giving_voids v ON v.gift=g.id ORDER BY g.day DESC,g.id')]
         plans=[dict(json.loads(r['body']),id=r['id'],revision=r['revision']) for r in c.execute('SELECT * FROM giving_plans')]
         return {'donors':sorted(donors,key=lambda x:x['name'].casefold()),'gifts':gifts,'plans':plans,
           'processing':'not_connected','delivery':'not_configured','settings':giving_config(c) if has_permission(u,'giving_settings') else None}
