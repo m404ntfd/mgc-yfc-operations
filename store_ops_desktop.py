@@ -6,17 +6,10 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 TITLE = "CoastYouth Retail STORE OPS"
-VERSION = "1.3.0"
+VERSION = "1.4.0"
 DEFAULT_SERVER = "https://operations.coastyfc.com"
 
-def server_url(value):
-    value = value.strip()
-    if "://" not in value: value = "http://" + value
-    parts = urlsplit(value)
-    if parts.scheme not in ("http", "https") or not parts.hostname or parts.username or parts.password or parts.path not in ("", "/") or parts.query or parts.fragment:
-        raise ValueError("Enter the server address only, such as https://operations.coastyfc.com")
-    parts.port
-    return value.rstrip("/")
+from desktop_connection import server_url, connect_before_open
 
 class CloseGuard:
     def __init__(self, window, address=None):
@@ -75,28 +68,24 @@ def ops_window(address, hidden=False):
     window._ops_guard = guard
     return window
 
+def save_connection(directory, address):
+    address = server_url(address)
+    config = directory / 'connection.json'
+    existing = json.loads(config.read_text(encoding='utf-8')) if config.exists() else {}
+    if not isinstance(existing, dict):
+        raise ValueError('Connection settings cannot be read. Contact your administrator.')
+    existing['server'] = address
+    directory.mkdir(parents=True, exist_ok=True)
+    temp = directory / 'connection.tmp'
+    with temp.open('w', encoding='utf-8') as out:
+        json.dump(existing, out); out.flush(); os.fsync(out.fileno())
+    os.replace(temp, config)
+    return address
+
+
 def configure(directory, address):
-    import tkinter as tk
-    from tkinter import ttk, messagebox
-    root = tk.Tk(); root.title(TITLE); root.geometry("620x310"); root.resizable(False, False)
-    frame = ttk.Frame(root, padding=24); frame.pack(fill="both", expand=True)
-    ttk.Label(frame, text="Connect STORE OPS", font=("Segoe UI", 22, "bold")).pack(anchor="w")
-    ttk.Label(frame, text="Use the same server as your website, DESK and OFFICE.\nSign in as an administrator next to register this computer.").pack(anchor="w", pady=18)
-    ttk.Label(frame, text="Server address").pack(anchor="w")
-    value = tk.StringVar(value=address); ttk.Entry(frame, textvariable=value).pack(fill="x", pady=6)
-    chosen = []
-    def save():
-        try:
-            url = server_url(value.get())
-            directory.mkdir(parents=True, exist_ok=True)
-            temp = directory / "connection.tmp"
-            temp.write_text(json.dumps({"server": url}), encoding="utf-8")
-            os.replace(temp, directory / "connection.json")
-            chosen.append(url); root.destroy()
-        except Exception as exc: messagebox.showerror(TITLE, str(exc), parent=root)
-    ttk.Button(frame, text="Save & open STORE OPS", command=save).pack(anchor="e", pady=18)
-    root.mainloop()
-    return chosen[0] if chosen else None
+    return connect_before_open('ops', address, lambda candidate: save_connection(directory, candidate), configure=True)
+
 
 def main():
     import sys
@@ -123,9 +112,9 @@ def main():
     address = DEFAULT_SERVER
     try: address = server_url(json.loads(config.read_text(encoding="utf-8"))["server"])
     except (OSError, ValueError, KeyError): pass
-    if not config.exists() or "--configure" in sys.argv:
-        address = configure(directory, address)
-        if not address: return
+    address = connect_before_open('ops', address, lambda candidate: save_connection(directory, candidate),
+                                  configure=not config.exists() or '--configure' in sys.argv)
+    if not address: return
     directory.mkdir(parents=True, exist_ok=True)
     ops_window(address)
     webview.settings["ALLOW_DOWNLOADS"] = True

@@ -162,6 +162,22 @@ class DeliveryUI(unittest.TestCase):
         expect(self.p.locator('.givingDeliveryRecord')).to_contain_text('Prepared - not sent')
         self.assertEqual(self.p.evaluate('posts.length'), 1)
 
+    def test_saved_copy_separates_period_and_shows_setup_notice(self):
+        self.p.locator('[data-snapshot]').click()
+        expect(self.p.locator('#givingStatement')).to_be_hidden()
+        expect(self.p.locator('#givingStatementPreview')).to_contain_text('Giving statement - 2025')
+        expect(self.p.locator('#givingStatementPreview')).to_contain_text('Organization setup incomplete.')
+        expect(self.p.locator('#givingStatementActions #givingPrint')).to_be_visible()
+        self.p.locator('#givingNewStatement').click()
+        expect(self.p.locator('#givingStatement')).to_be_visible()
+        expect(self.p.locator('#givingStatementPreview')).to_be_empty()
+
+    def test_period_edit_invalidates_pending_preview(self):
+        self.p.locator('#givingStatement [type=submit]').click()
+        expect(self.p.locator('#givingStatementPreview')).to_contain_text('Statement preview')
+        self.p.locator('#givingStatement [name=period]').fill('2024')
+        expect(self.p.locator('#givingStatementPreview')).to_be_empty()
+
     def test_late_saved_copy_does_not_replace_new_donor(self):
         self.p.evaluate("mode='lateSnapshot'")
         self.p.locator('[data-snapshot]').click()

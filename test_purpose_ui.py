@@ -26,6 +26,11 @@ def run():
     page.locator('#accountButton').click();expect(page.locator('#printPurpose' if width==390 else '#receipts')).to_be_visible()
     page.locator('.headerMenu summary').click();page.locator('#chooseStartSection').click()
     page.locator('[name=section][value=receipts]').check();page.locator('#sectionChooserForm button').click()
+    # Verify the new home from a different section, so the visibility assertion
+    # waits for Home's asynchronous response before opening the upload form.
+    expect(page.locator('#sectionChooser')).to_be_hidden()
+    page.locator('#storeMenuButton').click();page.locator('#printSection').click()
+    expect(page.locator('#printPurpose')).to_be_visible()
     page.locator('#accountButton').click();expect(page.locator('#receipts')).to_be_visible()
     page.locator('#storeMenuButton').click();page.locator('#receiptsSection').click();page.locator('#openReceiptUpload').click()
     page.locator('#receiptCategory').select_option('Office')

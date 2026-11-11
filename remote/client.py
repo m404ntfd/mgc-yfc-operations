@@ -1,9 +1,11 @@
 """HTTP client for MGC YFC Operations Remote Manager; credentials stay in memory."""
 import http.cookiejar,json,secrets,urllib.request,urllib.error,urllib.parse
+# Keep this helper usable by standalone administration and installer tools.
+USER_AGENT = 'CoastYouth-Retail-Desktop/0.57.0'
 
 def normalize_address(value):
     value=value.strip()
-    if '://' not in value:value='http://'+value
+    if '://' not in value:value=('https://' if value.split('/')[0].split(':')[0].lower()=='operations.coastyfc.com' else 'http://')+value
     p=urllib.parse.urlsplit(value)
     if p.scheme not in ('http','https') or not p.hostname or p.username or p.password or p.path not in ('','/') or p.query or p.fragment:
         raise ValueError('Enter only a server name or IP address, such as 192.168.1.50:8080.')
@@ -25,7 +27,7 @@ class Client:
         self.cookies=http.cookiejar.CookieJar()
         self.opener=urllib.request.build_opener(urllib.request.ProxyHandler({}),NoRedirect(),urllib.request.HTTPCookieProcessor(self.cookies))
     def request(self,path,data=None,activity=True):
-        headers={'X-Dispatch':'1','X-Dispatch-Connection':self.connection_id,'Content-Type':'application/json'}
+        headers={'User-Agent':USER_AGENT,'X-Dispatch':'1','X-Dispatch-Connection':self.connection_id,'Content-Type':'application/json'}
         if activity and not self.local_control:headers['X-Dispatch-Activity']='1'
         if self.local_control:headers['X-Local-Control']=self.local_control
         if self.session_token:headers['Cookie']='session='+self.session_token
@@ -37,8 +39,9 @@ class Client:
                 error=json.loads(e.read());message=error.get('error','Request failed.')
                 if isinstance(error.get('attempts_remaining'),int):message+='\nAttempts Remaining Until Account Lock: '+str(error['attempts_remaining'])
             except Exception:message='Server refused the request.'
+            e.close()
             raise ValueError(message) from e
-        except (urllib.error.URLError,TimeoutError,OSError) as e:raise ValueError('Cannot reach the server. Check its address, power, staff network, and Windows Firewall.') from e
+        except (urllib.error.URLError,TimeoutError,OSError) as e:raise ValueError('Cannot reach the server. Check its address, power, internet or VPN connection, and firewall.') from e
     def probe(self):
         r=self.request('session')
         if r.get('application')!='thrift-mart-dispatch':raise ValueError('This is not a compatible MGC YFC Operations Server. Install server version 0.3.0 or newer.')

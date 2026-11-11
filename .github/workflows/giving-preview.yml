@@ -9,6 +9,7 @@ on:
       - 'test_giving*'
       - '.github/workflows/giving-preview.yml'
   workflow_dispatch:
+  workflow_call:
 permissions:
   contents: read
 jobs:
@@ -28,7 +29,7 @@ jobs:
         run: python -m unittest test_giving_history test_giving_donors test_giving_deliveries test_giving test_giving_storage test_data_integrity test_startup_updates
       - uses: actions/checkout@v4
         with:
-          ref: 25e37aeba8bd9081b8bd525366d4715e45f938a4
+          ref: 618e0c4f1120d677d63b865d9d258c61d7a56963
           path: .giving-upgrade-baseline
       - name: Verify populated upgrade, backup and rollback
         env:
@@ -36,7 +37,7 @@ jobs:
         run: python test_giving_upgrade.py
       - name: Install Chromium for browser checks
         run: python -m playwright install chromium
-      - run: python -m unittest test_giving_plan_history_ui test_giving_correction_ui test_giving_delivery_ui -v
+      - run: python -m unittest test_giving_donor_review_ui test_giving_plan_history_ui test_giving_correction_ui test_giving_delivery_ui -v
       - run: python test_giving_ui.py
       - run: python test_office_navigation_ui.py
       - uses: actions/upload-artifact@v4

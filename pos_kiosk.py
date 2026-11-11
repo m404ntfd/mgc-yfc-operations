@@ -3,6 +3,7 @@ import hashlib,hmac,json,os,re,secrets,threading,time
 from pathlib import Path
 from urllib.request import Request,build_opener,HTTPRedirectHandler,ProxyHandler
 from urllib.error import HTTPError
+from desktop_connection import USER_AGENT
 
 class NoRedirect(HTTPRedirectHandler):
  def redirect_request(self,*args,**kwargs):return None
@@ -67,12 +68,13 @@ class KioskBridge:
   p=urlsplit(url);base=urlsplit(self._address)
   return (p.scheme,p.netloc)==(base.scheme,base.netloc) and p.path in ('/pos','/pos/','/office','/office/','/')
  def _redeem_remote(self,token):
-  req=Request(self._address+'/api/pos/kiosk-redeem',data=json.dumps({'token':token,'device':self._store.data['device'],'nonce':self._nonce}).encode(),headers={'Content-Type':'application/json','X-Dispatch':'1'})
+  req=Request(self._address+'/api/pos/kiosk-redeem',data=json.dumps({'token':token,'device':self._store.data['device'],'nonce':self._nonce}).encode(),headers={'Content-Type':'application/json','X-Dispatch':'1','User-Agent':USER_AGENT})
   try:
    with build_opener(ProxyHandler({}),NoRedirect()).open(req,timeout=15) as r:return json.loads(r.read(8192))
   except HTTPError as e:
    try:message=json.loads(e.read(8192)).get('error','Administrator approval failed.')
    except Exception:message='Administrator approval failed.'
+   e.close()
    raise ValueError(message) from e
  def terminal_info(self):
   info=self.kiosk_info();return {**info,'app':'pos'}
