@@ -12,6 +12,9 @@ GIVING_PERMISSIONS = {
 def giving_init(c):
     c.executescript('''
 CREATE TABLE IF NOT EXISTS giving_donors(id TEXT PRIMARY KEY,revision INTEGER NOT NULL,body TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS giving_donor_history(donor TEXT NOT NULL,revision INTEGER NOT NULL,at TEXT NOT NULL,actor TEXT NOT NULL,body TEXT NOT NULL,PRIMARY KEY(donor,revision));
+CREATE TRIGGER IF NOT EXISTS giving_donor_history_no_update BEFORE UPDATE ON giving_donor_history BEGIN SELECT RAISE(ABORT,'Donor history is immutable'); END;
+CREATE TRIGGER IF NOT EXISTS giving_donor_history_no_delete BEFORE DELETE ON giving_donor_history BEGIN SELECT RAISE(ABORT,'Donor history is immutable'); END;
 CREATE TABLE IF NOT EXISTS giving_gifts(id TEXT PRIMARY KEY,donor TEXT NOT NULL,day TEXT NOT NULL,amount INTEGER NOT NULL CHECK(amount>0),body TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS giving_gifts_donor_day ON giving_gifts(donor,day);
 CREATE TABLE IF NOT EXISTS giving_voids(gift TEXT PRIMARY KEY,reason TEXT NOT NULL,actor TEXT NOT NULL,at TEXT NOT NULL);
@@ -66,6 +69,25 @@ def giving_config(c):
 
 def giving_get(c,u,path,q):
     giving_require(u)
+    if path=='donor':
+        return {'donor':giving_profile(c,q.get('id',[''])[0])}
+    if path=='donor_history':
+        giving_require(u,'manage_donors')
+        donor=giving_profile(c,q.get('donor',[''])[0])
+        rows=c.execute('SELECT * FROM giving_donor_history WHERE donor=? ORDER BY revision DESC',(donor['id'],))
+        return {'history':[dict(json.loads(r['body']),revision=r['revision'],at=r['at'],actor=r['actor']) for r in rows]}
+    if path=='donors':
+        search=giving_text({'search':q.get('search',[''])[0]},'search',254).casefold()
+        try:
+            limit_text=q.get('limit',['50'])[0];offset_text=q.get('offset',['0'])[0]
+            if not re.fullmatch(r'[0-9]{1,7}',limit_text) or not re.fullmatch(r'[0-9]{1,7}',offset_text):raise ValueError()
+            limit=int(limit_text);offset=int(offset_text)
+            if not 1<=limit<=100:raise ValueError()
+        except (ValueError,TypeError):raise Problem('Choose a limit from 1 to 100 and a nonnegative offset.')
+        donors=[dict(json.loads(r['body']),id=r['id'],revision=r['revision']) for r in c.execute('SELECT * FROM giving_donors')]
+        donors=[d for d in donors if not search or any(search in d.get(k,'').casefold() for k in ('name','email','address'))]
+        donors.sort(key=lambda d:(d['name'].casefold(),d['id']))
+        return {'donors':donors[offset:offset+limit],'total':len(donors),'limit':limit,'offset':offset}
     if path in ('statement_history','statement_snapshot'):
         giving_require(u,'giving_statements')
         if path=='statement_snapshot':
@@ -107,7 +129,7 @@ def giving_post(c,u,path,d):
     request=giving_text(d,'request',32,True)
     if not re.fullmatch('[0-9a-f]{32}',request):raise Problem('A unique request is required.')
     actor=u.get('receipt_owner') or u['name'];payload=json.dumps([path,d],sort_keys=True)
-    if path=='statement_snapshot':c.execute('BEGIN IMMEDIATE')
+    if path in ('statement_snapshot','donor'):c.execute('BEGIN IMMEDIATE')
     old=c.execute('SELECT * FROM giving_requests WHERE id=?',(request,)).fetchone()
     if old:
         if old['actor']!=actor or old['payload']!=payload:raise Problem('Request already used for another action.',409)
@@ -120,6 +142,8 @@ def giving_post(c,u,path,d):
         body.update(id=ident,created_at=now,actor=u['name'],preview=False,saved=True,delivery='not_sent')
         c.execute('INSERT INTO giving_statements VALUES(?,?,?,?,?,?)',(ident,donor,period,now,u['name'],json.dumps(body)))
     elif path=='donor':
+        if type(d.get('revision',0)) is not int or d.get('revision',0)<0:raise Problem('Invalid donor revision.')
+        previous=giving_profile(c,ident) if d.get('id') else None
         body={k:giving_text(d,k,limit,k=='name') for k,limit in [('name',150),('email',254),('address',500),('delivery',10)]}
         if body['email']:customer_email(body['email'])
         if body['delivery'] not in ('email','print'):raise Problem('Choose email or print delivery.')
@@ -152,6 +176,9 @@ def giving_post(c,u,path,d):
         old=c.execute('SELECT revision FROM '+table+' WHERE id=?',(ident,)).fetchone();revision=old['revision'] if old else 0
         if d.get('revision',0)!=revision:raise Problem('This record changed. Reload before saving.',409)
         c.execute('INSERT INTO '+table+' VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,body=excluded.body',(ident,revision+1,json.dumps(body)))
+        if path=='donor':
+            history={'before':previous,'after':dict(body,id=ident,revision=revision+1)}
+            c.execute('INSERT INTO giving_donor_history VALUES(?,?,?,?,?)',(ident,revision+1,now,u['name'],json.dumps(history)))
     result={'id':ident,'ok':True}
     c.execute('INSERT INTO giving_requests VALUES(?,?,?,?)',(request,actor,payload,json.dumps(result)))
     c.execute('INSERT INTO audit VALUES(?,?,?,?)',(now,u['name'],'Giving '+path, str(ident)))
