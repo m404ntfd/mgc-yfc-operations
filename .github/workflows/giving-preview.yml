@@ -25,7 +25,7 @@ jobs:
       - run: node --check static/pos.js
       - run: node --check static/giving-office.js
       - name: Verify Giving endpoints, history and data integrity
-        run: python -m unittest test_giving_donors test_giving_deliveries test_giving test_giving_storage test_data_integrity test_startup_updates
+        run: python -m unittest test_giving_history test_giving_donors test_giving_deliveries test_giving test_giving_storage test_data_integrity test_startup_updates
       - uses: actions/checkout@v4
         with:
           ref: 25e37aeba8bd9081b8bd525366d4715e45f938a4
