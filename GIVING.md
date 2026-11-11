@@ -1,4 +1,4 @@
-# OFFICE Giving preview
+# OFFICE Giving — initial staff release
 
 The Giving section uses the existing Operations database. It is separate from retail sales, inventory donation intake, store credit, and cash drawers.
 
@@ -8,11 +8,11 @@ Saving a statement captures the current donor, organization, message, gifts and 
 
 Permissions: `view_giving` plus the applicable `manage_donors`, `record_gifts`, `adjust_gifts`, `manage_giving_plans`, `giving_statements`, or `giving_settings` grant. OFFICE access also uses its existing `use_pos` permission. Administrators retain access. All endpoints enforce permissions on the server.
 
-This is a development preview. Clover payments, secure payment-method enrollment, recurring billing, donor self-service, automatic monthly/January emails, and processor reconciliation are not connected. Draft monthly commitments cannot be activated. Never put payment credentials, card numbers, or security codes in donor fields. Statements are previews, not delivery confirmations. Configure the organization identity and review wording and goods/services details before issuing statements.
+This initial release is for staff recordkeeping. Clover payments, secure payment-method enrollment, recurring billing, donor self-service, automatic monthly/January emails, and processor reconciliation are not connected. Draft monthly commitments cannot be activated. Never put payment credentials, card numbers, or security codes in donor fields. Statements are previews, not delivery confirmations. Configure the organization identity and review wording and goods/services details before issuing statements.
 
 Next integration: confirm Clover ecommerce/recurring eligibility and rates; add hosted card capture and token storage, consent records, signed webhook reconciliation and duplicate-charge prevention; then implement scheduled delivery, retry history, and approved monthly/annual templates.
 
-Validation: `python prepare_web_assets.py`, `python -m unittest test_giving test_giving_storage test_data_integrity test_startup_updates`, `python test_giving_ui.py`, and `python test_office_navigation_ui.py`. The Giving pull-request workflow runs these checks and the populated upgrade/backup/rollback test against the 0.56.0 baseline, and saves synthetic preview screenshots. Tests use isolated temporary databases and synthetic donors. The migration only adds giving tables/indexes/triggers. This branch does not change the version or install an update.
+Validation: `python prepare_web_assets.py`, `python -m unittest test_giving test_giving_storage test_data_integrity test_startup_updates`, `python test_giving_ui.py`, and `python test_office_navigation_ui.py`. The Giving pull-request workflow runs these checks and the populated upgrade/backup/rollback test against the 0.57.0 baseline, and saves synthetic preview screenshots. Tests use isolated temporary databases and synthetic donors. The migration only adds giving tables/indexes/triggers. The v0.58.0 release workflow gates publication on Giving and suite checks.
 
 Printed previews and saved copies retain their status labels and saved reference. Received gifts show original recording details and correction history without changing the original ledger entry.
 
@@ -43,3 +43,7 @@ OFFICE donor rows include Giving history for staff with view_giving. History fil
 Saved statements include Review delivery preparation for staff with giving_statements and giving_delivery. Preparing delivery freezes the saved recipient; cancellation requires a reason and retains history. Duplicate preparation is prevented. Cancelled preparations cannot be reused; create a new saved copy if needed. Email sending remains disabled, and prepared/cancelled records are explicitly marked not sent.
 
 Review checks: python -m unittest test_giving_donor_review_ui test_giving_delivery_ui -v. The Giving workflow includes these alongside backend, full workflow, OFFICE navigation and populated upgrade/backup/rollback checks. Visual review of rendered production screens and live payment/email integration remain release gates for the complete donor platform.
+
+## Initial staff setup
+
+Update the Operations server, then open OFFICE → Giving → Settings. Enter the organization EIN, mailing address and statement wording; assign staff permissions. Review a printable statement before issuing it. Missing identity details display a setup notice. Saved copies retain the original identity and period; create a new copy after correcting settings. New statement criteria are hidden while viewing a saved copy; choose New statement preview to return.

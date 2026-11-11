@@ -8,7 +8,7 @@ try:
 except ImportError:
     from client import Client
 NAME='MGC YFC Operations Remote Manager'
-VERSION='0.56.0'
+VERSION='0.57.0'
 CONFIG=Path(os.environ.get('APPDATA',Path.home()))/'ThriftMartDispatchRemoteManager'/'config.json'
 
 class App:

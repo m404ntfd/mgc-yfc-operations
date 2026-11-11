@@ -2,13 +2,14 @@
 import hashlib,json,os,re,shutil,subprocess,sys,threading,time
 from pathlib import Path
 from urllib.request import Request,urlopen
-VERSION='1.17.0'
+from desktop_connection import USER_AGENT
+VERSION='1.18.0'
 REPO='m404ntfd/mgc-yfc-operations'
 def version(value):
  if not isinstance(value,str) or not re.fullmatch(r'\d+\.\d+\.\d+',value):raise ValueError('Invalid POS version.')
  return tuple(map(int,value.split('.')))
 def fetch(url,limit=1000000):
- with urlopen(Request(url,headers={'User-Agent':'MGC-YFC-POS-Updater'}),timeout=30) as response:data=response.read(limit+1)
+ with urlopen(Request(url,headers={'User-Agent':USER_AGENT}),timeout=30) as response:data=response.read(limit+1)
  if len(data)>limit:raise ValueError('POS download exceeds its size limit.')
  return data
 def verified_installer(expected,app='pos'):

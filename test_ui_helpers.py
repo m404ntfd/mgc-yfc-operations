@@ -16,3 +16,11 @@ def office_setting(page, action):
  page.locator('#officeGroups [data-office-group="'+info['group']+'"]').click()
  expect(target).to_be_visible()
  return target
+
+
+def wait_for_pos_save(page):
+ """Wait for a serial checkout action and its server refresh to finish."""
+ for _ in range(100):
+  if page.evaluate('!posBusy && !posPending && !flowProductStarting'):return
+  page.wait_for_timeout(50)
+ raise AssertionError('The checkout action did not finish saving and refreshing.')

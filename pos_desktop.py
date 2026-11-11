@@ -1,31 +1,16 @@
 """Full-screen POS launcher with device-local administrator exit protection."""
 import json,os,sys
 from pathlib import Path
-from urllib.parse import urlsplit
 import tkinter as tk
-from tkinter import ttk,messagebox
+from tkinter import messagebox
 
 from pos_updater import VERSION
-def server_url(value):
- value=value.strip()
- if '://' not in value:value='http://'+value
- parts=urlsplit(value)
- if parts.scheme not in ('http','https') or not parts.hostname or parts.username or parts.password or parts.path not in ('','/') or parts.query or parts.fragment:
-  raise ValueError('Enter the Operations server address, for example http://192.168.1.20:8080.')
- try:parts.port
- except ValueError:raise ValueError('Enter a valid server port.')
- return value.rstrip('/')
+from desktop_connection import server_url, connect_before_open
 
 def open_pos(address,store):
  import webview
  from pos_kiosk import KioskBridge
  address=server_url(address)
- from urllib.request import build_opener,ProxyHandler
- try:
-  with build_opener(ProxyHandler({})).open(address+'/pos.js',timeout=10) as response:
-   compatible=b'kioskSetupDialog' in response.read(2000000)
- except Exception as e:raise ValueError('Cannot reach the Operations server. Check that it is running and that this computer is connected to the store network.') from e
- if not compatible:raise ValueError('Update the Operations server to the matching full-screen POS release before opening this POS version.')
  bridge=KioskBridge(store,address)
  window=webview.create_window('CoastYouth Retail DESK',address+'/pos?kiosk=1',js_api=bridge,fullscreen=True,frameless=True,easy_drag=False,resizable=False,confirm_close=False)
  bridge._window=window
@@ -78,31 +63,21 @@ def main():
  address='http://localhost:8080'
  try:address=server_url(json.loads(settings.read_text())['server'])
  except (OSError,ValueError,KeyError):pass
- if store.data.get('server') and '--configure' not in sys.argv:
-  try:open_pos(address,store);return
-  except Exception as e:
-   root=tk.Tk();root.withdraw();messagebox.showerror('Unable to open POS',str(e));root.destroy();return
- root=tk.Tk();root.title('CoastYouth Retail DESK '+VERSION);root.geometry('620x280');root.resizable(False,False)
- frame=ttk.Frame(root,padding=24);frame.pack(fill='both',expand=True)
- ttk.Label(frame,text='Connect CoastYouth Retail DESK',font=('Segoe UI',18,'bold')).pack(anchor='w')
- ttk.Label(frame,text='Use the address shown by your Operations server.\nSign in as an administrator next to register this checkout.').pack(anchor='w',pady=14)
- value=tk.StringVar(value=address);entry=ttk.Entry(frame,textvariable=value);entry.pack(fill='x');entry.focus_set()
- selected=[]
- def connect():
-  try:
-   normalized=server_url(value.get())
-   if store.configured and normalized!=store.data.get('server'):
-    from tkinter.simpledialog import askstring
-    code=askstring('Administrator exit passcode','Enter the current exit passcode to change servers:',show='*',parent=root)
-    if code is None:return
-    if not store.verify(code):raise ValueError('Incorrect admin passcode.')
-   store.data['server']=normalized;store.save();selected.append(normalized);root.destroy()
-  except Exception as e:messagebox.showerror('Unable to open POS',str(e),parent=root)
- ttk.Button(frame,text='Open Point of Sale',command=connect).pack(anchor='e',pady=18)
- root.bind('<Return>',lambda e:connect());root.mainloop()
- if selected:
-  try:open_pos(selected[0],store)
-  except Exception as e:
-   root=tk.Tk();root.withdraw();messagebox.showerror('Unable to open POS',str(e));root.destroy()
+ def authorize(candidate,parent):
+  if not store.configured:return True
+  from tkinter.simpledialog import askstring
+  code=askstring('Administrator exit passcode','Enter the current exit passcode to change servers:',show='*',parent=parent)
+  if code is None:return False
+  if not store.verify(code):raise ValueError('Incorrect admin passcode.')
+  return True
+ def save(candidate):
+  previous=dict(store.data);store.data['server']=candidate
+  try:store.save()
+  except Exception:store.data=previous;raise
+ address=connect_before_open('pos',address,save,configure=not store.data.get('server') or '--configure' in sys.argv,authorize=authorize)
+ if not address:return
+ try:open_pos(address,store)
+ except Exception as e:
+  root=tk.Tk();root.withdraw();messagebox.showerror('Unable to open DESK',str(e),parent=root);root.destroy()
 
 if __name__=='__main__':main()

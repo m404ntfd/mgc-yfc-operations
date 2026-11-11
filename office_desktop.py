@@ -1,7 +1,7 @@
 """CoastYouth Retail OFFICE desktop client; shares the Operations server."""
 import json,os,sys,threading
 from pathlib import Path
-from pos_desktop import server_url
+from desktop_connection import server_url, connect_before_open
 
 def save_connection(settings,address):
  from pos_kiosk import KioskStore
@@ -49,7 +49,7 @@ class OfficeBridge:
   if not self._trusted():return {'error':'Open the configured OFFICE server.'}
   if not hasattr(self,'_updates'):
    self._store=KioskStore(Path(os.environ.get('APPDATA',str(Path.home())))/'CoastYouthRetailOffice'/'settings.json')
-   self._updates=PosUpdater(self,app='office',current='1.14.0')
+   self._updates=PosUpdater(self,app='office',current='1.15.0')
   from computer_identity import computer_info
   return {'computer':computer_info(),'device':self._store.data['device'],'version':self._updates.version,'updater':True}
  def office_update_status(self,ident=None):
@@ -98,8 +98,6 @@ def main():
  if '--apply-pos-update' in sys.argv:
   from pos_updater import apply_update
   apply_update(sys.argv[sys.argv.index('--apply-pos-update')+1]);return
- import tkinter as tk
- from tkinter import ttk,messagebox
  import webview
  if '--smoke-test' in sys.argv:
   errors=[];window=webview.create_window('OFFICE startup check',html='<html><body>OFFICE</body></html>',hidden=True)
@@ -114,24 +112,13 @@ def main():
  from desktop_startup import startup_update,claim_instance
  if not claim_instance('office'):return
  directory=Path(os.environ.get('APPDATA',str(Path.home())))/'CoastYouthRetailOffice'
- if startup_update('office','1.14.0',directory/'settings.json'):return
+ if startup_update('office','1.15.0',directory/'settings.json'):return
  settings=directory/'settings.json';address='http://localhost:8080'
  if settings.exists():
   try:address=server_url(json.loads(settings.read_text(encoding='utf-8'))['server'])
   except Exception:pass
- if not settings.exists() or '--configure' in sys.argv:
-  root=tk.Tk();root.title('CoastYouth Retail OFFICE');root.geometry('620x280');root.resizable(False,False)
-  frame=ttk.Frame(root,padding=24);frame.pack(fill='both',expand=True)
-  ttk.Label(frame,text='Connect OFFICE',font=('Segoe UI',20,'bold')).pack(anchor='w')
-  ttk.Label(frame,text='Use your existing Operations server address.\nSign in as an administrator next to register this computer.').pack(anchor='w',pady=16)
-  value=tk.StringVar(value=address);ttk.Entry(frame,textvariable=value).pack(fill='x');chosen=[]
-  def save():
-   try:
-    url=save_connection(settings,value.get());chosen.append(url);root.destroy()
-   except Exception as e:messagebox.showerror('OFFICE connection',str(e),parent=root)
-  ttk.Button(frame,text='Connect',command=save).pack(anchor='e',pady=16);root.mainloop()
-  if not chosen:return
-  address=chosen[0]
+ address=connect_before_open('office',address,lambda candidate:save_connection(settings,candidate),configure=not settings.exists() or '--configure' in sys.argv)
+ if not address:return
  directory.mkdir(parents=True,exist_ok=True);office_window(address,directory)
  webview.settings['OPEN_DEVTOOLS_IN_DEBUG']=False
  webview.start(gui='edgechromium',debug=False,private_mode=False,storage_path=str(directory/'webview'))
