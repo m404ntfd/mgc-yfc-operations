@@ -1,25 +1,27 @@
-# CoastYouth Retail startup and update fixes
+# CoastYouth Retail remote connections and recovery
 
-Server / Server Admin / Computer Setup 0.56.0 · DESK 1.17.0 · OFFICE 1.14.0 · STORE OPS desktop 1.3.0
+Server / Server Admin / Computer Setup 0.57.0 · DESK 1.18.0 · OFFICE 1.15.0 · STORE OPS desktop 1.4.0
 
-## Changes
+## Remote connections
 
-- Installed DESK, OFFICE, STORE OPS and standalone Server Admin check for updates when they start. A newer version offers Update or Not now. Selecting Update downloads and verifies the installer, closes the starting application, installs into its existing folder and reopens it. Offline or failed checks allow the application to open. A failed previous installation is reported instead of immediately repeating it.
-- The shared server checks after startup. Selecting Update retains administrator sign-in, staff notification/readiness, backup and coordinated restart protections. The server and STORE OPS web app use the existing managed update process.
-- OFFICE maximizes after successful sign-in, including a restored session. Failed sign-in keeps the normal login window. Staff can restore or resize OFFICE afterward without routine refreshes maximizing it again.
-- DESK's My work is finished — update button records readiness separately from the download and countdown. The banner explains what it is waiting for, keeps download errors visible and offers Retry update download. Staff can choose Keep working while waiting. A new interaction cancels their readiness. Existing checks continue to block installation with unfinished sales, forms, pending writes or a shared-server update in progress.
-- Download retry rechecks the active request and installer checksum. New DESK clients retain the original warning deadline; older clients can retry by restarting their warning period. Installers are instructed not to close other running applications or restart Windows automatically.
+- Native connection checks, administrator approval requests, Server Admin requests and desktop update requests identify themselves as CoastYouth Retail. This resolves the Cloudflare rejection of the default Python client signature without weakening certificate verification or changing website security settings.
+- DESK, OFFICE and STORE OPS verify the configured server before opening their work screen. When the server is unavailable, a connection screen offers Retry connection, Change server and Close. Staff can connect their VPN and retry without restarting the application.
+- A changed address is saved only after a successful check. Failed, canceled, denied or abandoned checks retain the previous address and device identity. DESK retains its administrator exit-passcode requirement for changing an existing protected connection.
+- Entering operations.coastyfc.com without a scheme uses HTTPS. Local server names/IP addresses remain supported. Connection checks do not follow redirects, send credentials or change server records.
+- STORE OPS receives the same connection recovery options. Standalone Server Admin retains its existing editable address and Test connection controls.
 
-## Manual installation
+## Connecting from another network
 
-1. Create and verify a fresh backup on the existing server. Finish sales and save all forms, then close the desktop clients. Use Exit server to stop the server before running its manual installer.
-2. Install Server 0.56.0 over the existing installation, keeping its current folder and data location. Reopen it and confirm existing records are present.
-3. Install DESK 1.17.0, OFFICE 1.14.0 and STORE OPS 1.3.0 on computers that use those apps. Keep each client's existing server connection. Computer Setup includes all installers; select only the applications needed on that computer.
+Install the desktop clients needed on that computer, then use https://operations.coastyfc.com as the server address. Use the base address only, without /office or /pos. Sign in using the existing server account and complete administrator terminal registration if this is a new computer.
 
-The stuck update button can be bypassed by using these manual installers after work is saved and applications are closed. Startup checks take effect after this version is installed. The server update is required for the new DESK banner; the desktop installers add native startup checks and OFFICE maximization. The Server installer also offers standalone Server Admin for computers that use it separately.
+Alternatively, connect the computer to the store VPN and use the server address accessible through that VPN. If the VPN is disconnected when the application opens, connect it and select Retry connection. Change server allows correction of an old IP address or switching to the public HTTPS address.
 
-## Data preservation and verification
+The existing store server must be running and reachable. These clients use its existing database; no second server or data copy is needed. Offline checkout is not provided. A connection interruption during existing work does not automatically reload or switch servers; existing unsaved-work and transaction-retry protections remain in place.
 
-No database schema changes or catalog imports are included. The release does not reset timecards, open punches or breaks, reservations, attachments, sales, accounts, products, prices, taxes, users, settings or terminal registrations. Existing installation IDs and data/configuration locations are preserved. Publishing does not install updates or restart a live store.
+## Installation and data preservation
 
-Checks cover startup consent and cancellation, offline and failed downloads, safe helper handoff, retry timing, unfinished-work protection, native OFFICE sign-in/maximization and browser update controls. Release checks also exercise a populated 0.55.0 upgrade, backup, repeated startup and rollback, plus real installers and client self-updates with retained settings and data.
+Create and verify a fresh backup before updating the server. Finish transactions and save forms; close desktop clients. Use Exit server before manually installing the server update. Install over existing folders and retain the existing data location and connection settings. Do not uninstall or reset data. Computer Setup lets you select the applications needed on each computer.
+
+No database schema, operational records, account permissions or catalog imports are changed by this release. Timecards, open punches/breaks, reservations, attachments, sales, products, prices, taxes, customers, users, settings and terminal registrations remain in the shared server. Publishing does not install updates or restart the live server.
+
+Release checks cover identified native requests, HTTPS verification, redirect refusal, VPN retry, verified address changes, canceled/denied/failed saves, initial setup, retained device settings, real desktop clients, populated 0.56.0 upgrade/backup/rollback, and Windows installers/self-updates. Read-only checks also verified the updated connection code against the public operations.coastyfc.com endpoint; no live records or credentials were used.
