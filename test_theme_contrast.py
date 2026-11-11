@@ -10,7 +10,7 @@ AUDIT = r"""() => {
  const lum=c=>c.map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4}).reduce((a,v,i)=>a+v*[.2126,.7152,.0722][i],0);
  const background=e=>{let chain=[];for(let p=e;p;p=p.parentElement)chain.unshift(p);return chain.reduce((c,p)=>over(rgba(getComputedStyle(p).backgroundColor),c),[255,255,255]);};
  let issues=[];
- for(const e of document.querySelectorAll('button,summary,input,select,textarea,label,p,h1,h2,h3,strong,small,span,a,th,td')){
+ for(const e of document.querySelectorAll('button,summary,input,select,textarea,label,p,h1,h2,h3,strong,small,span,time,a,th,td')){
   if(!e.checkVisibility({checkOpacity:true,checkVisibilityCSS:true})||e.disabled||e.closest('[hidden]'))continue;
   let text=[...e.childNodes].filter(n=>n.nodeType===3).map(n=>n.textContent).join('').trim();if(e.matches('input,textarea,select'))text=e.value||e.placeholder;if(!text)continue;
   let s=getComputedStyle(e),bg=background(e),fg=over(rgba(s.color),bg),a=lum(fg),b=lum(bg),ratio=(Math.max(a,b)+.05)/(Math.min(a,b)+.05),limit=parseFloat(s.fontSize)>=24||(parseFloat(s.fontSize)>=18.66&&parseInt(s.fontWeight)>=700)?3:4.5;
