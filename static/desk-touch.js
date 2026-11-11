@@ -33,10 +33,11 @@ function deskQuantityControl(line,index){
  }
  function addKeypads(){
   for(const input of document.querySelectorAll('#posManual input[type=number],#posCash input[type=number],#flowChoices input[type=number],#storeWeight input[type=number],#creditPay input[type=number]')){
-   if(input.closest('.deskNumberField')||input.closest('#posAdmin')||input.closest('#posSetup')||input.hidden)continue;
-   const wrap=document.createElement('span');wrap.className='deskNumberField';input.before(wrap);wrap.append(input);
+   if(input.classList.contains('deskKeypadInput')||input.closest('#posAdmin')||input.closest('#posSetup')||input.hidden||!input.parentElement.matches('label'))continue;
+   // Keep the input mounted: moving a focused number field can interrupt typed input.
+   input.classList.add('deskKeypadInput');input.parentElement.classList.add('deskNumberLabel');
    input.inputMode=input.step&&input.step!=='1'?'decimal':'numeric';
-   const button=document.createElement('button');button.type='button';button.className='deskKeypadOpen';button.textContent='Keypad';button.setAttribute('aria-label','Open keypad for '+fieldName(input));wrap.append(button);
+   const button=document.createElement('button');button.type='button';button.className='deskKeypadOpen';button.textContent='Keypad';button.setAttribute('aria-label','Open keypad for '+fieldName(input));input.after(button);
    button.onclick=e=>{e.preventDefault();if(!input.disabled&&!input.readOnly)openKeypad(input);};
   }
  }

@@ -385,9 +385,9 @@ dialog.catalogSetup{width:min(940px,calc(100vw - 48px));max-width:calc(100vw - 4
  .deskTouch .flowDialogHeading{gap:20px;align-items:center;margin-bottom:14px}
  .deskTouch .flowDialogHeading h2{font-size:24px;line-height:1.3;margin:0}
  .deskTouch .flowClose{min-width:80px;font-size:18px}
- .deskTouch .deskNumberField{display:flex;align-items:stretch;gap:8px;margin-top:6px;min-width:0}
- .deskTouch .deskNumberField input{flex:1;min-width:0;width:0;margin:0}
- .deskTouch .deskKeypadOpen{min-width:90px;font-size:16px}
+ .deskTouch .deskNumberLabel{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 8px;align-items:end;min-width:0}
+ .deskTouch input.deskKeypadInput{grid-column:1;grid-row:2;min-width:0;width:100%;margin:0}
+ .deskTouch .deskKeypadOpen{grid-column:2;grid-row:2;min-width:90px;min-height:52px;font-size:16px}
  .deskTouch .deskAmountPad{width:490px;max-width:94vw}
  .deskTouch .deskAmountPad #deskKeypadValue{height:66px;font-size:30px;text-align:right}
  .deskTouch .deskKeypadError{min-height:22px;font-size:15px;color:var(--rt-text,#223248);margin:10px 0}

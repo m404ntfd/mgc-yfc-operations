@@ -41,7 +41,7 @@ try:
    down=p.locator(f'[data-desk-scrollbar={kind}] [data-scroll-direction="1"]');expect(down).to_be_visible();down.tap();assert p.locator(selector).evaluate('(e)=>e.scrollTop')>0
    p.locator(f'[data-desk-scrollbar={kind}] [data-scroll-direction="-1"]').tap()
   # Keypad stages input, validates it, and Cancel preserves the sale and field.
-  item(products[4]).tap();expect(p.locator('#flowChoices .deskKeypadOpen')).to_be_visible();p.locator('#flowChoices .deskKeypadOpen').tap()
+  item(products[4]).tap();expect(p.locator('#flowChoices .deskKeypadOpen')).to_be_visible();assert p.locator('#flowOpenPrice').evaluate('(e)=>e.parentElement.tagName')=='LABEL', 'Touch controls must not reparent the number field';p.locator('#flowChoices .deskKeypadOpen').tap()
   assert p.evaluate('unfinished()'), 'Keypad entry must block an automatic restart'
   p.locator('.deskAmountPad [data-key="0"]').tap();p.locator('.deskKeypadApply').tap();expect(p.locator('.deskKeypadError')).not_to_be_empty();p.locator('.deskAmountPad [data-key="clear"]').tap()
   for key in '12.50':p.locator('.deskAmountPad [data-key="'+key+'"]').tap()
