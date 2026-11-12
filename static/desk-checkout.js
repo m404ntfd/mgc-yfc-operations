@@ -118,7 +118,7 @@ async function checkoutOffice(){
  d.querySelector('#checkoutSettingsSave').onclick=async()=>{if(busy)return;if(changedForms.has(d.querySelector('form'))){checkoutError(d,Error('Add or update the choice before saving settings.'));return;}try{busy=true;const result=await retailSave('checkout-settings-save',draft);Object.assign(draft,result.settings);dirty=false;checkoutClose(d);posMessage('Checkout choices saved for this store.');}catch(e){checkoutError(d,e);}finally{busy=false;}};render();
 }
 officeCards.push({section:'sales',action:'checkout-buttons',title:'Checkout buttons & cancellation reasons',description:'Configure item and transaction discounts, surcharges and reasons for canceling sales.',icon:'▦',permission:'manage_pos'});
-officeNavigationGroups.find(g=>g.id==='policies').actions.push('checkout-buttons');
+officeNavigationGroups.splice(officeNavigationGroups.findIndex(g=>g.id==='policies')+1,0,{section:'sales',id:'checkout-choices',title:'Checkout buttons',description:'Set item and transaction choices and cancellation reasons for DESK.',actions:['checkout-buttons']});
 const checkoutOriginalOfficeAction=officeAction;officeAction=async function(action){if(action==='checkout-buttons'){try{await checkoutOffice();}catch(e){posMessage(e.message);}return;}return checkoutOriginalOfficeAction(action);};
 
 if(!officeMode){

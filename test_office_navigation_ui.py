@@ -33,6 +33,13 @@ def run():
      p.locator('#officeGroups [data-office-group='+group+']').click()
      assert 1<=p.locator('#officeTiles [data-office-action]').count()<=5
      assert p.locator('#officeGroupHeading h2').inner_text()
+   # New checkout configuration keeps the existing groups short and is searchable.
+   p.locator('#officeNav [data-office-section=sales]').click()
+   p.locator('#officeGroups [data-office-group=checkout-choices]').click()
+   expect(p.locator('#officeTiles [data-office-action=checkout-buttons]')).to_be_visible()
+   p.locator('#officeTiles [data-office-action=checkout-buttons]').click()
+   expect(p.locator('#checkoutSettingsSave')).to_be_visible()
+   p.locator('#checkoutSettingsCancel').click()
    # Home and the item hierarchy match the reference's short task tiles.
    p.locator('#officeNav [data-office-section=home]').click()
    p.evaluate("document.body.dataset.retailTheme='glass-teal';document.documentElement.dataset.theme='light'")

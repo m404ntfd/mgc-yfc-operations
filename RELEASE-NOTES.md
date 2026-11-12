@@ -16,7 +16,7 @@ This release brings the approved touchscreen checkout screens to DESK and the ch
 
 ## OFFICE configuration
 
-Under Sales → Taxes & payment rules, open Checkout buttons & cancellation reasons. Administrators with Manage POS permission can add, copy, edit and delete per-store choices. Existing discount limits, surcharge limits, return rules and manager approvals remain enforced.
+Under Sales → Checkout buttons, open Checkout buttons & cancellation reasons. Administrators with Manage POS permission can add, copy, edit and delete per-store choices. Existing discount limits, surcharge limits, return rules and manager approvals remain enforced.
 
 ## Installation and data preservation
 
