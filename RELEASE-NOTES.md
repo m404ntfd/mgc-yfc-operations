@@ -1,28 +1,26 @@
-# CoastYouth Retail Checkout and Store Settings — v0.58.2
+# CoastYouth Retail Combined Update — v0.58.3
 
-Selecting a product starts a sale and adds it to the receipt, including products with explicitly configured taxes when the store has no separate default rate. Open-price and weighed items ask for the required amount first; canceling leaves existing sale items unchanged.
+This release combines all completed Giving and Retail work with the DESK screen-fit correction. It is the current update for the shared Operations server, OFFICE, DESK and STORE OPS screens.
 
-## Checkout corrections
+## DESK touchscreen correction
 
-- Fixed the blanket receipt-and-tax setup warning that prevented imported products from starting a sale. Product tax selections, including non-taxable and zero-rate selections, are honored without inventing a store default rate.
-- Taxable products or manual amounts without a configured tax remain blocked with instructions to select a product tax or confirm the store default in OFFICE.
-- Fixed native DESK startup so the registered computer identity is resolved before loading the store catalog. Routine background connection checks no longer silently prevent a product tap.
-- Price, quantity, discount, bundle and refund calculations retain the tax rates captured on each sale. Existing completed receipts are not recalculated.
+- Fits the register within 1920×1080 at 100% Windows scaling. The top menu is now included in the available screen height, so receipt controls, scroll arrows and the Cash Advance button stay visible.
+- Keeps the existing large touch buttons, product tiles, quantity controls and keypads. Long product lists and receipts scroll inside their own panels.
+- Adjusts the workspace for window/taskbar space and the update warning banner.
 
-- Standalone Server Admin reports 0.58.2 after installation so its startup update check recognizes that the current server package is already installed.
+## Combined Giving and Retail features
 
-## Shared store setup
+- Retains the Giving workspace in OFFICE: donor management and profile history, received gifts and audited corrections, monthly giving drafts and change history, saved statements and printing, delivery preparation/cancellation, and filtered gift history.
+- Retains the OFFICE status bar and its theme contrast correction.
+- Includes first-product-tap checkout, open-price and weight prompts with safe cancellation, product-specific taxes, and shared store catalog/tax/receipt settings for registered terminals from v0.58.2.
+- Giving card processing, automatic recurring charges, donor self-service and automatic statement emails remain future development. Prepared statement deliveries are not automatically sent.
 
-- Terminal setup shows the registered store and allows an administrator to select the store for a new checkout. Existing registered devices retain their assignment.
-- Every checkout assigned to a store uses that store's catalog, taxes and receipt branding. OFFICE lists the store beside each terminal. Changing a terminal's store requires its open drawer and saved sales to be resolved first.
-- Legacy receipt-only Thrift Mart profiles can read a previously confirmed shared tax rate without rewriting the saved profile.
+## Installation and existing data
 
-## Install and preserve existing data
+Update the existing Operations server to **0.58.3**, then close and reopen DESK, OFFICE and STORE OPS. These screens are delivered by the shared server. The native launcher versions remain DESK 1.18.0, OFFICE 1.15.0 and STORE OPS 1.4.0; new copies of their installers are included for additional computers or reinstalls. Standalone Server Admin reports 0.58.3.
 
-Update the existing Operations server to 0.58.2, then close and reopen DESK and OFFICE. These screens are delivered by the shared server; the native launchers remain DESK 1.18.0, OFFICE 1.15.0 and STORE OPS 1.4.0. Download the individual installers or Computer Setup for additional computers or reinstalling the clients.
+Create and verify a fresh backup before installing. Finish transactions and save forms. Install over the existing application and retain its data folder and connection settings. Do not reset or replace the database. Publishing this release does not install or restart the live server.
 
-Create and verify a fresh backup before installing. Finish transactions and save forms. Install over the existing application, retaining its data folder and connection settings. Do not uninstall or reset the database. Publishing this release does not restart or install anything on the live server.
+No database migration or operational-record rewrite is introduced by this update. Timecards, punches, breaks, reservations, attachments, sales, products, prices, taxes, users, donor records, accounts, settings and terminal identities remain in the shared data source.
 
-No schema migration, catalog import, tax-rate assignment or operational-record rewrite is introduced by these checkout fixes. Timecards, open punches and breaks, reservations, attachments, completed sales, products, accounts, users, settings and terminal identities remain in the shared database. The Giving functionality and OFFICE status bar from the previous releases are retained.
-
-Release verification includes product-tap and touch-screen flows, open-price and weight cancellation, multiple registers sharing a store, captured taxes and refunds, Windows/Linux tests, packaged assets, populated upgrade/backup/rollback, and Windows installer preservation checks.
+Release checks cover Giving and checkout workflows, touchscreen controls and themes, Windows/Linux tests, populated upgrade from v0.58.2, backup/rollback, native applications and actual Windows installer data preservation.

@@ -1,7 +1,5 @@
 /* Touch-first DESK at 1920 x 1080 / 100%. Kept out of OFFICE and print. */
 @media screen {
- .deskTouch .workspace{height:100dvh}
- .deskTouch.posInstallWarning .workspace{height:calc(100dvh - 90px)}
  .deskTouch button,.deskTouch summary{min-height:48px;touch-action:manipulation}
  .deskTouch input:not([type=checkbox]):not([type=radio]),.deskTouch select,.deskTouch textarea{min-height:52px;font-size:17px;padding:12px}
  .deskTouch input[type=checkbox],.deskTouch input[type=radio]{width:24px;height:24px;vertical-align:middle}
@@ -87,6 +85,13 @@
  .deskTouch .deskKeypadActions{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
  .deskTouch .deskKeypadActions button{flex:1;min-height:56px;font-size:17px}
  .deskTouch .deskKeypadActions [data-key=back]{flex-basis:100%}
+}
+/* Share the actual viewport with the top menu and any update banner.
+   Giving the workspace its own 100dvh pushes the bottom controls off-screen. */
+@media screen and (min-width:901px){
+ body.deskTouch{height:100dvh;display:flex;flex-direction:column}
+ .deskTouch>.sidebar,.deskTouch .workspace>header{flex:none}
+ .deskTouch .workspace,.deskTouch.posInstallWarning .workspace{height:auto;min-height:0;flex:1}
 }
 @media screen and (min-width:1700px){
  .deskTouch .registerLayout{grid-template-columns:minmax(400px,1fr) 550px 148px}

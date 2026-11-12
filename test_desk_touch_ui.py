@@ -12,9 +12,31 @@ def post(action,**data):
 def saved(page):
  ident=page.locator('#posCarts').input_value()
  with server.connect() as db:return dict(db.execute('SELECT * FROM pos_carts WHERE id=?',(ident,)).fetchone()) if ident else None
+def assert_viewport(page):
+ # A scrollable panel may contain more items, but its frame and fixed controls
+ # must stay on-screen without Playwright scrolling an ancestor to reach them.
+ page.evaluate('()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))')
+ issues=page.evaluate("""()=>{
+  const failures=[];
+  if(document.documentElement.scrollWidth>innerWidth+1||document.documentElement.scrollHeight>innerHeight+1)failures.push('Page exceeds viewport');
+  for(const e of document.querySelectorAll('.workspace,.registerLayout,.receiptPane,.receiptTools,.registerRail,.registerRail>button,.deskScroll,.deskScroll>button,#posCart>p:last-child,#posSearch')){
+   if(!e.getClientRects().length)continue;
+   const b=e.getBoundingClientRect(),name=e.id||e.className||e.textContent;
+   if(b.left<0||b.top<0||b.right>innerWidth+1||b.bottom>innerHeight+1)failures.push(name+' outside viewport');
+   for(let parent=e.parentElement;parent;parent=parent.parentElement){
+    const style=getComputedStyle(parent),r=parent.getBoundingClientRect();
+    if(/auto|scroll|hidden|clip/.test(style.overflowY)&&(b.top<r.top-1||b.bottom>r.bottom+1))failures.push(name+' clipped by '+(parent.id||parent.className));
+   }
+  }
+  return failures;
+ }""")
+ assert not issues,issues
 try:
  post('settings',store='Thrift Mart · SAMPLE',tax_bps=700,confirmed=True)
  post('terminal-save',name='Thrift Mart Register 1',device='a'*32,enabled=True,hostname='THRIFTMART-POS-01')
+ info=dict(app='pos',device='a'*32,version='1.18.0',configured=True,nonce='b'*64,computer=dict(id='c'*32,hostname='SAMPLE-TOUCH-PC',macs=[],os='Windows fixture'))
+ assert f.call('computers/self',info)[0]==200
+ assert f.call('computers/register',dict(id='c'*32,revision=0,name='Sample Touch Register',role='pos',app='pos',device='a'*32))[0]==200
  products=[]
  for i in range(48):
   names=['Large Hardback','Small Hardback','Large Paperback','Magazines','Clothes & Accessories','Electronics','Small Paperback','Comic Books','Table Lamp','VHS Tapes','CD & DVDs','Records','Dining Chair','Furniture','Household','Delivery Fee']
@@ -26,8 +48,9 @@ try:
  with sync_playwright() as pw:
   browser=pw.chromium.launch(executable_path=os.environ.get('TEST_CHROMIUM') or None)
   ctx=browser.new_context(viewport={'width':1920,'height':1080},device_scale_factor=1,has_touch=True,reduced_motion='reduce');p=ctx.new_page();errors=[];p.on('pageerror',lambda e:errors.append(str(e)))
-  ctx.add_init_script("window.pywebview={api:{kiosk_info:async()=>({device:'a'.repeat(32),nonce:'b'.repeat(64),configured:true})}}")
+  ctx.add_init_script('window.fixtureInfo='+json.dumps(info)+';window.pywebview={api:{kiosk_info:async()=>window.fixtureInfo,terminal_info:async()=>window.fixtureInfo}};')
   p.goto(f'http://127.0.0.1:{f.port}/pos');password_login_page(p).locator('#login [name=name]').fill('Admin');p.locator('#login [name=password]').fill('testpassword');p.locator('#login button').tap();expect(p.locator('#posCatalog')).to_be_visible()
+  expect(p.locator('#nativeTerminalStatus')).to_contain_text('Registered');assert_viewport(p)
   def item(ident):return p.locator('[data-pos-product="'+ident+'"]')
   item(products[0]).tap();expect(p.locator('.deskQuantity output')).to_have_text('1')
   p.locator('[data-desk-quantity="0"][data-step="1"]').tap();expect(p.locator('.deskQuantity output')).to_have_text('2');expect(p.locator('#posCart')).to_contain_text('$4.28')
@@ -60,6 +83,12 @@ try:
    item(ident).tap();expect(p.locator('#posStatus')).not_to_have_text('Saving…')
   expect(p.locator('[data-desk-scrollbar=receipt]')).to_be_visible();p.locator('[data-desk-scrollbar=receipt] [data-scroll-direction="1"]').tap();assert p.locator('.receiptLines').evaluate('(e)=>e.scrollTop')>0;p.locator('[data-desk-scrollbar=receipt] [data-scroll-direction="-1"]').tap()
   # Fit the target screen and keep payment/receipt totals in view.
+  assert_viewport(p)
+  # Window chrome/taskbar and update notice must reduce the workspace, not clip it.
+  p.set_viewport_size({'width':1920,'height':1040});assert_viewport(p)
+  p.set_viewport_size({'width':1920,'height':1080})
+  p.evaluate("document.body.classList.add('posInstallWarning')");assert_viewport(p)
+  p.evaluate("document.body.classList.remove('posInstallWarning')");assert_viewport(p)
   for selector in ['#posPayNow','.receiptTools','#posCart>p:last-child','#posSearch']:
    box=p.locator(selector).bounding_box();assert box and box['x']>=0 and box['y']>=0 and box['x']+box['width']<=1921 and box['y']+box['height']<=1081,(selector,box)
   for selector in ['#posSearch','#posCarts','[data-desk-quantity="0"][data-step="1"]','#posPayNow','#retailNext']:
