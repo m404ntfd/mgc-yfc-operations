@@ -91,7 +91,10 @@ class HierarchyTests(unittest.TestCase):
   policy=self.f.call('pos/policies')[1]['policy'];refund=self.post('refund',sale=sale['id'],policy_revision=policy['revision'],refund_revision=0,reason='Fixture return',lines=[dict(index=0,quantity=1)],confirmed=True)['refund'];self.assertEqual(refund['total'],1070)
  def test_historical_records_and_keys_stay_intact(self):
   self.product=self.post('product',name='Old item',category='Furniture',price=1000,taxable=False)['product']['id']
-  with patch.object(server,'catalog_stamp',side_effect=lambda c,line,legacy:line):sale=self.sale()
+  # Legacy receipts lacked hierarchy snapshots but still captured their tax.
+  def legacy_stamp(c,line,legacy):
+   server.catalog_tax(line,legacy);return line
+  with patch.object(server,'catalog_stamp',side_effect=legacy_stamp):sale=self.sale()
   with server.connect() as c:
    self.assertNotIn('reporting',json.loads(c.execute('SELECT body FROM pos_sales WHERE id=?',(sale['id'],)).fetchone()[0])['lines'][0])
    account=c.execute("SELECT profile_id FROM receipt_profiles WHERE name='Employee'").fetchone()[0]
