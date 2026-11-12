@@ -64,7 +64,7 @@ try:
    down=p.locator(f'[data-desk-scrollbar={kind}] [data-scroll-direction="1"]');expect(down).to_be_visible();down.tap();assert p.locator(selector).evaluate('(e)=>e.scrollTop')>0
    p.locator(f'[data-desk-scrollbar={kind}] [data-scroll-direction="-1"]').tap()
   # Keypad stages input, validates it, and Cancel preserves the sale and field.
-  item(products[4]).tap();expect(p.locator('#flowChoices .deskKeypadOpen')).to_be_visible();assert p.locator('#flowOpenPrice').evaluate('(e)=>e.parentElement.tagName')=='LABEL', 'Touch controls must not reparent the number field';p.locator('#flowChoices .deskKeypadOpen').tap()
+  item(products[4]).tap();expect(p.locator('.deskAmountPad')).to_be_visible();assert p.locator('#flowOpenPrice').evaluate('(e)=>e.parentElement.tagName')=='LABEL', 'Touch controls must not reparent the number field'
   assert p.evaluate('unfinished()'), 'Keypad entry must block an automatic restart'
   p.locator('.deskAmountPad [data-key="0"]').tap();p.locator('.deskKeypadApply').tap();expect(p.locator('.deskKeypadError')).not_to_be_empty();p.locator('.deskAmountPad [data-key="clear"]').tap()
   for key in '12.50':p.locator('.deskAmountPad [data-key="'+key+'"]').tap()
@@ -74,8 +74,8 @@ try:
     assert not p.evaluate(AUDIT.replace('document.querySelectorAll(', 'document.querySelector(".deskAmountPad").querySelectorAll(')),theme
   p.evaluate("document.body.dataset.retailTheme='harbor-blue';document.documentElement.dataset.theme='light'")
   p.screenshot(path=str(out/'DESK-Touch-Price-Keypad.png'))
-  p.locator('.deskKeypadApply').tap();expect(p.locator('#flowOpenPrice')).to_have_value('12.50');p.locator('#flowChoices button.primary').tap();expect(p.locator('#posCart')).to_contain_text('Clothes & Accessories')
-  original=saved(p);item(products[4]).tap();p.locator('#flowChoices .deskKeypadOpen').tap();p.locator('.deskAmountPad [data-key="9"]').tap();p.locator('.deskKeypadCancel').tap();expect(p.locator('#flowOpenPrice')).to_have_value('');p.locator('.flowProductCancel').tap();expect(p.locator('dialog[open]')).to_contain_text('because no price was entered');p.locator('[data-product-cancel-ok]').tap();assert saved(p)==original
+  p.locator('.deskKeypadApply').tap();expect(p.locator('#flowChoices')).to_have_count(0);expect(p.locator('#posCart')).to_contain_text('Clothes & Accessories')
+  original=saved(p);item(products[4]).tap();p.locator('.deskAmountPad [data-key="9"]').tap();p.locator('.deskKeypadCancel').tap();expect(p.locator('dialog[open]')).to_contain_text('entry was canceled');p.locator('[data-product-cancel-ok]').tap();assert saved(p)==original
   item(weight).tap();p.locator('#storeWeight .deskKeypadOpen').tap()
   for key in '2.125':p.locator('.deskAmountPad [data-key="'+key+'"]').tap()
   p.locator('.deskKeypadApply').tap();expect(p.locator('#storeWeightTotal')).to_contain_text('$4.25');p.locator('#storeWeight button.primary').tap();expect(p.locator('.deskFixedQuantity')).to_contain_text('By weight')
@@ -91,7 +91,7 @@ try:
   p.evaluate("document.body.classList.remove('posInstallWarning')");assert_viewport(p)
   for selector in ['#posPayNow','.receiptTools','#posCart>p:last-child','#posSearch']:
    box=p.locator(selector).bounding_box();assert box and box['x']>=0 and box['y']>=0 and box['x']+box['width']<=1921 and box['y']+box['height']<=1081,(selector,box)
-  for selector in ['#posSearch','#posCarts','[data-desk-quantity="0"][data-step="1"]','#posPayNow','#retailNext']:
+  for selector in ['#posSearch','#posFindCart','[data-desk-quantity="0"][data-step="1"]','#posPayNow','#retailNext']:
    box=p.locator(selector).bounding_box();assert box['height']>=48,(selector,box)
   assert p.evaluate('document.documentElement.scrollWidth<=innerWidth'), 'Horizontal page overflow'
   p.locator('#posSearch').fill('');p.locator('#posCatalog').evaluate('(e)=>e.scrollTop=0');p.screenshot(path=str(out/'DESK-Touch-Register-1920.png'))
@@ -106,9 +106,9 @@ try:
   assert not [r for r in theme_results if r['issues']],theme_results
   p.evaluate("document.body.dataset.retailTheme='harbor-blue';document.documentElement.dataset.theme='light'")
   # Cash keypad updates the existing change preview, with explicit payment confirmation.
-  p.locator('#posPayNow').tap();p.locator('#posCash .deskKeypadOpen').tap()
-  for key in '100':p.locator('.deskAmountPad [data-key="'+key+'"]').tap()
-  p.locator('.deskKeypadApply').tap();expect(p.locator('#financeCashPreview')).to_contain_text('Change to give');p.locator('#posCash button.primary').tap();expect(p.locator('#posReceipt')).to_contain_text('Receipt #')
+  p.locator('#posPayNow').tap()
+  for key in '10000':p.locator('[data-money-key="'+key+'"]').tap()
+  expect(p.locator('#checkoutChange')).not_to_be_empty();p.locator('#checkoutComplete').tap();expect(p.locator('#posReceipt')).to_contain_text('Receipt #')
   assert p.locator('#posReceipt .deskQuantity').count()==0
   p.emulate_media(media='print');expect(p.locator('.deskScroll').first).to_be_hidden();p.emulate_media(media='screen')
   assert not errors,errors;browser.close()

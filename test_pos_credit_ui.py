@@ -1,4 +1,4 @@
-from test_ui_helpers import office_setting
+from test_ui_helpers import office_setting,select_saved_sale
 from test_ui_helpers import password_login_page
 import os
 from pathlib import Path
@@ -27,15 +27,15 @@ def run():
    p.locator('#creditAdjust button').first.click();expect(p.locator('.creditBalance')).to_contain_text('$55.00');expect(p.locator('#creditHistory tr')).to_have_count(2)
    assert not p.evaluate('changedForms.has(document.querySelector("#creditAdjust"))')
    out=Path(os.environ.get('TEST_ARTIFACTS','test-artifacts'));out.mkdir(parents=True,exist_ok=True);p.screenshot(path=str(out/'POS-Store-Credit-Accounts-Preview.png'))
-   p.locator('#creditClose').click();p.goto(f'http://127.0.0.1:{f.port}/pos');p.locator('#posCarts').select_option(cart['id']);p.locator('#creditOpen').click();p.locator('[data-credit="1"]').click();p.locator('#creditPay [name=amount]').fill('20');p.locator('#creditPay [name=tender]').fill('10');expect(p.locator('#creditRemainder')).to_contain_text('$9.93')
+   p.locator('#creditClose').click();p.goto(f'http://127.0.0.1:{f.port}/pos');select_saved_sale(p,cart['id']);p.locator('#posPayNow').click();p.locator('[data-method=credit]').click();p.locator('#checkoutAccount').select_option('1');p.locator('#checkoutCreditAmount').fill('20');p.locator('#checkoutTender').fill('10.00');expect(p.locator('#checkoutDue')).to_contain_text('$9.93')
    # Server commits, response is lost: retry must retrieve the original sale.
    def lose(route):
     route.fetch();route.abort();p.unroute('**/api/pos/credit',lose)
-   p.route('**/api/pos/credit',lose);p.locator('#creditPay').get_by_role('button',name='Complete store-credit payment',exact=True).click();expect(p.locator('#creditRetry')).to_be_visible(timeout=25000)
+   p.route('**/api/pos/credit',lose);p.locator('#checkoutComplete').click();expect(p.locator('#checkoutComplete')).to_have_text('Retry / check this payment',timeout=25000)
    # Pending requests can be safely retried from the account dialog.
-   p.locator('#creditRetry').click();expect(p.locator('#creditDialog')).not_to_be_visible();expect(p.locator('#posReceipt')).to_contain_text('Store credit: $20.00');expect(p.locator('#posReceipt')).to_contain_text('Change: $0.07')
+   p.locator('#checkoutComplete').click();expect(p.locator('#checkoutPaymentForm')).not_to_be_visible();expect(p.locator('#posReceipt')).to_contain_text('Store credit: $20.00');expect(p.locator('#posReceipt')).to_contain_text('Change: $0.07')
    assert len(f.call('pos/sales')[1]['sales'])==1
-   p.locator('#creditOpen').click();expect(p.locator('.creditBalance')).to_contain_text('$35.00');expect(p.locator('#creditHistory tr')).to_have_count(3)
+   p.locator('#creditOpen').click();p.locator('[data-credit="1"]').click();expect(p.locator('.creditBalance')).to_contain_text('$35.00');expect(p.locator('#creditHistory tr')).to_have_count(3)
    p.locator('#creditClose').click();p.goto(f'http://127.0.0.1:{f.port}/office');office_setting(p,'accounts').click();p.locator('#creditCreateDetails summary').click();p.locator('#creditCreate [name=name]').fill('New sample account');p.locator('#creditCreate button').first.click();expect(p.locator('#creditSummary')).to_contain_text('New sample account')
    for width,height in [(1366,768),(1024,768)]:
     p.set_viewport_size({'width':width,'height':height});assert p.evaluate('document.documentElement.scrollWidth<=innerWidth')

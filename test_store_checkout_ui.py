@@ -53,18 +53,18 @@ try:
   p.unroute('**/api/computers/self')
   assert p.evaluate("localStorage.getItem('coastyouth-retail-device')")=='c'*32
   first=p.evaluate('posCurrent.id');assert p.evaluate('posCurrent.store_id')=='binopoly'
-  p.locator('[data-pos-product="'+opened+'"]').tap();expect(p.locator('#flowOpenPrice')).to_be_visible();p.locator('.flowProductCancel').tap()
+  p.locator('[data-pos-product="'+opened+'"]').tap();expect(p.locator('#deskKeypadValue')).to_be_visible();p.locator('.deskKeypadCancel').tap()
   expect(p.locator('dialog[open]')).to_contain_text('because no price was entered');p.locator('[data-product-cancel-ok]').tap();expect(p.locator('#posCart')).to_contain_text('$5.50')
   p.locator('[data-pos-product="'+weighed+'"]').tap();p.locator('#storeWeight [name=weight]').fill('2.25');p.locator('#storeWeight button.primary').tap();expect(p.locator('#posCart')).to_contain_text('$10.45');wait_for_pos_save(p)
   expect(p.locator('#posStatus')).to_contain_text('added to the sale and saved')
   p.screenshot(path=str(out/'DESK-Registered-Store-Receipt.png'))
-  p.locator('#posPayNow').tap();p.locator('#posCash [name=tender]').fill('20');p.locator('#posCash button.primary').tap();expect(p.locator('#posReceipt')).to_contain_text(receipt['footer']);wait_for_pos_save(p)
+  p.locator('#posPayNow').tap();p.locator('#checkoutTender').fill('20.00');p.locator('#checkoutComplete').tap();expect(p.locator('#posReceipt')).to_contain_text(receipt['footer']);wait_for_pos_save(p)
   previous=rows('pos_sales');p.reload();expect(p.locator('#retailStoreBadge')).to_have_text('Binopoly · SAMPLE')
   p.locator('[data-pos-product="'+fixed+'"]').tap();expect(p.locator('#posCart')).to_contain_text('$5.50');assert p.evaluate('posCurrent.id')!=first
   # A second registered PC uses exactly the same store receipt and tax configuration.
   second=native(infos[1]);expect(second.locator('#retailStoreBadge')).to_have_text('Binopoly · SAMPLE');expect(second.locator('#nativeTerminalSetup')).not_to_be_visible()
   second.locator('[data-pos-product="'+fixed+'"]').click();expect(second.locator('#posCart')).to_contain_text('$5.50');wait_for_pos_save(second)
-  second.locator('#posPayNow').click();second.locator('#posCash [name=tender]').fill('10');second.locator('#posCash button.primary').click();expect(second.locator('#posReceipt')).to_contain_text(receipt['footer']);wait_for_pos_save(second)
+  second.locator('#posPayNow').click();second.locator('#checkoutTender').fill('10.00');second.locator('#checkoutComplete').click();expect(second.locator('#posReceipt')).to_contain_text(receipt['footer']);wait_for_pos_save(second)
   assert rows('pos_sales')[:len(previous)]==previous
   # OFFICE exposes store assignments beside terminals, not per-terminal tax/receipt settings.
   officeContext=browser.new_context(viewport={'width':1920,'height':1080});assert officeContext.request.post(origin+'/api/login',data={'name':'Admin','password':'testpassword'},headers={'X-Dispatch':'1'}).status==200
@@ -76,7 +76,7 @@ try:
   new=native(info);expect(new.locator('#nativeTerminalForm [name=store_id]')).to_be_visible();new.locator('#nativeTerminalForm [name=name]').fill('Binopoly · New sample register');new.locator('#nativeTerminalForm [name=store_id]').select_option('binopoly')
   new.screenshot(path=str(out/'DESK-Register-Store.png'))
   new.locator('#nativeTerminalForm button').click();expect(new.locator('#nativeTerminalSetup')).not_to_be_visible();expect(new.locator('#retailStoreBadge')).to_have_text('Binopoly · SAMPLE')
-  new.locator('[data-pos-product="'+opened+'"]').tap();new.locator('#flowOpenPrice').fill('12');new.locator('#flowChoices button.primary').tap();expect(new.locator('#posCart')).to_contain_text('$13.20')
+  new.locator('[data-pos-product="'+opened+'"]').tap();new.locator('#deskKeypadValue').fill('12');new.locator('.deskKeypadApply').tap();expect(new.locator('#posCart')).to_contain_text('$13.20')
   for name,values in protected.items():assert rows(name)==values,name
   assert not errors,errors;browser.close()
  print('PASS native saved-session store resolution, first tap during heartbeat, shared receipts/taxes across PCs, cancellation, weight/open price, registration, historical sales and protected records')

@@ -18,24 +18,23 @@ def run():
    form.locator('[name=name]').fill('MGC Test Store');form.locator('[name=tax]').fill('7.25');form.locator('[name=confirmed]').check();form.locator('button').first.click()
    expect(p.locator('#storeProfileForm [name=name]')).to_have_value('MGC Test Store');p.locator('dialog[open] .flowClose').click();office_setting(p,'catalog').click()
    product=p.locator('#flowProductForm');product.locator('[name=name]').fill('Catalog shirt');product.locator('[name=category]').select_option('Clothing');product.locator('[name=price]').fill('3.99');product.locator('button.primary').click()
-   expect(p.locator('#flowProductStatus')).to_contain_text('Product saved');p.goto(origin+'/pos');p.locator('#posNew').click();expect(p.locator('#posCart')).to_contain_text('Saved on server')
-   p.locator('[data-pos-product]').click();expect(p.locator('#posCart')).to_contain_text('$4.28')
-   p.locator('summary').filter(has_text='Manual item').click();form=p.locator('#posManual')
-   form.locator('[name=name]').fill('Manual item');form.locator('[name=category]').fill('Housewares');form.locator('[name=price]').fill('2.00');form.locator('[name=taxable]').uncheck();form.get_by_role('button',name='Add to sale',exact=True).click()
+   expect(p.locator('#flowProductStatus')).to_contain_text('Product saved');p.goto(origin+'/pos');expect(p.locator('#posCart')).to_contain_text('Tap a product')
+   p.locator('#posCatalog button').filter(has_text='Catalog shirt').click();expect(p.locator('#posCart')).to_contain_text('$4.28')
+   f.call('pos/product',dict(request='e'*32,name='Housewares item',category='Housewares',price=200,taxable=False));p.evaluate('posLoad()');p.locator('#posCatalog button').filter(has_text='Housewares item').click()
    expect(p.locator('#posCart')).to_contain_text('$6.28');cart=p.locator('#posCarts').input_value()
-   p.reload();expect(p.locator('#posPanel')).to_be_visible();p.locator('#posCarts').select_option(cart);expect(p.locator('#posCart')).to_contain_text('$6.28')
+   p.reload();expect(p.locator('#posPanel')).to_be_visible();expect(p.locator('#posCart')).to_contain_text('$6.28')
    # Lose the response after the server commits cash. Retry must return the same receipt.
    def lose(route):
     route.fetch();route.abort();p.unroute('**/api/pos/cash',lose)
    p.route('**/api/pos/cash',lose)
-   p.locator('#posPayNow').click();p.locator('#posCash [name=tender]').fill('10.00');p.locator('#posCash button.primary').click()
-   expect(p.locator('#posRetry')).to_be_visible();p.locator('#posRetry').click()
+   p.locator('#posPayNow').click();p.locator('#checkoutTender').fill('10.00');p.locator('#checkoutComplete').click()
+   expect(p.locator('#checkoutComplete')).to_have_text('Retry / check this payment');p.locator('#checkoutComplete').click()
    expect(p.locator('#posReceipt')).to_contain_text('Change: $3.72')
    with __import__('server').connect() as c:assert c.execute('SELECT COUNT(*) FROM pos_sales').fetchone()[0]==1
-   p.locator('#navSales').click();expect(p.locator('#posSaleList')).to_contain_text('$6.28')
+   p.locator('#navSales').click();expect(p.locator('#checkoutReceiptList')).to_contain_text('$6.28');p.locator('#checkoutReceiptClose').click()
    # Opening Operations never replaces the POS or its saved cart.
-   p.locator('#posNew').click();expect(p.locator('#posCart')).to_contain_text('Saved on server')
-   p.locator('[data-pos-product]').click();expect(p.locator('#posCart')).to_contain_text('$4.28')
+   expect(p.locator('#posCart')).to_contain_text('Tap a product')
+   p.locator('#posCatalog button').filter(has_text='Catalog shirt').click();expect(p.locator('#posCart')).to_contain_text('$4.28')
    saved=p.locator('#posCarts').input_value()
    for link,selector in [('linkClock','#workforce'),('linkReservations','#schedule'),('linkPaging','#paging')]:
     with p.expect_popup() as opened:p.locator('#'+link).click()

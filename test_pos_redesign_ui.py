@@ -1,4 +1,4 @@
-from test_ui_helpers import password_login_page
+from test_ui_helpers import password_login_page,select_saved_sale
 import os
 from pathlib import Path
 from playwright.sync_api import sync_playwright,expect
@@ -20,26 +20,26 @@ def run():
    b=pw.chromium.launch(**({'executable_path':os.environ['TEST_CHROMIUM']} if os.environ.get('TEST_CHROMIUM') else {}));p=b.new_page(viewport={'width':1366,'height':900});errors=[];p.on('pageerror',lambda e:errors.append(str(e)))
    p.add_init_script("window.pywebview={api:{kiosk_info:async()=>({configured:true,device:'a'.repeat(32),nonce:'b'.repeat(64)}),request_exit:async()=>({error:'Preview only'})}}")
    p.goto(f'http://127.0.0.1:{f.port}/pos?kiosk=1');password_login_page(p).locator('#login [name=name]').fill('Admin');p.locator('#login [name=password]').fill('testpassword');p.locator('#login button').click()
-   expect(p.locator('#posCategories button')).to_have_count(7);p.locator('#posCarts').select_option(cart['id']);expect(p.locator('#posCart')).to_contain_text('$29.93')
+   expect(p.locator('#posCategories button')).to_have_count(7);select_saved_sale(p,cart['id']);expect(p.locator('#posCart')).to_contain_text('$29.93')
    p.locator('[data-category=Clothing]').click();expect(p.locator('#posCatalog button')).to_have_count(4)
    p.locator('#posSearch').fill('jeans');expect(p.locator('#posCatalog button')).to_have_count(1);p.locator('#posSearch').fill('');p.locator('[data-category=""]').click()
-   p.locator('#posPayNow').click();expect(p.locator('#posCash [name=tender]')).to_be_focused()
-   p.locator('#posCash [name=tender]').fill('40');p.locator('#posNew').click();expect(p.locator('#posStatus')).to_contain_text('clear the cash amount');expect(p.locator('#posCarts')).to_have_value(cart['id']);p.evaluate("document.querySelector('#posCash').reset();document.querySelector('#posCashDetails').open=false")
-   p.locator('#posManualShortcut').click();expect(p.locator('#posManual [name=name]')).to_be_focused();p.locator('summary').filter(has_text='Manual item').click()
+   p.locator('#posPayNow').click();expect(p.locator('#checkoutTender')).to_be_focused()
+   p.locator('#checkoutTender').fill('40.00');expect(p.locator('#posCarts')).to_have_value(cart['id']);p.locator('#checkoutCancel').click();expect(p.locator('#posCarts')).to_have_value(cart['id'])
+   expect(p.locator('#posManualShortcut')).to_be_hidden();expect(p.locator('#posNew')).to_be_hidden()
    p.evaluate("document.querySelector('.eyebrow').textContent='DESIGN PREVIEW · SAMPLE ITEMS';document.querySelector('#posStatus').textContent='Sale saved · Select an item to add it to the receipt.'")
    out=Path(os.environ.get('TEST_ARTIFACTS','test-artifacts'));out.mkdir(parents=True,exist_ok=True)
    p.screenshot(path=str(out/'POS-Redesign-Preview.png'))
    for width,height in [(1366,768),(1280,800),(1024,768)]:
     p.set_viewport_size({'width':width,'height':height})
     assert p.evaluate('document.documentElement.scrollWidth<=innerWidth'),width
-    for selector in ['#posPayNow','#posNew','#posExitButton']:
+    for selector in ['#posPayNow','#checkoutPayLater','#posExitButton']:
      rect=p.locator(selector).bounding_box();assert rect and rect['y']+rect['height']<=height+1,(selector,rect,height)
    p.set_viewport_size({'width':1366,'height':768});p.screenshot(path=str(out/'POS-Redesign-Compact-Preview.png'))
    # Receipt printing must include the receipt and exclude register/catalog chrome.
-   p.locator('#posPayNow').click();p.locator('#posCash [name=tender]').fill('40');p.locator('#posCash button.primary').click();expect(p.locator('#posReceipt')).to_contain_text('Change: $10.07')
+   p.locator('#posPayNow').click();p.locator('#checkoutTender').fill('40.00');p.locator('#checkoutComplete').click();expect(p.locator('#posReceipt')).to_contain_text('Change: $10.07')
    p.emulate_media(media='print');expect(p.locator('#posReceipt')).to_be_visible();expect(p.locator('#posCatalog')).to_be_hidden();p.emulate_media(media='screen')
-   p.locator('#posNew').click();expect(p.locator('#posCart')).to_contain_text('Saved on server');expect(p.locator('#posReceipt')).to_be_hidden()
-   p.locator('#posSalesShortcut').click();p.locator('#posSaleList button').first.click();expect(p.locator('#posCashDetails')).to_be_hidden();expect(p.locator('#posPayNow')).to_be_disabled();p.locator('.receiptBack').click();expect(p.locator('#posReceipt')).to_be_hidden();expect(p.locator('#posCart')).to_be_visible()
+   p.locator('#posCatalog button').first.click();expect(p.locator('#posReceipt')).to_be_hidden()
+   p.locator('#posSalesShortcut').click();p.locator('[data-checkout-receipt]').first.click();expect(p.locator('#checkoutReceiptPreview')).to_contain_text('Change');p.locator('#checkoutReceiptClose').click();expect(p.locator('#posCart')).to_be_visible()
    assert not errors,errors;b.close()
  finally:f.close()
  print('PASS category/search tiles, saved receipt, cash guard, shortcuts, compact screens, cash checkout and print layout')

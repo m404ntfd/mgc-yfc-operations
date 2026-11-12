@@ -32,19 +32,26 @@ function deskQuantityControl(line,index){
   return input.getAttribute('aria-label')||[...(input.labels||[])].map(label=>[...label.childNodes].filter(n=>n.nodeType===3).map(n=>n.textContent.trim()).join(' ')).filter(Boolean).join(' ')||'Enter value';
  }
  function addKeypads(){
-  for(const input of document.querySelectorAll('#posManual input[type=number],#posCash input[type=number],#flowChoices input[type=number],#storeWeight input[type=number],#creditPay input[type=number]')){
+  for(const input of document.querySelectorAll('#posManual input[type=number],#posCash input[type=number],#flowChoices input[type=number],#storeWeight input[type=number],#creditPay input[type=number],#checkoutPaymentForm input[type=number],#cashAdvanceForm input[type=number]')){
    if(input.classList.contains('deskKeypadInput')||input.closest('#posAdmin')||input.closest('#posSetup')||input.hidden||!input.parentElement.matches('label'))continue;
    // Keep the input mounted: moving a focused number field can interrupt typed input.
    input.classList.add('deskKeypadInput');input.parentElement.classList.add('deskNumberLabel');
    input.inputMode=input.step&&input.step!=='1'?'decimal':'numeric';
    const button=document.createElement('button');button.type='button';button.className='deskKeypadOpen';button.textContent='Keypad';button.setAttribute('aria-label','Open keypad for '+fieldName(input));input.after(button);
    button.onclick=e=>{e.preventDefault();if(!input.disabled&&!input.readOnly)openKeypad(input);};
+   if(input.id==='flowOpenPrice')openKeypad(input);
   }
  }
  function openKeypad(input){
   const name=fieldName(input),decimal=input.step==='any'||(input.step&&Number(input.step)%1!==0);
   const dialog=flowModal(name,`<form id="deskAmountEntry"><label class="deskKeypadLabel">${esc(name)}<input id="deskKeypadValue" name="value" type="text" inputmode="${decimal?'decimal':'numeric'}" autocomplete="off"></label></form><p class="deskKeypadError" role="alert"></p><div class="deskKeypadGrid">${['7','8','9','4','5','6','1','2','3','clear','0',decimal?'.':'back'].map(key=>`<button type="button" data-key="${key}" aria-label="${key==='clear'?'Clear entry':key==='back'?'Backspace':key==='.'?'Decimal point':key}">${key==='clear'?'Clear':key==='back'?'⌫':key}</button>`).join('')}</div><div class="deskKeypadActions">${decimal?'<button type="button" data-key="back" aria-label="Backspace">⌫ Backspace</button>':''}<button type="button" class="deskKeypadCancel">Cancel</button><button type="button" class="primary deskKeypadApply">Use value</button></div>`);
   dialog.classList.add('deskAmountPad');const value=dialog.querySelector('#deskKeypadValue'),error=dialog.querySelector('.deskKeypadError');value.value=input.value;const entry=dialog.querySelector("#deskAmountEntry");entry.onsubmit=e=>{e.preventDefault();apply();};changedForms.set(entry,snapshot(entry));value.focus();value.select();
+  const openPrice=input.id==='flowOpenPrice',choiceForm=input.form,parentDialog=input.closest('dialog'),moved=[];
+  if(openPrice){
+   dialog.querySelector('.deskKeypadApply').textContent='Okay · Add to sale';
+   for(const select of choiceForm.querySelectorAll('select')){const label=select.closest('label'),marker=document.createComment('choice');label.before(marker);moved.push([label,marker]);entry.append(label);}
+   dialog.onDismiss=()=>{if(value.value.trim())input.value=value.value;for(const [label,marker]of moved)marker.replaceWith(label);parentDialog.querySelector('.flowClose').click();};
+  }
   const cancel=()=>dialog.querySelector('.flowClose').click();dialog.querySelector('.deskKeypadCancel').onclick=cancel;
   dialog.querySelectorAll('[data-key]').forEach(button=>button.onclick=()=>{
    const key=button.dataset.key,start=value.selectionStart??value.value.length,end=value.selectionEnd??start;
@@ -58,7 +65,9 @@ function deskQuantityControl(line,index){
    if(!input.isConnected||input.disabled||input.readOnly){error.textContent='This field is no longer available. Close the keypad and reopen the item.';return;}
    const text=value.value.trim(),check=input.cloneNode();check.required=true;check.value=text;
    if(!text||!new RegExp(decimal?'^\\d+(\\.\\d+)?$':'^\\d+$').test(text)||!check.checkValidity()){error.textContent=check.validationMessage||'Enter a valid value for this field.';return;}
-   input.value=text;input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));changedForms.delete(entry);dialog.close();dialog.remove();input.focus();
+   if(openPrice&&!entry.reportValidity())return;
+   for(const [label,marker]of moved)marker.replaceWith(label);
+   input.value=text;input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));changedForms.delete(entry);dialog.close();dialog.remove();if(openPrice)choiceForm.requestSubmit();else input.focus();
   }
   dialog.querySelector('.deskKeypadApply').onclick=apply;value.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();apply();}};
  }

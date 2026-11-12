@@ -55,30 +55,30 @@ try:
   product(p,fixed).tap();expect(p.locator('#posCart')).to_contain_text('$12.82');assert current(p)==first and units(first)==2
   p.screenshot(path=str(out/'DESK-First-Product-Receipt.png'))
   # Empty price/weight cancellation writes nothing and explains why the item was not added.
-  q=fresh();before=carts();product(q,opened).tap();expect(q.locator('#flowOpenPrice')).to_be_visible();assert carts()==before
+  q=fresh();before=carts();product(q,opened).tap();expect(q.locator('#deskKeypadValue')).to_be_visible();assert carts()==before
   q.screenshot(path=str(out/'DESK-First-Product-Price.png'))
-  q.locator('.flowProductCancel').tap();acknowledge(q,'because no price was entered');assert carts()==before
+  q.locator('.deskKeypadCancel').tap();acknowledge(q,'because no price was entered');assert carts()==before
   product(q,weighed).tap();q.keyboard.press('Escape');acknowledge(q,'because no weight was entered');assert carts()==before
-  product(q,opened).tap();q.locator('#flowOpenPrice').fill('0');q.locator('#flowChoices button.primary').tap();assert carts()==before
-  q.locator('#flowOpenPrice').fill('12.34');q.locator('#flowChoices button.primary').tap();expect(q.locator('#posCart')).to_contain_text('$13.20')
+  product(q,opened).tap();q.locator('#deskKeypadValue').fill('0');q.locator('.deskKeypadApply').tap();assert carts()==before
+  q.locator('#deskKeypadValue').fill('12.34');q.locator('.deskKeypadApply').tap();expect(q.locator('#posCart')).to_contain_text('$13.20')
   open_cart=current(q);assert len(carts())==len(before)+1 and body(open_cart)['lines'][0]['price']==1234
   # Cancellation keeps the complete saved cart and revision untouched.
-  saved=cart(open_cart);product(q,opened).tap();q.locator('.flowProductCancel').tap()
+  saved=cart(open_cart);product(q,opened).tap();q.locator('.deskKeypadCancel').tap()
   expect(q.locator('dialog[open]')).to_contain_text('because no price was entered')
   q.screenshot(path=str(out/'DESK-Canceled-Price-Keeps-Receipt.png'))
   acknowledge(q,'because no price was entered');assert cart(open_cart)==saved
   product(q,weighed).tap();q.locator('.flowClose').tap();acknowledge(q,'because no weight was entered');assert cart(open_cart)==saved
-  product(q,opened).tap();q.locator('#flowOpenPrice').fill('8.00');q.locator('.flowProductCancel').tap();acknowledge(q,'entry was canceled');assert cart(open_cart)==saved
+  product(q,opened).tap();q.locator('#deskKeypadValue').fill('8.00');q.locator('.deskKeypadCancel').tap();acknowledge(q,'entry was canceled');assert cart(open_cart)==saved
   # Weight and required item choices can each be the first product.
   w=fresh();before=len(carts());product(w,weighed).tap();w.locator('#storeWeight [name=weight]').fill('2.5')
   expect(w.locator('#storeWeight [name=weight]')).to_have_value('2.5');expect(w.locator('#storeWeightTotal')).to_contain_text('$5.00');w.locator('#storeWeight button.primary').tap();expect(w.locator('#posCart')).to_contain_text('$5.35')
   assert len(carts())==before+1 and body(current(w))['lines'][0]['weight_milli']==2500
   m=fresh();before=len(carts());product(m,choice).tap();m.locator('#flowChoices select').select_option('large');m.locator('#flowChoices button.primary').tap();expect(m.locator('#posCart')).to_contain_text('$6.42');assert len(carts())==before+1
   # An already-created empty cart is reused.
-  e=fresh();e.locator('#posNew').tap();expect(e.locator('#posCart')).to_contain_text('Saved on server');empty=current(e);before=len(carts())
+  e=fresh();e.evaluate('()=>posDo("new")');empty=current(e);before=len(carts())
   product(e,fixed).tap();expect(e.locator('#posCart')).to_contain_text('$6.41');assert current(e)==empty and len(carts())==before
   # The next product after payment starts a new sale, preserving the completed receipt.
-  p.locator('#posPayNow').tap();p.locator('#posCash [name=tender]').fill('20');p.locator('#posCash button.primary').tap();expect(p.locator('#posReceipt')).to_contain_text('$12.82')
+  p.locator('#posPayNow').tap();p.locator('#checkoutTender').fill('20.00');p.locator('#checkoutComplete').tap();expect(p.locator('#posReceipt')).to_contain_text('$12.82')
   paid=rows('pos_sales');product(p,fixed).tap();expect(p.locator('#posCart')).to_be_visible();expect(p.locator('#posCart')).to_contain_text('$6.41');assert current(p)!=first and rows('pos_sales')==paid
   # A second event during automatic cart creation cannot create a second cart.
   r=fresh();held=[];r.route('**/api/pos/new',lambda route:held.append(route));before=len(carts())
@@ -94,7 +94,7 @@ try:
   product(n,fixed).tap();assert len(carts())==before+1
   n.locator('#posRetry').tap();expect(n.locator('#posRetry')).to_be_hidden();product(n,fixed).tap();expect(n.locator('#posCart')).to_contain_text('$6.41');assert len(carts())==before+1 and units(current(n))==1
   a=fresh();before=len(carts());lose_once(a,'**/api/pos/add');product(a,fixed).tap();expect(a.locator('#posRetry')).to_be_visible();a.locator('#posRetry').tap();expect(a.locator('#posRetry')).to_be_hidden();assert len(carts())==before+1 and units(current(a))==1
-  o=fresh();before=len(carts());product(o,opened).tap();o.locator('#flowOpenPrice').fill('8.50');expect(o.locator('#flowOpenPrice')).to_have_value('8.50');lose_once(o,'**/api/pos/add');o.locator('#flowChoices button.primary').tap()
+  o=fresh();before=len(carts());product(o,opened).tap();o.locator('#deskKeypadValue').fill('8.50');expect(o.locator('#deskKeypadValue')).to_have_value('8.50');lose_once(o,'**/api/pos/add');o.locator('.deskKeypadApply').tap()
   expect(o.locator('.flowError')).not_to_be_empty();o.locator('.flowProductCancel').tap();expect(o.locator('.flowError')).to_contain_text('last save is unconfirmed');expect(o.locator('[data-product-cancel-ok]')).to_have_count(0)
   o.locator('#flowChoices button.primary').tap();expect(o.locator('#posCart')).to_contain_text('$9.10');assert len(carts())==before+1 and units(current(o))==1
   for name,values in protected.items():assert rows(name)==values,name

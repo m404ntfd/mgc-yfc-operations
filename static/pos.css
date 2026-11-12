@@ -436,3 +436,39 @@ dialog.catalogSetup{width:min(940px,calc(100vw - 48px));max-width:calc(100vw - 4
 }
 
 /* END DESK TOUCH */
+/* BEGIN CHECKOUT UI */
+@media screen {
+ .checkoutRedesign #posNew,.checkoutRedesign #posManualShortcut,.checkoutRedesign #posManual,.checkoutRedesign details:has(>#posManual),.checkoutRedesign #posCashDetails,.checkoutRedesign #creditPay,.checkoutRedesign #flowHold,.checkoutRedesign #flowHeldOpen,.checkoutRedesign .receiptPane>label:has(#posCarts){display:none!important}
+ .checkoutDialog{width:min(1400px,96vw);max-width:96vw;max-height:94dvh;padding:20px;overflow:auto}
+ .checkoutDialog .flowDialogHeading{margin-bottom:12px}
+ .checkoutDialog .flowError{color:var(--danger,#b42318);font-weight:600;white-space:pre-line}
+ .checkoutSplit{display:grid;grid-template-columns:minmax(280px,.8fr) minmax(450px,1.2fr);gap:20px;min-height:0}
+ .checkoutPaper{background:#fff;color:#152c40;padding:20px;border-radius:12px;max-height:70dvh;overflow:auto;scrollbar-width:auto;scrollbar-color:#48657b #e6edf2}
+ .checkoutPaper h2,.checkoutPaper h3,.checkoutPaper p,.checkoutPaper th,.checkoutPaper td,.checkoutPaper dt,.checkoutPaper dd{color:#152c40!important}
+ .checkoutPaper table{width:100%;border-collapse:collapse}.checkoutPaper th,.checkoutPaper td{padding:12px 4px;border-bottom:1px solid #ccd8e0;text-align:left}.checkoutPaper td:last-child,.checkoutPaper th:last-child{text-align:right}
+ .checkoutPaper small{display:block;font-size:12px}.checkoutPaper dl{display:grid;grid-template-columns:1fr auto;gap:10px;font-size:18px}.checkoutPaper dd{margin:0;text-align:right;font-weight:700}
+ .checkoutControls{min-width:0;display:flex;flex-direction:column;gap:12px}
+ .checkoutAmounts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;padding:14px;border-radius:12px;background:var(--rt-surface,var(--panel,#e9f0f6));border:2px solid var(--accent,#385a74)}
+ .checkoutAmounts label{min-width:0}.checkoutAmounts output,.checkoutAmounts input{display:block;font-size:30px!important;font-weight:750;width:100%;min-width:0;box-sizing:border-box;margin-top:8px;min-height:58px;color:var(--rt-text,var(--text,#193348))}
+ .checkoutMethods,.checkoutFooter,.checkoutEditorTabs{display:flex;gap:12px;flex-wrap:wrap;margin:14px 0}.checkoutMethods>*{flex:1;min-height:70px}.checkoutMethods small{display:block;font-size:12px}
+ .checkoutDialog button[aria-pressed=true]{background:#1b6d9a!important;color:#fff!important;border:3px solid #57c5f5!important}
+ .checkoutKeys{display:grid;grid-template-columns:1fr 1.5fr;gap:14px}.checkoutNumberPad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.checkoutNumberPad button{min-height:65px;font-size:25px;font-weight:700}.checkoutQuick{display:grid;grid-template-columns:1fr 1fr;gap:10px}.checkoutQuick strong{grid-column:1/-1}.checkoutQuick button{min-height:60px}
+ .checkoutFooter button{min-height:54px;padding:12px 22px}.checkoutFooter .primary{flex:1}
+ #checkoutCredit{display:grid;grid-template-columns:1.5fr 1fr;gap:10px}#checkoutCredit[hidden]{display:none}#checkoutCredit p{grid-column:1/-1;margin:0}
+ .checkoutList{display:flex;flex-direction:column;gap:8px;max-height:46dvh;overflow:auto;margin:12px 0}.checkoutList button{text-align:left;padding:14px;min-height:68px}.checkoutList small{display:block;margin-top:6px}
+ .checkoutAdjustmentSection{border:2px solid #4d8cac;border-radius:16px;padding:16px;margin:16px 0}.checkoutAdjustmentSection.surcharge{border-color:#a87537}.checkoutAdjustmentSection h3{margin:0 0 12px}
+ .checkoutAdjustmentColumns{display:grid;grid-template-columns:1fr 1fr;gap:20px}.checkoutAdjustmentColumns>div+div{border-left:1px solid #889ba9;padding-left:20px}.checkoutPresetTiles{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.checkoutPresetTiles button{min-height:76px;font-size:18px}.checkoutPresetTiles small{display:block;margin-top:6px}
+ .checkoutEditorFields{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+ .checkoutDialog input,.checkoutDialog select{min-height:52px;font-size:18px}.checkoutDialog button{touch-action:manipulation}
+ @media(max-height:950px){.checkoutNumberPad button{min-height:52px}.checkoutQuick button{min-height:48px}.checkoutMethods>*{min-height:58px}.checkoutDialog{padding:14px}}
+ @media(max-width:900px){.checkoutSplit{grid-template-columns:1fr}.checkoutPaper{max-height:28dvh}.checkoutEditorFields{grid-template-columns:1fr 1fr}.checkoutAmounts output,.checkoutAmounts input{font-size:22px!important}}
+}
+@media print {
+ body.checkoutPrinting>*{display:none!important}
+ body.checkoutPrinting>dialog:has(#checkoutReceiptPreview){display:block!important;position:static!important;max-width:none!important;width:auto!important;max-height:none!important;height:auto!important;border:0!important;box-shadow:none!important;padding:0!important}
+ body.checkoutPrinting dialog:has(#checkoutReceiptPreview)>:not(.checkoutSplit),body.checkoutPrinting .checkoutControls{display:none!important}
+ body.checkoutPrinting .checkoutSplit,body.checkoutPrinting #checkoutReceiptPreview{display:block!important;max-height:none!important;overflow:visible!important;background:white!important;color:black!important}
+ body.checkoutPrinting #checkoutReceiptPreview table{width:100%;border-collapse:collapse}body.checkoutPrinting #checkoutReceiptPreview td{padding:6px;border-bottom:1px solid #bbb}body.checkoutPrinting #checkoutReceiptPreview dl{display:grid;grid-template-columns:1fr auto}body.checkoutPrinting #checkoutReceiptPreview small{display:block}
+}
+
+/* END CHECKOUT UI */

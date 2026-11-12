@@ -22,7 +22,7 @@ def run():
    form=p.locator('#kioskPasscodeForm');form.locator('[name=code]').fill('123456');form.locator('[name=confirm]').fill('123456');form.locator('button.primary').click()
    expect(p.locator('#kioskSetupDialog')).to_be_hidden();expect(p.locator('#posRoot')).to_be_visible()
    f.call('pos/settings',dict(request='d'*32,store='MGC YFC',tax_bps=0,confirmed=True));p.evaluate('posLoad()')
-   expect(p.locator('#posNew')).to_be_enabled();p.locator('#navCheckout').click()
+   expect(p.locator('#posCatalog')).to_be_visible();p.locator('#navCheckout').click()
    p.screenshot(path=str(out/'POS-Full-Screen-Preview.png'))
    p.locator('#posExitButton').click();p.locator('#posExitForm [name=code]').fill('000000');p.locator('#posExitForm button.primary').click();expect(p.locator('#posExitError')).to_contain_text('Incorrect')
    p.locator('#posExitCancel').click();expect(p.locator('#posAdmin')).to_be_hidden();p.goto(f'http://127.0.0.1:{f.port}/office');expect(p.locator('#posKioskSettings')).to_be_visible()

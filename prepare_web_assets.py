@@ -28,6 +28,7 @@ def prepare(root=None):
   if filename=='pos.js':content=re.sub(r'\n*// BEGIN OFFICE NAVIGATION.*?// END OFFICE NAVIGATION\n*','\n',content,flags=re.S).rstrip()+'\n// BEGIN OFFICE NAVIGATION\n'+(root/'static/office-navigation.js').read_text(encoding='utf-8')+'\n// END OFFICE NAVIGATION\n'
   if filename=='pos.js':content=re.sub(r'\n*// BEGIN OFFICE SEARCH.*?// END OFFICE SEARCH\n*','\n',content,flags=re.S).rstrip()+'\n// BEGIN OFFICE SEARCH\n'+(root/'static/office-search.js').read_text(encoding='utf-8')+'\n// END OFFICE SEARCH\n'
   if filename=='pos.js':content=re.sub(r'\n*// BEGIN DESK TOUCH.*?// END DESK TOUCH\n*','\n',content,flags=re.S).rstrip()+'\n// BEGIN DESK TOUCH\n'+(root/'static/desk-touch.js').read_text(encoding='utf-8-sig')+'\n// END DESK TOUCH\n'
+  if filename=='pos.js':content=re.sub(r'\n*// BEGIN CHECKOUT UI.*?// END CHECKOUT UI\n*','\n',content,flags=re.S).rstrip()+'\n// BEGIN CHECKOUT UI\n'+(root/'static/desk-checkout.js').read_text(encoding='utf-8')+'\n// END CHECKOUT UI\n'
   content=re.sub(r'// BEGIN TERMINAL REGISTRATION.*?// END TERMINAL REGISTRATION','',content,flags=re.S).rstrip()+'\n// BEGIN TERMINAL REGISTRATION\n'+(root/'static/terminal-registration.js').read_text(encoding='utf-8')+'\n// END TERMINAL REGISTRATION\n'
   file.write_text(content,encoding='utf-8')
  for name in ('pos.css','style.css'):
@@ -36,6 +37,7 @@ def prepare(root=None):
   css=root/'static'/name;content=css.read_text(encoding='utf-8-sig');content=re.sub(r'\n*/\* BEGIN REPORT DOCUMENT \*/.*?/\* END REPORT DOCUMENT \*/\n*','\n',content,flags=re.S);css.write_text(content.rstrip()+'\n/* BEGIN REPORT DOCUMENT */\n'+(root/'static/report-document.css').read_text(encoding='utf-8')+'\n/* END REPORT DOCUMENT */\n',encoding='utf-8')
  css=root/'static/pos.css';content=css.read_text(encoding='utf-8');content=re.sub(r'\n*/\* BEGIN OFFICE NAVIGATION \*/.*?/\* END OFFICE NAVIGATION \*/\n*','\n',content,flags=re.S);css.write_text(content.rstrip()+'\n/* BEGIN OFFICE NAVIGATION */\n'+(root/'static/office-navigation.css').read_text(encoding='utf-8')+'\n/* END OFFICE NAVIGATION */\n',encoding='utf-8')
  css=root/'static/pos.css';content=css.read_text(encoding='utf-8');content=re.sub(r'\n*/\* BEGIN DESK TOUCH \*/.*?/\* END DESK TOUCH \*/\n*','\n',content,flags=re.S);css.write_text(content.rstrip()+'\n/* BEGIN DESK TOUCH */\n'+(root/'static/desk-touch.css').read_text(encoding='utf-8-sig')+'\n/* END DESK TOUCH */\n',encoding='utf-8')
+ css=root/'static/pos.css';content=css.read_text(encoding='utf-8');content=re.sub(r'\n*/\* BEGIN CHECKOUT UI \*/.*?/\* END CHECKOUT UI \*/\n*','\n',content,flags=re.S);css.write_text(content.rstrip()+'\n/* BEGIN CHECKOUT UI */\n'+(root/'static/desk-checkout.css').read_text(encoding='utf-8')+'\n/* END CHECKOUT UI */\n',encoding='utf-8')
  hr=root/'static/hr.js';content=hr.read_text(encoding='utf-8');content=re.sub(r'// BEGIN HR BROWSER UI.*?// END HR BROWSER UI',lambda _: '// BEGIN HR BROWSER UI\n'+(root/'static/hr-browser.js').read_text(encoding='utf-8')+'\n// END HR BROWSER UI',content,flags=re.S);hr.write_text(content,encoding='utf-8')
  pos={name:(root/'static'/name).read_text(encoding='utf-8') for name in ('pos.html','pos.js','pos.css','customer-display.html','customer-display.js','customer-display.css','hr.html','hr.js','hr.css')}
  source,count=re.subn(r'^POS_ASSETS=.* # prepared POS application assets$',lambda _: 'POS_ASSETS='+repr(pos)+' # prepared POS application assets',source,flags=re.M)
@@ -51,6 +53,7 @@ def prepare(root=None):
  source=re.sub(r'^HR_REFERENCE_FORMS=.* # prepared HR reference forms$',lambda _: 'HR_REFERENCE_FORMS='+repr([item for item in json.loads((root/'assets/hr-reference-forms.json').read_text(encoding='utf-8')) if item['kind']=='deposit'])+' # prepared HR reference forms',source,flags=re.M)
  source=re.sub(r'# BEGIN HR BROWSER.*?# END HR BROWSER',lambda _: '# BEGIN HR BROWSER\n'+(root/'hr_browser.py').read_text(encoding='utf-8')+'\n# END HR BROWSER',source,flags=re.S)
  source=re.sub(r'^HR_SOURCE_FORMS=.* # prepared HR source forms$',lambda _: 'HR_SOURCE_FORMS='+repr(json.loads((root/'assets/hr-source-forms.json').read_text(encoding='utf-8')))+' # prepared HR source forms',source,flags=re.M)
+ source=re.sub(r'# BEGIN CHECKOUT.*?# END CHECKOUT',lambda _: '# BEGIN CHECKOUT\n'+(root/'checkout.py').read_text(encoding='utf-8')+'\n# END CHECKOUT',source,flags=re.S)
  source=re.sub(r'# BEGIN GIVING.*?# END GIVING',lambda _: '# BEGIN GIVING\n'+(root/'giving.py').read_text(encoding='utf-8')+'\n# END GIVING',source,flags=re.S)
  path.write_text(source,encoding='utf-8')
 if __name__=='__main__':prepare()

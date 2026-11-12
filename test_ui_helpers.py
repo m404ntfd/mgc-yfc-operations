@@ -1,3 +1,8 @@
+def select_saved_sale(page,ident):
+ page.locator('#posFindCart').click()
+ page.locator('[data-saved-sale="'+ident+'"]').click()
+ page.locator('#checkoutResume').click()
+
 def password_login_page(page):
  toggle=page.locator("#deskPasswordToggle")
  if toggle.is_visible() and not page.locator("#login").is_visible():toggle.click()

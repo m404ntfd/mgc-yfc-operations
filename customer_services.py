@@ -127,7 +127,7 @@ def customer_get(c,u,path,query):
         for r in c.execute('SELECT * FROM jobs ORDER BY id'):
             j=json.loads(r['body']);contact=c.execute('SELECT * FROM reservation_contacts WHERE job=?',(r['id'],)).fetchone()
             jobs.append(dict(id=r['id'],customer=j.get('customer',''),start=j.get('start',''),status=j.get('status',''),contact=dict(contact) if contact else None))
-        return dict(jobs=jobs,deliveries=[dict(r,body=json.loads(r['body'])) for r in c.execute('SELECT * FROM customer_delivery ORDER BY id DESC LIMIT 100')],enabled=customer_settings(c,'email')['enabled'],gmail_ready=customer_ready(c))
+        return dict(jobs=jobs,deliveries=[dict(r,body=json.loads(r['body'])) for r in c.execute("SELECT * FROM customer_delivery WHERE kind<>'receipt' ORDER BY id DESC LIMIT 100")],enabled=customer_settings(c,'email')['enabled'],gmail_ready=customer_ready(c))
     return None
 
 def customer_post(handler,c,u,path,d,finish):
@@ -171,7 +171,7 @@ def customer_post(handler,c,u,path,d,finish):
         if not has_permission(u,'manage_pos') or not has_permission(u,'view_schedule'):raise Problem('POS settings and schedule permissions required.',403)
         if path=='delivery-retry':
             row=c.execute('SELECT * FROM customer_delivery WHERE id=?',(pos_int(d.get('id'),'message',1),)).fetchone()
-            if not row or row['status'] not in ('failed','uncertain'):raise Problem('Only failed or uncertain messages may be retried.',409)
+            if not row or row['kind']=='receipt' or row['status'] not in ('failed','uncertain'):raise Problem('Only failed or uncertain messages may be retried.',409)
             if d.get('checked_sent') is not True:raise Problem('Check Gmail Sent before confirming a retry.')
             customer_schedule(c)
             current=c.execute('SELECT status FROM customer_delivery WHERE id=?',(row['id'],)).fetchone()[0]

@@ -33,13 +33,13 @@ def run():
     assert c.execute("SELECT COUNT(*) FROM users WHERE name='office sample staff'").fetchone()[0]==1
     assert c.execute("SELECT COUNT(*) FROM receipt_profiles WHERE name='office sample staff'").fetchone()[0]==1
    p.locator('#officeBack').click();office_setting(p,'catalog').click();p.locator('#flowProductForm [name=name]').fill('OFFICE sample item');p.locator('#flowProductForm [name=category]').select_option('Home');p.locator('#flowProductForm [name=price]').fill('6.50');p.locator('#flowProductForm button.primary').first.click();expect(p.locator('#flowProductStatus')).to_contain_text('Product saved')
-   desk=context.new_page();desk.goto(origin+'/pos');expect(desk.locator('#posCatalog')).to_contain_text('OFFICE sample item');expect(desk.locator('#posSetup')).to_be_hidden();expect(desk.locator('#posAdmin')).to_be_hidden();expect(desk.locator('#posSetupShortcut')).to_be_hidden();expect(desk.locator('#navSetup')).to_be_hidden();desk.locator('#posNew').click();expect(desk.locator('#posCart')).to_contain_text('Saved on server');desk.locator('#posCatalog button').filter(has_text='Adult shirt').click()
+   desk=context.new_page();desk.goto(origin+'/pos');expect(desk.locator('#posCatalog')).to_contain_text('OFFICE sample item');expect(desk.locator('#posSetup')).to_be_hidden();expect(desk.locator('#posAdmin')).to_be_hidden();expect(desk.locator('#posSetupShortcut')).to_be_hidden();expect(desk.locator('#navSetup')).to_be_hidden();desk.locator('#posCatalog button').filter(has_text='Adult shirt').click()
    # Wait for the first saved product and its refresh before the next action.
    # Checkout deliberately blocks a second request while the first is pending.
    expect(desk.locator('#posCart')).to_contain_text('Adult shirt')
    wait_for_pos_save(desk)
    desk.locator('#posCatalog button').filter(has_text='Table lamp').click();expect(desk.locator('#posCart')).to_contain_text('$20.31');desk.screenshot(path=str(out/'CoastYouth-Retail-DESK-Preview.png'))
-   desk.locator('#posPayNow').click();desk.locator('#posCash [name=tender]').fill('25');desk.locator('#posCash button.primary').click();expect(desk.locator('#posReceipt')).to_contain_text('Change: $4.69')
+   desk.locator('#posPayNow').click();desk.locator('#checkoutTender').fill('25.00');desk.locator('#checkoutComplete').click();expect(desk.locator('#posReceipt')).to_contain_text('Change: $4.69')
    p.locator('#officeBack').click();office_setting(p,'history').click();p.locator('#posSaleList button').first.click();expect(p.locator('#officeReceipt')).to_be_visible();expect(p.locator('#posReceipt')).to_contain_text('Change: $4.69');p.emulate_media(media='print');expect(p.locator('#posReceipt')).to_be_visible();p.emulate_media(media='screen');p.locator('.receiptBack').click();office_setting(p,'roles').click()
    # A user-management role can open OFFICE without checkout permission.
    f.call('admin/permissions',dict(name='Employee',grants={'manage_users':True},can_create=False,see_requests=False))
