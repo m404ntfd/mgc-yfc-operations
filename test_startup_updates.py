@@ -67,6 +67,14 @@ class StartupTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'verification'):startup.stage_installer(offer,Path(tmp)/'settings.json')
             launch.assert_not_called()
 
+    def test_installed_server_admin_does_not_offer_its_own_release_again(self):
+        from remote.remote_manager import VERSION as installed
+        target=(Path(__file__).parent/'VERSION').read_text().strip()
+        release={'assets':[{'name':'MGC-YFC-Operations-Setup-v'+target+'.exe'}]}
+        with patch.object(startup,'urlopen') as fetch:
+            fetch.return_value.__enter__.return_value.read.return_value=json.dumps(release).encode()
+            self.assertIsNone(startup.check_release('remote',installed))
+
     def test_shared_server_cannot_use_desktop_handoff(self):
         with self.assertRaisesRegex(ValueError,'administrator'):
             startup.stage_installer({'app':'server'},Path('unused'))

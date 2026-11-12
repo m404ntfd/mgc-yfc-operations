@@ -9,6 +9,8 @@ Selecting a product starts a sale and adds it to the receipt, including products
 - Fixed native DESK startup so the registered computer identity is resolved before loading the store catalog. Routine background connection checks no longer silently prevent a product tap.
 - Price, quantity, discount, bundle and refund calculations retain the tax rates captured on each sale. Existing completed receipts are not recalculated.
 
+- Standalone Server Admin reports 0.58.2 after installation so its startup update check recognizes that the current server package is already installed.
+
 ## Shared store setup
 
 - Terminal setup shows the registered store and allows an administrator to select the store for a new checkout. Existing registered devices retain their assignment.
