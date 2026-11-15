@@ -41,11 +41,9 @@ class ExpansionTests(unittest.TestCase):
   self.assertEqual(r['city'],'Mobile');self.assertEqual(self.f.call('admin/office-user-details?name=Employee')[1]['city'],'Mobile')
   self.assertEqual(self.f.call('admin/office-user-details',dict(name='Employee',revision=0))[0],409)
  def test_office_update_separate_and_force_restricted(self):
-  server.OFFICE_UPDATE_RELEASE={'checking':False,'version':'1.4.0','checked':time.time()}
-  self.post('office-update/start',target='all',mode='notify')
-  self.assertIsNotNone(self.f.call('office-update/state')[1]['campaign'])
+  for path in ('start','cancel','check','settings'):
+   self.assertEqual(self.f.call('office-update/'+path,dict(target='all',mode='force'))[0],409)
+  self.assertIsNone(self.f.call('office-update/state')[1]['campaign'])
   self.assertIsNone(self.f.call('pos-update/state')[1]['campaign'])
-  self.post('office-update/cancel')
-  self.assertEqual(self.f.call('office-update/start',dict(target='all',mode='force'))[0],403)
 
 if __name__=='__main__':unittest.main()

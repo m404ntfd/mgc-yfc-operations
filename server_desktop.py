@@ -31,6 +31,8 @@ class ServerWindow:
         style=ttk.Style();style.theme_use('clam');style.configure('TButton',padding=10);style.configure('TLabel',font=('Segoe UI',10))
         self.admin_panel=None;self.cleanup_checked=False;self.startup_check_started=False
         self.tabs=ttk.Notebook(root);self.tabs.pack(fill='both',expand=True)
+        from desktop_updates import maintenance_warning
+        self.maintenance_banner=maintenance_warning(root,self.tabs)
         self.server_tab=ttk.Frame(self.tabs);self.admin_tab=ttk.Frame(self.tabs);self.updates_tab=ttk.Frame(self.tabs);self.settings_tab=ttk.Frame(self.tabs)
         self.tabs.add(self.server_tab,text='Server');self.tabs.add(self.admin_tab,text='Administration');self.tabs.add(self.updates_tab,text='Updates');self.tabs.add(self.settings_tab,text='Server settings')
         self.tabs.bind('<<NotebookTabChanged>>',self.on_tab_changed)
@@ -203,7 +205,7 @@ class ServerWindow:
         elif self.process and not self.stopping and not self.notice:
             self.status.set('Server running • minimize safely to the system tray')
         if not self.smoke and self.process and self.process.poll() is None:
-            self.check_startup_update()
+            self.startup_update_status.set('Automatic server update check: 04:00 AM Central each day.')
             if not self.root.grab_current():self.offer_remote_cleanup()
         if self.smoke and not self.smoke_done:
             try:

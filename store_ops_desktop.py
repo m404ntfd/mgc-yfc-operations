@@ -6,7 +6,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 TITLE = "CoastYouth Retail STORE OPS"
-VERSION = "1.4.0"
+VERSION = "1.5.0"
 DEFAULT_SERVER = "https://operations.coastyfc.com"
 
 from desktop_connection import server_url, connect_before_open
@@ -32,6 +32,9 @@ class CloseGuard:
             self._store=KioskStore(Path(os.environ.get('APPDATA',str(Path.home())))/'CoastYouthRetailStoreOps'/'settings.json')
             self._updates=PosUpdater(self,app='ops',current=VERSION)
         return {'computer':computer_info(),'device':self._store.data['device'],'version':VERSION,'app':'ops'}
+    def desktop_update_status(self):
+        from desktop_updates import bridge_update_status
+        return bridge_update_status(self,'ops',VERSION)
     def ops_update_status(self, ident=None):
         if self.terminal_info().get('error'):return {'error':'Open the configured server.'}
         return self._updates.observe(ident)

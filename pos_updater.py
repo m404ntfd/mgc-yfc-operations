@@ -3,7 +3,7 @@ import hashlib,json,os,re,shutil,subprocess,sys,threading,time
 from pathlib import Path
 from urllib.request import Request,urlopen
 from desktop_connection import USER_AGENT
-VERSION='1.18.0'
+VERSION='1.19.0'
 REPO='m404ntfd/mgc-yfc-operations'
 def version(value):
  if not isinstance(value,str) or not re.fullmatch(r'\d+\.\d+\.\d+',value):raise ValueError('Invalid POS version.')
@@ -31,50 +31,10 @@ class PosUpdater:
   if not isinstance(ident,str) or not re.fullmatch('[0-9a-f]{64}',ident):raise ValueError('Invalid update request.')
   return json.loads(fetch(self.bridge._address+'/api/'+self.app+'-update/ticket?id='+ident))
  def observe(self,ident,retry=False):
-  if not self.bridge._trusted():return {'error':'Open the configured server.'}
-  with self.lock:
-   if not ident:self.job=None;self.state='idle';return {'state':'idle','version':self.version}
-   try:
-    job=self.ticket(ident)
-    if job.get('target') not in ('all',self.bridge._store.data['device']) and self.bridge._store.data['device'] not in job.get('targets',[]):return {'state':'idle','version':self.version}
-    if version(job['version'])<=version(self.version):return {'state':'complete','version':self.version}
-    if not self.job or self.job['id']!=ident:
-     seconds=job.get('seconds')
-     if type(seconds) is not int or not (30<=seconds<=3600 or seconds==0 and job.get('mode') in ('force','install')):raise ValueError('Invalid warning period.')
-     self.job=job;self.deadline=time.monotonic()+seconds;self.state='downloading';self.error='';self.path=None
-     threading.Thread(target=self.download,args=(dict(job),),daemon=True).start()
-    elif retry and self.state=='error':
-     self.state='downloading';self.error='';self.path=None;self.digest=None
-     threading.Thread(target=self.download,args=(dict(job),),daemon=True).start()
-    return {'state':self.state,'seconds':max(0,int(self.deadline-time.monotonic()+.999)),'version':self.version,'target':job['version'],'error':self.error}
-   except Exception as e:return {'state':'error','error':str(e),'version':self.version}
- def download(self,job):
-  try:
-   raw,digest=verified_installer(job['version'],self.app);folder=self.bridge._store.path.parent/'updates'/job['id'];folder.mkdir(parents=True,exist_ok=True)
-   path=folder/'installer.exe';path.write_bytes(raw)
-   with self.lock:
-    if self.job and self.job['id']==job['id']:self.path=path;self.digest=digest;self.state='ready'
-  except Exception as e:
-   with self.lock:
-    if self.job and self.job['id']==job['id']:self.state='error';self.error=str(e)
+  return {'state':'idle','version':self.version,'restart_required':True}
+
  def install(self):
-  with self.lock:
-   b=self.bridge
-   if not b._trusted() or not self.job or self.state!='ready':raise ValueError('The verified POS installer is not ready.')
-   if time.monotonic()<self.deadline:raise ValueError('Allow the employee warning countdown to finish.')
-   current=self.ticket(self.job['id'])
-   if current!=self.job:raise ValueError('The update request changed. Check again.')
-   if not getattr(sys,'frozen',False):raise ValueError('Automatic installation is available in the installed Windows POS application.')
-   if hashlib.sha256(self.path.read_bytes()).hexdigest()!=self.digest:raise ValueError('Installer verification failed.')
-   # Freeze only if the current sale is finished and no draft/write/retry is pending.
-   if b._window.evaluate_js('window.posUpdateFreeze ? window.posUpdateFreeze('+('true' if self.job.get('mode')=='force' else 'false')+') : false') is not True:raise ValueError('Return to POS and finish or cancel the current sale; save all unfinished entries.')
-   try:
-    exe=Path(sys.executable).resolve();helper=self.path.parent/'pos-update-helper.exe';shutil.copy2(exe,helper)
-    manifest=self.path.parent/'install.json';manifest.write_text(json.dumps({'installer':str(self.path),'sha256':self.digest,'exe':str(exe),'pid':os.getpid(),'version':self.job['version'],'settings':str(b._store.path)}),encoding='utf-8')
-    subprocess.Popen([str(helper),'--apply-pos-update',str(manifest)],creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
-    self.state='installing';b._exiting=True;b._window.destroy();return {'ok':True}
-   except Exception:
-    b._window.run_js('window.posUpdateUnfreeze && window.posUpdateUnfreeze()');raise
+  raise ValueError('Restart this application to install an available update. Remote and automatic desktop updates are disabled.')
 
 def apply_update(manifest_path):
  """Runs from a copied helper, after the original POS process releases its files."""

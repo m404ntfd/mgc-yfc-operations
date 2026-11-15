@@ -14,3 +14,4 @@ output/
 /tmp/
 
 .desktop-deps/
+.venv/

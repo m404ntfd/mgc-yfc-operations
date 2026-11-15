@@ -87,6 +87,16 @@ class KioskBridge:
   except (OSError,ValueError):pass
   from computer_identity import computer_info
   return {'computer':computer_info(),'device':self._store.data['device'],'nonce':self._nonce,'configured':self._store.configured,'version':VERSION,'updater':True,'update_result':result}
+ def receipt_printers(self):
+  from receipt_printer import printers
+  return printers(self)
+ def receipt_print(self,printer,sale,automatic=False):
+  from receipt_printer import print_receipt
+  return print_receipt(self,printer,sale,automatic)
+ def desktop_update_status(self):
+  from desktop_updates import bridge_update_status
+  from pos_updater import VERSION
+  return bridge_update_status(self,'pos',VERSION)
  def update_status(self,ident=None):
   return self._updates.observe(ident)
  def retry_update(self,ident):

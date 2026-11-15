@@ -180,7 +180,7 @@ async function posDo(action,data={},retry=false){
   if(result.account){await creditSelect(result.account.id);if(posPending.action==='account-create')$('creditCreate').reset();if(posPending.action==='account-adjust')$('creditAdjust').reset();await creditList();}
   if(result.sale&&result.sale.store_credit){$('creditPay').reset();$('creditDialog').close();}
   if(result.cart){posCurrent=result.cart;$('posReceipt').hidden=true;$('posPrint').hidden=true;if(posPending.action==='new'){$('posCash').reset();changedForms.delete($('posCash'));}}
-  if(result.sale){paidSaleForPickup=result.sale;$('posCashDetails').open=false;posReceipt(result.sale);posCurrent=null;$('posCash').reset();changedForms.delete($('posCash'));}
+  if(result.sale){paidSaleForPickup=result.sale;$('posCashDetails').open=false;posReceipt(result.sale,true);posCurrent=null;$('posCash').reset();changedForms.delete($('posCash'));}
   if(posPending.action==='discard')posCurrent=null;
   if(!officeMode)sessionStorage.setItem('yfc-pos-selected:'+user.name,posCurrent?.id||'');
   const finished=posPending.action;sessionStorage.removeItem(posPendingKey());posPending=null;
@@ -254,7 +254,7 @@ const officeCards=[
  {section:'accounts',title:'Store-credit accounts',description:'Customer and employee balances, adjustments and history.',icon:'◎',action:'accounts',permission:'manage_store_credit'},
  {section:'security',title:'Users',description:'Add users and assign roles shared with Operations.',icon:'♙',action:'users',permission:'manage_users'},
  {section:'security',title:'Roles & permissions',description:'Create roles and manage shared permissions here in OFFICE.',icon:'☷',action:'roles',permission:'manage_roles'},
- {section:'system',title:'Application updates',description:'Update the STORE OPS web app, shared server and registered DESK, STORE OPS desktop and OFFICE computers.',icon:'↓',action:'computer-updates',permission:'admin'},
+ {section:'system',title:'Installed application versions',description:'See registered computers and the versions installed on them.',icon:'↓',action:'computer-updates',permission:'admin'},
  {section:'system',title:'Operations & server',description:'Open Operations settings and shared server administration.',icon:'▣',action:'server',permission:'admin'},
  {section:'system',title:'Credit-card processing',description:'Credit cards will be added in future updates.',icon:'▰',action:'cards',permission:'manage_pos'}
 ];
@@ -262,7 +262,7 @@ let officeSection='home';
 const officeHub=document.createElement('section');officeHub.id='officeHub';officeHub.hidden=!officeMode;officeHub.innerHTML=`<div class="officeIntro"><div><span class="eyebrow">COASTYOUTH RETAIL OFFICE</span><h1 id="officeHeading">Retail administration</h1><p>Configure your store. Keep checkout focused.</p></div><span class="officeConnected">● Shared Operations server</span></div><div id="officeTiles"></div><section id="officeWork" hidden><button id="officeBack" type="button">‹ Back to menu</button><h2 id="officeWorkTitle"></h2><div id="officeForms"></div><div id="officeCatalog"></div></section>`;posPanel.append(officeHub);
 const officeNav=document.createElement('nav');officeNav.id='officeNav';officeNav.hidden=!officeMode;officeNav.setAttribute('aria-label','OFFICE sections');officeNav.innerHTML=officeSections.map(([id,label,icon])=>`<button type="button" data-office-section="${id}"><span aria-hidden="true">${icon}</span>${label}</button>`).join('');document.querySelector('.sidebar').insertBefore(officeNav,$('navCheckout'));
 function officeRenderCatalog(){if(!officeMode||!posOverview)return;const products=posOverview.products;$('officeCatalog').innerHTML='<h3>Catalog · '+products.length+' products</h3><p>Groups become category buttons in DESK.</p><table><thead><tr><th>Product</th><th>Group</th><th>Price</th><th>Tax</th></tr></thead><tbody>'+products.map(x=>`<tr><td>${esc(x.name)}<small class="flowLineNote">${esc(flowLineDetails(x)+(x.tag?' · '+x.tag.name+' tag · '+posMoney(x.tag.discount)+' markdown':''))}</small></td><td>${esc(x.category)}</td><td>${posMoney(x.price)}</td><td>${x.taxable?'Taxable':'Non-taxable'}</td></tr>`).join('')+'</tbody></table>';}
-function officeAvailableCards(){return user?officeCards.filter(x=>(x.action==='user-setup'?['manage_users','reset_passwords','rename_users','manage_staff_schedule'].some(can):x.action==='timekeeping-manage'?['edit_time_cards','add_time_cards','manage_staff_schedule','export_payroll','manage_work_sites','review_requests'].some(can):x.action==='labor-reports'?['edit_time_cards','add_time_cards','export_payroll'].some(can):x.permission==='admin'?user?.admin:can(x.permission))&&(['cash-advance-report','hr-onboarding','users','user-setup','roles','server','updates','labor-reports','schedule-report','login-security','review-communications','timekeeping-manage'].includes(x.action)||can('use_pos'))):[];}
+function officeAvailableCards(){return user?officeCards.filter(x=>(x.action==='user-setup'?['manage_users','reset_passwords','rename_users','manage_staff_schedule'].some(can):x.action==='timekeeping-manage'?['edit_time_cards','add_time_cards','manage_staff_schedule','export_payroll','manage_work_sites','review_requests'].some(can):x.action==='labor-reports'?['edit_time_cards','add_time_cards','export_payroll'].some(can):x.permission==='admin'?user?.admin:can(x.permission))&&(['training-report','cash-advance-report','hr-onboarding','users','user-setup','roles','server','updates','labor-reports','schedule-report','login-security','review-communications','timekeeping-manage'].includes(x.action)||can('use_pos'))):[];}
 function officeRender(){if(!officeMode)return;const allowed=officeAvailableCards();$('officeHeading').textContent=officeSection==='home'?'Retail administration':officeSections.find(x=>x[0]===officeSection)[1];$('officeTiles').innerHTML=allowed.filter(x=>officeSection==='home'||x.section===officeSection).map(x=>`<button type="button" class="officeTile" data-office-action="${x.action}"><span class="officeIcon" aria-hidden="true">${x.icon}</span><span><strong>${x.title}</strong><small>${x.description}</small></span><span aria-hidden="true">›</span></button>`).join('')||'<p>No tools are enabled for your role in this section.</p>';for(const b of officeNav.querySelectorAll('button'))b.setAttribute('aria-current',b.dataset.officeSection===officeSection?'page':'false');}
 function officeHome(section='home'){if(!navigationAllowed())return;if(unfinished()){posMessage('Save or clear the current form before switching OFFICE sections.');return;}officeSection=section;$('officeWork').hidden=true;$('officeTiles').hidden=false;officeRender();}
 async function openRetailOffice(){if(!navigationAllowed()||unfinished()){posMessage('Save or clear unfinished entries before opening OFFICE.');return;}if(window.pywebview?.api?.open_operations){const r=await window.pywebview.api.open_operations('office');if(r.error)posMessage(r.error);}else window.open('/office','_blank','noopener');}
@@ -364,129 +364,6 @@ window.addEventListener('pywebviewready',refreshKiosk);
 if(!officeMode){$('navSetup').onclick=openRetailOffice;}
 boot();
 
-// POS update controls shared by the register and Operations screens.
-(()=>{
- const inPos=typeof posPanel!=='undefined',node=document.createElement('section');node.id='posApplicationUpdates';node.hidden=true;
- node.innerHTML='<h2>POS application updates</h2><p>Warn checkout staff, let transactions finish, then update their POS applications.</p><button type="button" id="openPosUpdates">Manage POS updates</button>';
- (inPos?document.getElementById('posAdmin'):document.getElementById('settings')).append(node);
- const dialog=document.createElement('dialog');dialog.id='posUpdatesDialog';dialog.innerHTML='<h2>POS application updates</h2><p>Updates do not change timecards or reservations. Each checkout computer receives its full warning period and waits for staff to finish the current sale.</p><form id="posUpdateSettings"><label>Employee warning (seconds)<input name="seconds" type="number" min="30" max="3600" value="120" required></label><button>Save warning time</button></form><div class="actions"><button type="button" id="checkPosRelease">Check for updates</button><button type="button" id="startPosRelease" disabled>Notify staff and update POS</button><button type="button" id="cancelPosRelease">Cancel update request</button></div><label>Checkout computers<select id="posUpdateTarget"><option value="all">All connected POS computers</option></select></label><p id="posReleaseStatus" role="status"></p><div id="posDeviceList"></div><button type="button" id="closePosUpdates">Close</button>';
- document.body.append(dialog);
- const banner=document.createElement('aside');banner.id='posInstallBanner';banner.hidden=true;banner.setAttribute('role','status');banner.innerHTML='<strong>POS update pending</strong><span id="posInstallMessage"></span><button type="button" id="posInstallReady">My work is finished — update</button>';document.body.append(banner);
- const get=id=>document.getElementById(id);let state=null,info=null,busy=false,lastStatus='',deadline=0,campaignId=null,seconds=0,installing=false,acting=false,staffReady=false,lastUpdate=null,noticeError='',pollError='';
- const setBanner=shown=>{banner.hidden=!shown;document.body.classList.toggle('posInstallWarning',shown);if(!shown){staffReady=false;lastUpdate=null;noticeError='';window.posUpdateCountdownDone=false;}};
- function render(data){
-  state=data;if(!user?.admin)return;
-  const release=data.release||{},campaign=data.campaign;
-  get('posReleaseStatus').textContent=release.checking?'Checking the published POS release…':release.error||('Latest POS: '+(release.version||'Check for updates')+(campaign?' · Update requested by '+campaign.by:''));
-  get('startPosRelease').disabled=!release.version||release.checking||!!campaign;
-  get('cancelPosRelease').disabled=!campaign;
-  const target=get('posUpdateTarget').value;get('posUpdateTarget').replaceChildren(new Option('All connected POS computers','all'));
-  get('posDeviceList').replaceChildren();
-  for(const device of data.devices||[]){
-   const active=Date.now()/1000-device.seen<45;
-   const text=device.user+' · '+device.device.slice(0,6)+' · POS '+device.version+' · '+(active?device.status:'Not recently connected')+(device.updater?'':' · One-time installer required');
-   const row=document.createElement('p');row.textContent=text;get('posDeviceList').append(row);
-   if(active)get('posUpdateTarget').append(new Option(device.user+' · '+device.device.slice(0,6),device.device));
-  }
-  if([...get('posUpdateTarget').options].some(x=>x.value===target))get('posUpdateTarget').value=target;
- }
- async function action(name,body={}){
-  try{render(await api('pos-update/'+name,body));}catch(e){get('posReleaseStatus').textContent=e.message;}
- }
- get('openPosUpdates').onclick=async()=>{if(inPos&&!officeMode)return;dialog.showModal();try{const data=await api('pos-update/state');render(data);get('posUpdateSettings').elements.seconds.value=data.seconds;}catch(e){get('posReleaseStatus').textContent=e.message;}};
- get('closePosUpdates').onclick=()=>dialog.close();get('checkPosRelease').onclick=()=>action('check');get('cancelPosRelease').onclick=()=>action('cancel');
- get('startPosRelease').onclick=()=>action('start',{target:get('posUpdateTarget').value});
- get('posUpdateSettings').onsubmit=async e=>{e.preventDefault();await action('settings',{seconds:Number(e.target.elements.seconds.value)});};
- function drawNotice(){
-  if(banner.hidden||!info?.updater||!lastUpdate)return;
-  seconds=Math.max(0,Math.ceil((deadline-Date.now())/1000));
-  const button=get('posInstallReady');
-  button.disabled=acting||installing;
-  if(!inPos){button.textContent='Return to POS to finish update';}
-  else button.textContent=lastUpdate.state==='error'?'Retry update download':staffReady?'Keep working':'My work is finished — update';
-  window.posUpdateCountdownDone=seconds===0;
-  const wait=seconds?'Warning time remaining: '+seconds+' seconds. ':'';
-  let message=pollError||lastUpdate.error||noticeError;
-  if(!message){
-   if(lastUpdate.state==='downloading')message=wait+'Downloading and verifying the installer. '+(staffReady?'Your work is marked finished. The update will start when the download and warning time are complete.':'Finish your work, then select My work is finished — update when ready.');
-   else if(lastUpdate.state==='ready')message=wait+(staffReady?'Your work is marked finished. Waiting for the warning time to end.':'Finish or hold the current sale and save your work, then select My work is finished — update.');
-   else if(lastUpdate.state==='installing')message='Installing the update. DESK will reopen when finished.';
-   else message=wait+'Checking update readiness. Your work has not been closed.';
-  }
-  if(lastUpdate.state==='error')message='Update paused: '+(message||'The installer could not be prepared.')+' Select Retry update download. Your sale is unchanged.';
-  get('posInstallMessage').textContent=message;
- }
- async function attemptInstall(native){
-  if(acting||installing||lastUpdate?.state!=='ready'||seconds>0)return;
-  acting=true;drawNotice();
-  try{
-   const outcome=await native.install_update();
-   if(outcome?.error){staffReady=false;noticeError=outcome.error;lastStatus=outcome.error;}
-  }catch(error){staffReady=false;noticeError='Update paused: '+error.message;}
-  finally{acting=false;if(!installing)drawNotice();}
- }
- for(const event of ['pointerdown','keydown','input'])document.addEventListener(event,e=>{
-  if(staffReady&&!banner.contains(e.target)){staffReady=false;noticeError='';drawNotice();}
- },true);
- get('posInstallReady').onclick=async()=>{
-  if(acting||installing)return;
-  const native=window.pywebview?.api;
-  if(!inPos){const result=await native.open_operations('pos');if(result.error)get('posInstallMessage').textContent=result.error;return;}
-  if(!info?.updater){get('posInstallMessage').textContent='This older POS needs the one-time installer. Ask an administrator to finish this installation.';return;}
-  noticeError='';
-  if(lastUpdate?.state==='error'){
-   staffReady=false;acting=true;drawNotice();
-   try{
-    // Older installed clients can retry safely too; they repeat their warning period.
-    if(native.retry_update){lastUpdate=await native.retry_update(campaignId);deadline=Date.now()+Math.max(0,lastUpdate.seconds||0)*1000;}
-    else{await native.update_status(null);lastUpdate=null;}
-   }catch(error){noticeError='Unable to retry the download: '+error.message;}
-   finally{acting=false;drawNotice();}
-   await poll();return;
-  }
-  if(staffReady){staffReady=false;drawNotice();return;}
-  if(unfinished()||posCurrent?.lines.length||flow?.active){noticeError='Finish or cancel your current sale, or hold it, and save all unfinished entries before updating.';drawNotice();return;}
-  staffReady=true;drawNotice();await attemptInstall(native);
- };
- async function poll(){
-  if(busy||acting||!user||installing)return;busy=true;
-  try{
-   node.hidden=!user.admin||(inPos&&!officeMode);
-   if((!inPos||officeMode)&&location.hash==='#pos-updates'&&user.admin&&!dialog.open){get('openPosUpdates').click();history.replaceState(null,'',location.pathname);}
-   const native=window.pywebview?.api?.kiosk_info?window.pywebview.api:null;
-   if(native){
-    info=(typeof kioskInfo!=='undefined'&&kioskInfo)||info||await native.kiosk_info();
-    if(info.device){
-     const result=await api('pos-update/heartbeat',{computer:info.computer,device:info.device,version:info.version||'1.0.1',updater:!!info.updater,status:lastStatus||'Connected'});render(result);
-    }
-   }else if(user.admin&&dialog.open)render(await api('pos-update/state'));
-   if(!native||!info?.device)return;
-   const campaign=state?.campaign;
-   if(!campaign||(campaign.target!=='all'&&campaign.target!==info.device&&!campaign.targets?.includes(info.device))){setBanner(false);campaignId=null;if(info.updater)await native.update_status(null);return;}
-   if(info.updater){
-    const update=await native.update_status(campaign.id);lastStatus=update.state==='complete'?'Update complete · POS '+info.version:update.error||update.state+(update.seconds?' · '+update.seconds+' seconds':'');
-    if(update.state==='complete'||update.state==='idle'){setBanner(false);return;}
-    if(campaignId!==campaign.id){staffReady=false;noticeError='';}
-    pollError='';lastUpdate=update;seconds=Math.max(0,Number(update.seconds)||0);deadline=Date.now()+seconds*1000;campaignId=campaign.id;setBanner(true);drawNotice();
-    if(inPos&&update.state==='ready'&&seconds===0&&(staffReady||campaign.mode==='force'||campaign.automatic)&&!unfinished())await attemptInstall(native);
-   }else{
-    if(campaignId!==campaign.id){campaignId=campaign.id;deadline=Date.now()+campaign.seconds*1000;}
-    setBanner(true);get('posInstallReady').disabled=true;get('posInstallMessage').textContent='An update is pending. Finish your transaction. This older POS requires an administrator to install the new version once.';lastStatus='One-time installer required';
-   }
-  }catch(e){if(!banner.hidden){pollError='Update paused: '+e.message;get('posInstallMessage').textContent=pollError;}}
-  finally{busy=false;}
- }
- setInterval(drawNotice,1000);
- setInterval(poll,4000);window.addEventListener('pywebviewready',poll);setTimeout(poll,1000);
- if(inPos){
-  window.posUpdateFreeze=(force=false)=>{
-   if(unfinished()||(!force&&posCurrent?.lines.length)||flow?.active)return false;
-   installing=true;window.posUpdateInstalling=true;document.body.classList.add('posInstalling');get('posInstallMessage').textContent='Installing POS update. The application will reopen when finished.';return true;
-  };
-  window.posUpdateUnfreeze=()=>{installing=false;window.posUpdateInstalling=false;document.body.classList.remove('posInstalling');};
-  const original=posDo;posDo=async function(action,...args){if(window.posUpdateInstalling)return;if(action==='new'&&window.posUpdateCountdownDone&&!banner.hidden){posMessage('An update is pending. Finish this transaction and update before starting another.');return;}return original(action,...args);};
- }
-})();
 // Shared terminal registry and OFFICE-only layout configuration.
 let retailState=null,retailDraft=null,retailGroup=0,retailTerminal=null,retailLayout=null,retailScreen=0;
 let retailNativeDevice=null;
@@ -812,7 +689,7 @@ const customerPairButton=document.createElement('button');customerPairButton.id=
 let customerPairToken=null,customerDisplayBusy=false;
 customerPairButton.onclick=async()=>{if(!user)return;try{const r=await retailSave('display-pair',{});customerPairToken=r.token;const url=new URL(r.path,location.origin).href;const d=flowModal('Open the customer screen',`<p>Open this limited-access display on the customer monitor, then select Full screen. Use a separate browser profile without a staff login on customer-accessible touchscreens. Pairing lasts 12 hours. Keep this link on your store’s devices.</p><label>Display link<input id="customerPairLink" readonly value="${esc(url)}"></label><a id="customerOpenDisplay" href="${esc(url)}" target="_blank" rel="noopener">Open customer display</a><p>Only this checkout’s products and totals are shared.</p>`);await customerDisplaySync();}catch(e){posMessage(e.message);}};
 async function customerDisplaySync(){if(!customerPairToken||customerDisplayBusy)return;customerDisplayBusy=true;try{await api('pos/display-state',{token:customerPairToken,cart:user&&$('posReceipt').hidden?posCurrent?.id||null:null,sale:user&&!$('posReceipt').hidden?posLastReceipt?.id||null:null});}catch(e){if(e.status===404||e.status===401)customerPairToken=null;}finally{customerDisplayBusy=false;}}
-setInterval(customerDisplaySync,2000);
+setInterval(()=>customerDisplaySync(),2000);
 
 // END CUSTOMER OFFICE
 
@@ -844,8 +721,10 @@ if(!officeMode){
  const pin=document.createElement('form');pin.id='deskPinForm';pin.innerHTML='<h2>Staff PIN sign-in</h2><p>Enter your six-digit staff PIN. It is managed in OFFICE and shared with Time Clock.</p><label>PIN<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="off" required></label><div class="deskKeypad"></div><button class="primary">Sign in</button><button type="button" id="deskPasswordToggle">Username & password</button><p id="deskPinError" role="alert"></p>';$('login').before(pin);$('login').hidden=true;
  for(const n of ['1','2','3','4','5','6','7','8','9','Clear','0','⌫']){const b=document.createElement('button');b.type='button';b.textContent=n;b.onclick=()=>{const input=pin.elements.pin;input.value=n==='Clear'?'':n==='⌫'?input.value.slice(0,-1):(input.value+n).slice(0,6);};pin.querySelector('.deskKeypad').append(b);}
  $('deskPasswordToggle').onclick=()=>{$('login').hidden=!$('login').hidden;};
- pin.onsubmit=async e=>{e.preventDefault();try{await api('pos-pin-login',{pin:pin.elements.pin.value});pin.reset();$('deskPinError').textContent='';await boot();}catch(e){pin.reset();$('deskPinError').textContent=e.message;}};
- const previousBoot=boot;boot=async function(){await previousBoot();if(!user){$('login').hidden=true;pin.reset();}};
+ pin.onsubmit=async e=>{e.preventDefault();try{await api('pos-pin-login',{pin:pin.elements.pin.value});pin.reset();$('deskPinError').textContent='';await boot();}catch(e){pin.reset();pin.elements.pin.focus();$('deskPinError').textContent=e.message;}};
+ const previousBoot=boot;boot=async function(){await previousBoot();if(!user){$('login').hidden=true;pin.reset();requestAnimationFrame(()=>pin.elements.pin.focus());}};
+ const focusPin=()=>{if(!user&&!$('auth').hidden&&!document.querySelector('dialog[open]'))pin.elements.pin.focus();};
+ new MutationObserver(focusPin).observe($('auth'),{attributes:true,attributeFilter:['hidden']});requestAnimationFrame(focusPin);
 }
 officeCards.push({section:'accounts',title:'Employee cash advances',description:'Cash paid to employees by store, date and issuing staff member.',icon:'▤',action:'cash-advance-report',permission:'view_cash_advances'},{section:'sales',title:'Sales analysis',description:'Sales, cash, products, taxes and transaction reports.',icon:'▥',action:'report-center',permission:'view_pos_sales'},
  {section:'security',title:'Login security / unlock',description:'Review locked users and configure login attempt limits.',icon:'♙',action:'login-security',permission:'unlock_users'},
@@ -883,14 +762,6 @@ async function officeEditUser(name){
  if(can('rename_users'))try{const profile=await api('admin/user-identity?name='+encodeURIComponent(name));for(const key of ['username','first','middle','last'])$('officePersonal').elements[key].value=profile[key];}catch(e){$('officeUserSaveStatus').textContent=e.message;}
 }
 
-if(officeMode){
- const banner=document.createElement('aside');banner.className='officeUpdateBanner';banner.hidden=true;banner.innerHTML='<strong>OFFICE update pending</strong><p></p><button>My work is saved — update now</button>';document.body.prepend(banner);let busy=false,ready=false,lastOfficeUpdateStatus="Connected";
- window.posUpdateFreeze=()=>{if(unfinished()||flow?.active)return false;window.posUpdateInstalling=true;document.body.classList.add('posInstalling');return true;};
- window.posUpdateUnfreeze=()=>{window.posUpdateInstalling=false;document.body.classList.remove('posInstalling');};
- banner.querySelector('button').onclick=async()=>{const r=await window.pywebview.api.office_install_update();if(r?.error)banner.querySelector('p').textContent=r.error;};
- setInterval(async()=>{const native=window.pywebview?.api;if(busy||!user||!native?.office_update_info||window.posUpdateInstalling)return;busy=true;try{const info=await native.office_update_info();if(info.error)throw Error(info.error);const state=await api('office-update/heartbeat',{computer:info.computer,device:info.device,version:info.version,updater:true,status:lastOfficeUpdateStatus});const job=state.campaign;if(!job){banner.hidden=true;await native.office_update_status(null);return;}const update=await native.office_update_status(job.id);lastOfficeUpdateStatus=update.error||update.state+(update.seconds?' · '+update.seconds+' seconds':'');banner.hidden=['idle','complete'].includes(update.state);ready=update.state==='ready'&&!update.seconds;banner.querySelector('button').disabled=!ready;banner.querySelector('p').textContent=update.error||(update.seconds?'Update in '+update.seconds+' seconds. Finish and save your current work.':'Save your current work. Coordinated updates install automatically when safe; individual updates require acknowledgement.');if(ready&&(job.mode==='force'||job.automatic)&&!unfinished()){const r=await native.office_install_update();if(r?.error)banner.querySelector('p').textContent=r.error;}}catch(e){banner.querySelector('p').textContent=e.message;}finally{busy=false;}},4000);
-}
-
 officeCards.push({section:'communications',title:'Review staff communications',description:'Review retained conversations, files and saved messages.',icon:'✉',action:'review-communications',permission:'review_staff_communications'});
 const beforeCommunicationReview=officeAction;
 officeAction=async function(action){
@@ -917,39 +788,26 @@ officeAction=async function(action){
  officeTimeFrame.hidden=false;
 };
 
-// Computer registration and coordinated updates, backed by the shared server.
+// Computer registration and installed versions, backed by the shared server.
 officeCards.push({section:'system',title:'Registered computers',description:'Approve discovered PCs and keep their names, roles and application inventory.',icon:'▣',action:'computer-register',permission:'admin'});
+// BEGIN COMPUTER INVENTORY
 const officeBeforeComputers=officeAction;
-let computerPanelTimer=null;
 officeAction=async function(action){
  if(!['computer-register','computer-updates'].includes(action))return officeBeforeComputers(action);
  if(!navigationAllowed()||unfinished())return;
- const registration=action==='computer-register';
- const dialog=flowModal(registration?'Registered computers':'Application updates',`${registration?'':officeWebUpdateMarkup()+'<h3 class="officeDesktopHeading">Desktop applications</h3>'}<div class="computerIntro"><p>${registration?'Register each computer once. Its identity stays the same when its IP address changes.':'Send one update request to all selected computers. Each application warns staff and waits for transactions and unsaved work to finish.'}</p><p class="muted">MAC addresses are reference information. Computers are matched by a persistent Windows identity, not by IP or MAC alone.</p></div><div class="actions"><button id="computerRefresh">Refresh computers</button><button id="computerCheck">Check for updates</button></div><p id="computerStatus" role="status"></p><div id="computerVersions" class="computerVersions"></div>${registration?'':`<div class="computerSelectionTools"><button id="computerSelectAll" type="button">Select all registered</button><button id="computerSelectNone" type="button">Clear selection</button><strong id="computerSelectionCount" aria-live="polite">0 selected</strong></div><form id="computerRollout"><label>Employee warning (seconds)<input name="seconds" type="number" min="30" max="3600" value="120" required></label><button class="primary" type="submit">Notify staff & update selected computers</button><button type="button" id="computerCancel">Cancel pending rollout</button></form>`}<div id="computerRows"></div><p class="muted">Keep DESK, STORE OPS or OFFICE open and signed in to receive updates. Closed applications and offline computers remain pending until they reconnect. Computers need this desktop update installed once before they can appear here. ${registration?'Open Application updates for the STORE OPS web app and shared server.':'Use the STORE OPS web app &amp; server section above for the shared website.'} Desktop selections only update the applications installed on those computers.</p>`);
- dialog.classList.add('computerDialog');let current=null,busy=false;const selected=new Set();const webUpdates=registration?null:officeAttachWebUpdates(dialog);
- const selectionStatus=()=>{if(registration)return;$('computerSelectionCount').textContent=selected.size+' computer(s) selected';$('computerRollout').querySelector('[type=submit]').disabled=!selected.size;};
- const render=data=>{
-  if(!dialog.open||!dialog.isConnected||!data)return;current=data;for(const id of selected)if(!data.computers.some(pc=>pc.id===id&&pc.registered))selected.delete(id);const rel={ops:{},...data.releases};
-  $('computerVersions').innerHTML=['pos','office','ops'].map(app=>`<article><span>${app==='pos'?'DESK':app==='ops'?'STORE OPS desktop':'OFFICE'}</span><strong>${esc(rel[app].checking?'Checking…':rel[app].error?'Check failed':rel[app].version||'Not checked')}</strong>${rel[app].error?`<small>${esc(rel[app].error)}</small>`:''}</article>`).join('');
-  $('computerRows').innerHTML=data.computers.map(pc=>`<article class="computerCard"><header><div><h3>${esc(pc.name||pc.hostname||'Unnamed computer')}</h3><p>${esc(pc.hostname)} · ${esc(pc.role)} · <strong>${pc.registered?'Registered':'Awaiting registration'}</strong></p></div>${!registration?`<label class="computerSelectLabel"><input type="checkbox" aria-label="Select ${esc(pc.name||pc.hostname)} for updates" data-select-computer="${pc.id}" ${pc.registered?'':'disabled'} ${selected.has(pc.id)?'checked':''}> ${pc.registered?'Include in update':'Register first'}</label>`:''}</header><p class="muted">Computer ID ${esc(pc.id.slice(0,12))}… · MAC ${esc(pc.macs.join(', ')||'Unavailable')}</p>${registration?`<form data-register-computer="${pc.id}" data-revision="${pc.revision}"><label>Display name<input name="name" maxlength="80" required value="${esc(pc.name||pc.hostname)}"></label><label>Computer role<select name="role">${[['pos','POS checkout'],['office','Office computer'],['server','Server computer'],['other','Other']].map(([v,t])=>`<option value="${v}" ${pc.role===v?'selected':''}>${t}</option>`).join('')}</select></label><button>${pc.registered?'Save registration':'Register computer'}</button></form>`:''}<div class="computerApps">${pc.apps.map(a=>`<div><strong>${a.app==='pos'?'DESK':a.app==='ops'?'STORE OPS desktop':'OFFICE'} ${esc(a.version)}</strong><span class="computerBadge ${a.online?'online':''}">${a.online?'Connected':'Offline / closed'}</span><span>${a.complete?'Updated to target':a.target?`Target ${esc(a.target)} · ${esc(a.progress)}`:a.available?'Update available':rel[a.app].version?'Up to date':'Not checked'}</span><small>Last seen ${esc(new Date(a.seen*1000).toLocaleString())} · IP ${esc(a.ip)}</small></div>`).join('')}</div></article>`).join('')||'<div class="computerEmpty"><h3>No computers discovered yet</h3><p>Open the updated DESK, STORE OPS or OFFICE application and sign in on each computer. Then register it here.</p></div>';
-  const pending=data.computers.flatMap(p=>p.apps).filter(a=>a.target&&!a.complete).length,complete=data.computers.flatMap(p=>p.apps).filter(a=>a.complete).length;
-  selectionStatus();$('computerStatus').textContent=pending?`${pending} application update(s) pending · ${complete} verified complete`:complete?`Rollout complete: ${complete} application update(s) verified.`:`${data.computers.filter(p=>p.registered).length} registered computer(s).`;
- };
- const refresh=async()=>{if(busy||!dialog.open||[...changedForms.keys()].some(f=>dialog.contains(f)))return;busy=true;try{render(await api('computers/state'));}catch(e){if(dialog.open&&dialog.isConnected)$('computerStatus').textContent=e.message;}finally{busy=false;}};
- const act=async(path,body)=>{if(busy||!dialog.open)return;busy=true;try{render(await api('computers/'+path,body));}catch(e){if(dialog.open&&dialog.isConnected)$('computerStatus').textContent=e.message;}finally{busy=false;}};
- $('computerRefresh').onclick=refresh;$('computerCheck').textContent=registration?'Check desktop updates':'Check all updates';$('computerCheck').onclick=()=>Promise.all([act('check',{}),webUpdates?.check()]);
- $('computerRows').onchange=e=>{if(e.target.dataset.selectComputer){if(e.target.checked)selected.add(e.target.dataset.selectComputer);else selected.delete(e.target.dataset.selectComputer);selectionStatus();}};
- $('computerRows').onsubmit=e=>{const form=e.target;if(!form.dataset.registerComputer)return;e.preventDefault();changedForms.delete(form);act('register',{id:form.dataset.registerComputer,revision:Number(form.dataset.revision),name:form.elements.name.value,role:form.elements.role.value});};
- if(!registration){$('computerSelectAll').onclick=()=>{current?.computers.filter(pc=>pc.registered).forEach(pc=>selected.add(pc.id));render(current);};$('computerSelectNone').onclick=()=>{selected.clear();render(current);};$('computerRollout').onsubmit=e=>{e.preventDefault();changedForms.delete(e.target);act('start',{computers:[...selected],seconds:Number(e.target.elements.seconds.value)});};$('computerCancel').onclick=()=>{if(confirm('Cancel pending computer updates? Installers already running will finish.'))act('cancel',{});};}
- if(computerPanelTimer)clearInterval(computerPanelTimer);computerPanelTimer=setInterval(refresh,5000);dialog.addEventListener('close',()=>{clearInterval(computerPanelTimer);computerPanelTimer=null;},{once:true});await refresh();
+ const registration=action==='computer-register',dialog=flowModal(registration?'Registered computers':'Installed application versions','<p>Registration stays with the computer when its address changes. Applications check for updates on startup and hourly; restart an application to install an available update.</p><button id="computerRefresh" type="button">Refresh computers</button><p id="computerStatus" role="status"></p><div id="computerRows"></div>');
+ dialog.classList.add('computerDialog');let busy=false;
+ function render(data){
+  dialog.querySelector('#computerStatus').textContent=`${data.computers.filter(p=>p.registered).length} registered computers · Server ${data.server_version}`;
+  dialog.querySelector('#computerRows').innerHTML=data.computers.map(pc=>`<article class="computerCard"><h3>${esc(pc.name||pc.hostname)}</h3><p>${esc(pc.hostname)} · ${esc(pc.role)} · ${pc.registered?'Registered':'Awaiting registration'}</p>${registration?`<form data-register-computer="${pc.id}" data-revision="${pc.revision}"><label>Name<input name="name" maxlength="80" required value="${esc(pc.name||pc.hostname)}"></label><label>Role<select name="role">${[['pos','POS checkout'],['office','Office computer'],['server','Server computer'],['other','Other']].map(([v,t])=>`<option value="${v}" ${pc.role===v?'selected':''}>${t}</option>`).join('')}</select></label><button>Save registration</button></form>`:''}<div class="computerApps">${pc.apps.map(a=>`<div><strong>${a.app==='pos'?'DESK':a.app==='ops'?'STORE OPS desktop':'OFFICE'} · ${esc(a.version)}</strong><span>${a.online?'Connected':'Offline / closed'}</span><small>Last seen ${esc(new Date(a.seen*1000).toLocaleString())} · ${esc(a.ip)}</small></div>`).join('')}</div></article>`).join('')||'<p>No computers registered yet.</p>';
+ }
+ async function refresh(){if(busy||!dialog.open||[...changedForms.keys()].some(f=>dialog.contains(f)))return;busy=true;try{render(await api('computers/state'));}catch(e){dialog.querySelector('#computerStatus').textContent=e.message;}finally{busy=false;}}
+ dialog.querySelector('#computerRefresh').onclick=refresh;
+ dialog.querySelector('#computerRows').onsubmit=async e=>{e.preventDefault();if(busy)return;const f=e.target;busy=true;try{const data=await api('computers/register',{id:f.dataset.registerComputer,revision:Number(f.dataset.revision),name:f.elements.name.value,role:f.elements.role.value});changedForms.delete(f);render(data);}catch(error){dialog.querySelector('#computerStatus').textContent=error.message;}finally{busy=false;}};
+ const timer=setInterval(refresh,15000);dialog.addEventListener('close',()=>clearInterval(timer),{once:true});await refresh();
 };
 
-if(officeMode){
- const summary=document.createElement('section');summary.className='computerUpdateSummary';summary.hidden=true;summary.innerHTML='<div><strong>Application updates</strong><p>Checking registered computers…</p></div><button type="button">View updates</button>';$('officeTiles').before(summary);
- summary.querySelector('button').onclick=()=>officeAction('computer-updates');let running=false;
- const check=async()=>{summary.hidden=!user?.admin;if(!user?.admin||running)return;running=true;try{const state=await api('computers/state');const web=await api('connection-status');const apps=state.computers.filter(p=>p.registered).flatMap(p=>p.apps);const count=apps.filter(a=>a.available).length,pending=apps.filter(a=>a.target&&!a.complete).length,done=apps.filter(a=>a.complete).length;summary.querySelector('p').textContent=pending?`${pending} application update(s) pending · ${done} verified complete`:count?`${count} application update(s) available`:!apps.length?'Register your computers to track installed versions.':Object.values(state.releases).some(r=>r.error)?'Unable to check for updates. Open updates for details.':Object.values(state.releases).some(r=>r.checking)?'Checking for updates…':'Registered applications are up to date.';if(web.update_available)summary.querySelector('p').textContent='STORE OPS web app update available · '+summary.querySelector('p').textContent;summary.classList.toggle('hasUpdates',!!(count||pending||web.update_available));}catch(e){summary.querySelector('p').textContent=e.message;}finally{running=false;}};
- setInterval(check,30000);const bootBeforeComputerSummary=boot;boot=async function(){await bootBeforeComputerSummary();await check();};setTimeout(check,1000);
-}
+// END COMPUTER INVENTORY
 
 // END OFFICE EXPANSION
 
@@ -1123,7 +981,8 @@ async function thriftSettings(){
 async function thriftDesk(){
  if(!navigationAllowed()||unfinished()){posMessage('Save or clear current entries first.');return;}
  const {settings:s}=await api('pos/thrift-config');let cart=posCurrent;
- const d=thriftModal('Thrift store checkout',`<p>${cart?'Saved sale · '+posMoney(cart.total):'Start a sale to apply tags, donations or rewards.'}</p><div class="flowToolbar"><button id="thriftCustomer">Customer & rewards</button>${can('view_pos_sales')?'<button id="thriftSold">Sold-item pickup slip</button>':''}</div>${cart?`<form id="thriftTagForm"><h3>Color tag</h3><label>Merchandise line<select name="index">${cart.lines.map((l,i)=>l.donation?'':`<option value="${i}">${esc(l.name)}${l.tag?' · '+esc(l.tag.name):''}</option>`).join('')}</select></label><label>Tag<select name="tag"><option value="">No tag / restore tag price</option>${s.tags.map(t=>`<option>${esc(t.name)}</option>`).join('')}</select></label><button>Apply tag</button></form>${s.donations?`<form id="thriftDonation"><h3>Voluntary donation</h3><p>Ask the customer first. This is separate from cash-change rounding.</p>${thriftField('Custom amount ($), or zero to remove','amount','0.00','number','min="0" max="1000" step="0.01" required')}<button>Set donation</button><button type="button" id="thriftRoundup">Round up to next dollar</button></form>`:''}${s.loyalty?`<h3>Rewards</h3><p>${cart.customer?'Customer #'+cart.customer:'No customer selected'}</p><button id="thriftReward">${cart.reward?'Remove reward':'Redeem one reward'}</button>`:''}`:''}`);
+ const d=thriftModal('Thrift store checkout',`<p>${cart?'Saved sale · '+posMoney(cart.total):'Start a sale to apply tags, donations or rewards.'}</p><div class="flowToolbar"><button id="thriftAddCustomer">Add customer</button><button id="thriftCustomer">Find customer & rewards</button>${can('view_pos_sales')?'<button id="thriftSold">Sold-item pickup slip</button>':''}</div>${cart?`<form id="thriftTagForm"><h3>Color tag</h3><label>Merchandise line<select name="index">${cart.lines.map((l,i)=>l.donation?'':`<option value="${i}">${esc(l.name)}${l.tag?' · '+esc(l.tag.name):''}</option>`).join('')}</select></label><label>Tag<select name="tag"><option value="">No tag / restore tag price</option>${s.tags.map(t=>`<option>${esc(t.name)}</option>`).join('')}</select></label><button>Apply tag</button></form>${s.donations?`<form id="thriftDonation"><h3>Voluntary donation</h3><p>Ask the customer first. This is separate from cash-change rounding.</p>${thriftField('Custom amount ($), or zero to remove','amount','0.00','number','min="0" max="1000" step="0.01" required')}<button>Set donation</button><button type="button" id="thriftRoundup">Round up to next dollar</button></form>`:''}${s.loyalty?`<h3>Rewards</h3><p>${cart.customer?'Customer #'+cart.customer:'No customer selected'}</p><button id="thriftReward">${cart.reward?'Remove reward':'Redeem one reward'}</button>`:''}`:''}`);
+ d.querySelector('#thriftAddCustomer').onclick=()=>{thriftClose(d);customerCreateTouch();};
  d.querySelector('#thriftCustomer').onclick=()=>{thriftClose(d);thriftCustomers(true);};
  if(d.querySelector('#thriftSold'))d.querySelector('#thriftSold').onclick=()=>{thriftClose(d);thriftPickupEditor();};
  async function act(action,data){try{if(!cart){await flowEnsureProductSale();cart=posCurrent;}await posDo(action,{cart:cart.id,revision:cart.revision,...data});thriftClose(d);if(!posPending)await thriftDesk();}catch(e){thriftError(d,e);}}
@@ -1135,10 +994,10 @@ async function thriftDesk(){
  if(s.loyalty)d.querySelector('#thriftReward').onclick=()=>act('thrift-reward',{redeem:!cart.reward});
 }
 async function thriftCustomers(select){
- const d=thriftModal(select?'Select customer':'Customers & rewards',`<form id="thriftCustomerSearch">${thriftField('Find by name, contact or customer number','search','','search','minlength="2" required')}<button>Search</button></form><div id="thriftCustomerResults"></div><details><summary>Add customer</summary><form id="thriftCustomerCreate">${thriftField('Name','name','','text','required maxlength="120"')}${thriftField('Contact / membership reference','contact')}${thriftCheck('Customer explicitly agrees to marketing messages','marketing',false)}<p>Marketing consent is optional and does not affect rewards.</p><button>Create customer</button></form></details>`);
+ const d=thriftModal(select?'Select customer':'Customers & rewards',`<form id="thriftCustomerSearch">${thriftField('Find by name, contact or customer number','search','','search','minlength="2" required')}<button>Search</button></form><div id="thriftCustomerResults"></div><button id="thriftCustomerAdd" type="button">Add customer</button>`);
  let found=[];function show(customers){found=customers;d.querySelector('#thriftCustomerResults').innerHTML=customers.length?customers.map(c=>`<article><h3>${esc(c.name)} · #${c.id}</h3><p>${esc(c.contact)} · ${c.points} points · Marketing: ${c.marketing?'consented':'not opted in'}</p><button data-edit-customer="${c.id}">Edit profile / consent</button>${select&&posCurrent?`<button data-select-customer="${c.id}">Use for this sale</button>`:''}</article>`).join(''):'<p>No matching customers.</p>';}
  d.querySelector('#thriftCustomerSearch').onsubmit=async e=>{e.preventDefault();try{show((await api('pos/thrift-customers?store_id='+stores_id_js()+'&search='+encodeURIComponent(e.target.elements.search.value))).customers);changedForms.delete(e.target);}catch(err){thriftError(d,err);}};
- d.querySelector('#thriftCustomerCreate').onsubmit=async e=>{e.preventDefault();try{const f=e.target.elements;show([(await retailSave('thrift-customer-save',{name:f.name.value,contact:f.contact.value,marketing:f.marketing.checked})).customer]);e.target.reset();}catch(err){thriftError(d,err);}};
+ d.querySelector('#thriftCustomerAdd').onclick=()=>{thriftClose(d);customerCreateTouch();};
  d.querySelector('#thriftCustomerResults').onclick=async e=>{const edit=e.target.closest('[data-edit-customer]');if(edit){const c=found.find(x=>x.id===Number(edit.dataset.editCustomer));const ed=thriftModal('Edit customer',`<form>${thriftField('Name','name',c.name,'text','required')}${thriftField('Contact','contact',c.contact)}${thriftCheck('Customer agrees to marketing messages','marketing',c.marketing)}<button>Save profile</button></form>`);ed.querySelector('form').onsubmit=async ev=>{ev.preventDefault();try{const f=ev.target.elements;const updated=(await retailSave('thrift-customer-save',{id:c.id,revision:c.revision,name:f.name.value,contact:f.contact.value,marketing:f.marketing.checked})).customer;show([updated]);thriftClose(ed);}catch(err){thriftError(ed,err);}};return;}const b=e.target.closest('[data-select-customer]');if(b){await posDo('thrift-customer',{cart:posCurrent.id,revision:posCurrent.revision,customer:Number(b.dataset.selectCustomer)});thriftClose(d);}};
 }
 async function thriftVoucher(){
@@ -1299,6 +1158,9 @@ if(!document.body.dataset.retailTheme)document.body.dataset.retailTheme='glass-b
 officeCards.push({section:'sales',action:'surcharge-settings',title:'Surcharge rules',description:'Set general sale surcharge limits separately from discounts.',permission:'manage_pos',icon:'+'},{section:'sales',action:'card-future-settings',title:'Credit card settings (future)',description:'Card payments and card surcharges will be added in future updates.',permission:'manage_pos',icon:'▤'});
 const surchargeOfficeAction=officeAction;officeAction=async function(action){if(['surcharge-settings','card-future-settings'].includes(action)){await surchargeOfficeAction('cash-rules');if($('financeRules')){financeTab=action==='surcharge-settings'?'surcharges':'cards';$('financeRules').querySelector(`[data-finance-tab="${financeTab}"]`).click();}return;}return surchargeOfficeAction(action);};
 
+
+
+
 // BEGIN CASH ADVANCES
 // Employee cash payments use their own immutable ledger, separate from checkout.
 function cashAdvancePending(){try{return user?JSON.parse(sessionStorage.getItem('retail-save:'+user.name+':cash-advance')||'null'):null;}catch{return null;}}
@@ -1319,7 +1181,7 @@ async function cashAdvanceOpen(){
  const error=e=>{d.querySelector('.flowError').textContent=e.message;};
  function receipt(advance,recovered=false){
   if(form)changedForms.delete(form);
-  content.innerHTML=`<div class="advanceReceipt"><span class="eyebrow">EMPLOYEE CASH ADVANCE</span><h3>Advance #${advance.id} recorded</h3><strong class="advanceAmount">${posMoney(advance.amount)}</strong><dl><dt>Employee receiving cash</dt><dd>${esc(advance.employee_name)}</dd><dt>Issued by</dt><dd>${esc(advance.actor_name)}</dd><dt>Store / terminal</dt><dd>${esc(advance.store_name)} · ${esc(advance.terminal_name)}</dd><dt>Recorded</dt><dd>${esc(new Date(advance.at).toLocaleString())}</dd><dt>Drawer session</dt><dd>${advance.drawer?'#'+advance.drawer:'Reconciliation not enabled'}</dd><dt>Reason / reference</dt><dd>${esc(advance.reason)}</dd></dl><p>${recovered?'This advance was already recorded. Check whether the cash was handed over before paying; do not pay it twice.':'Give the recorded amount to this employee once. This payment is included in the cash drawer report.'}</p><p class="muted">Payroll recovery is handled separately.</p><div class="flowToolbar"><button id="advancePrint" type="button">Print record</button><button id="advanceDone" class="primary" type="button">Done</button></div></div>`;
+  content.innerHTML=`<div class="advanceReceipt"><span class="eyebrow">${advance.training?'TRAINING · NO CASH PAID':'EMPLOYEE CASH ADVANCE'}</span><h3>Advance #${advance.id} recorded</h3><strong class="advanceAmount">${posMoney(advance.amount)}</strong><dl><dt>Employee receiving cash</dt><dd>${esc(advance.employee_name)}</dd><dt>Issued by</dt><dd>${esc(advance.actor_name)}</dd><dt>Store / terminal</dt><dd>${esc(advance.store_name)} · ${esc(advance.terminal_name)}</dd><dt>Recorded</dt><dd>${esc(new Date(advance.at).toLocaleString())}</dd><dt>Drawer session</dt><dd>${advance.drawer?'#'+advance.drawer:'Reconciliation not enabled'}</dd><dt>Reason / reference</dt><dd>${esc(advance.reason)}</dd></dl><p>${advance.training?'Practice advance only. Do not hand over cash. This appears only in the training report.':recovered?'This advance was already recorded. Check whether the cash was handed over before paying; do not pay it twice.':'Give the recorded amount to this employee once. This payment is included in the cash drawer report.'}</p><p class="muted">Payroll recovery is handled separately.</p><div class="flowToolbar"><button id="advancePrint" type="button">Print record</button><button id="advanceDone" class="primary" type="button">Done</button></div></div>`;
   content.querySelector('#advanceDone').onclick=close;
   content.querySelector('#advancePrint').onclick=()=>{const copy=content.querySelector('.advanceReceipt').cloneNode(true);copy.querySelector('.flowToolbar').remove();thriftPrint('Employee cash advance #'+advance.id,copy.innerHTML);};
   cashAdvanceVisibility();
@@ -1332,16 +1194,16 @@ async function cashAdvanceOpen(){
   }
   const device=await retailDevice(),data=await api('pos/cash-advance-setup?device='+encodeURIComponent(device)),ctx=data.context;
   const saved=pending?JSON.parse(pending.payload):null;
-  content.innerHTML=`<div class="advanceContext"><strong>${esc(ctx.store_name)}</strong><span>${esc(ctx.terminal_name)}${ctx.drawer_id?' · Drawer #'+ctx.drawer_id:''}</span></div><p>${ctx.drawers_enabled?(ctx.drawer_id?'Expected drawer cash: '+posMoney(ctx.expected):'Open this terminal’s cash drawer in OFFICE before issuing an advance.'):'Drawer reconciliation is off. This payment will still appear in cash and employee-advance reports.'}</p><form id="cashAdvanceForm"><label>Employee receiving cash<select name="employee" required><option value="">Select another employee</option>${data.employees.map(e=>`<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('')}</select></label><label>Amount ($)<input name="amount" type="number" inputmode="decimal" min="0.01" max="100000" step="0.01" required></label><label>Reason / reference<textarea name="reason" maxlength="300" rows="3" required></textarea></label><p>Confirm the employee and amount before handing over cash. This is a cash payment record; payroll recovery is handled separately.</p><button id="advanceSubmit" class="primary" type="submit">Record cash advance</button></form>`;
+  content.innerHTML=`<div class="advanceContext"><strong>${esc(ctx.store_name)}</strong><span>${esc(ctx.terminal_name)}${ctx.drawer_id?' · Drawer #'+ctx.drawer_id:''}</span></div><p>${deskTraining.enabled?'TRAINING · Practice only. No cash will be paid or deducted from the drawer.':ctx.drawers_enabled?(ctx.drawer_id?'Expected drawer cash: '+posMoney(ctx.expected):'Open this terminal’s cash drawer in OFFICE before issuing an advance.'):'Drawer reconciliation is off. This payment will still appear in cash and employee-advance reports.'}</p><form id="cashAdvanceForm"><label>Employee receiving cash<select name="employee" required><option value="">Select another employee</option>${data.employees.map(e=>`<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('')}</select></label><label>Amount ($)<input name="amount" type="number" inputmode="decimal" min="0.01" max="100000" step="0.01" required></label><label>Reason / reference<textarea name="reason" maxlength="300" rows="3" required></textarea></label><p>Confirm the employee and amount before handing over cash. This is a cash payment record; payroll recovery is handled separately.</p><button id="advanceSubmit" class="primary" type="submit">Record cash advance</button></form>`;
   form=content.querySelector('form');const fields=form.elements;
   if(saved){fields.employee.value=saved.employee;fields.amount.value=(saved.amount/100).toFixed(2);fields.reason.value=saved.reason;}
-  function frozen(){if(cashAdvancePending()){for(const field of [fields.employee,fields.amount,fields.reason])field.disabled=true;fields.namedItem('advanceSubmit').textContent='Retry / check this advance';}else {fields.namedItem('advanceSubmit').textContent='Record cash advance';fields.namedItem('advanceSubmit').disabled=ctx.drawers_enabled&&!ctx.drawer_id;}}
+  function frozen(){if(cashAdvancePending()){for(const field of [fields.employee,fields.amount,fields.reason])field.disabled=true;fields.namedItem('advanceSubmit').textContent='Retry / check this advance';}else {fields.namedItem('advanceSubmit').textContent='Record cash advance';fields.namedItem('advanceSubmit').disabled=!deskTraining.enabled&&ctx.drawers_enabled&&!ctx.drawer_id;}}
   frozen();
   form.onsubmit=async e=>{
    e.preventDefault();if(busy)return;
    try{
     const retry=cashAdvancePending();const payload=retry?JSON.parse(retry.payload):{employee:fields.employee.value,amount:posCents(fields.amount.value),reason:fields.reason.value,terminal:ctx.terminal,store_id:ctx.store_id,drawer_id:ctx.drawer_id,confirmed:true};
-    if(!retry&&!confirm(`Record ${posMoney(payload.amount)} cash paid to ${fields.employee.selectedOptions[0]?.textContent} from ${ctx.store_name} / ${ctx.terminal_name}?`))return;
+    if(!retry&&!confirm(`${deskTraining.enabled?'TRAINING · No money paid. ':''}Record ${posMoney(payload.amount)} cash paid to ${fields.employee.selectedOptions[0]?.textContent} from ${ctx.store_name} / ${ctx.terminal_name}?`))return;
     busy=true;d.querySelector('.flowError').textContent='';
     const result=await retailSave('cash-advance',payload);receipt(result.advance,!!retry);
    }catch(e){error(e);if(!cashAdvancePending())for(const field of [fields.employee,fields.amount,fields.reason])field.disabled=false;frozen();if(cashAdvancePending())d.querySelector('.flowError').textContent='Payment status is unconfirmed. Retry / check this same advance before handing over cash. '+e.message;}
@@ -1352,101 +1214,7 @@ async function cashAdvanceOpen(){
 
 // END CASH ADVANCES
 // BEGIN OFFICE UPDATES
-// OFFICE manages desktop rollouts and the existing coordinated server/web updater.
-let officeWebRelease=null;
-function officeWebUpdateMarkup(){return `<section class="officeWebUpdate" aria-labelledby="officeWebHeading">
- <div class="officeUpdateHeading"><div><span class="eyebrow">SHARED WEBSITE</span><h3 id="officeWebHeading">STORE OPS web app &amp; server</h3></div><span class="officeUpdateTag">One shared update</span></div>
- <p>Updates operations.coastyfc.com and the shared server used by every application. The server briefly restarts; users will sign in again. The existing backup and recovery process protects saved data.</p>
- <div class="computerVersions"><article><span>Installed version</span><strong id="officeWebCurrent">Loading…</strong></article><article><span>Latest release</span><strong id="officeWebLatest">Not checked</strong></article><article><span>Other active users</span><strong id="officeWebActive">Checking…</strong></article></div>
- <p id="officeWebStatus" role="status">Loading server status…</p><p id="officeWebError" role="alert"></p>
- <details><summary>Connections &amp; release notes</summary><div id="officeWebConnections"></div><pre id="officeWebNotes"></pre></details>
- <div class="officeUpdateButtons"><button id="officeWebCheck" type="button">Check web app update</button><button id="officeWebNotify" class="primary" type="button" disabled>Notify users &amp; update when ready</button><button id="officeWebInstall" type="button" disabled>Install &amp; restart</button><button id="officeWebCancel" type="button" hidden>Cancel pending web update</button></div>
- <p class="muted">Your current session and the background server are excluded. Install &amp; restart is available when no other users are active. Updates wait for active users to finish and acknowledge.</p>
- </section>`;}
-
-function officeAttachWebUpdates(dialog){
- const get=id=>dialog.querySelector('#'+id);
- let installed=null,connections=null,pending=null,reading=false,acting=false,checking=false;
- const alive=()=>dialog.isConnected&&dialog.open&&user?.admin;
- function render(){
-  if(!alive())return;
-  const release=officeWebRelease,available=!!release?.available&&release.current===installed?.current;
-  get('officeWebCurrent').textContent=installed?.current||'Unavailable';
-  get('officeWebLatest').textContent=checking?'Checking…':release?.latest||'Not checked';
-  get('officeWebActive').textContent=connections?String(connections.other_connections):'Unavailable';
-  get('officeWebNotes').textContent=release?.notes||'Check for updates to view the latest release notes.';
-  get('officeWebConnections').replaceChildren();
-  for(const row of connections?.connections||[]){const p=document.createElement('p');p.textContent=row.name+(row.current?' · You (this session)':'')+' · '+row.kind+' · '+(row.status==='active'?'Active':'Inactive');get('officeWebConnections').append(p);}
-  if(connections&&!connections.connections.length)get('officeWebConnections').textContent='No other signed-in connections.';
-  const unavailable=!installed?.launcher,blocked=acting||checking||pending?.active||!available||unavailable||!connections;
-  get('officeWebCheck').disabled=acting||checking||!!pending?.active;
-  get('officeWebNotify').disabled=blocked;
-  get('officeWebInstall').disabled=blocked||connections.other_connections>0;
-  get('officeWebCancel').hidden=!pending?.active;
-  get('officeWebCancel').disabled=acting||pending?.phase!=='waiting';
-  get('officeWebStatus').textContent=pending?.active?`Web update ${pending.version}: ${pending.phase==='preparing'?'preparing update':pending.phase==='applying'?'installing and restarting':`waiting for ${pending.waiting} user(s)`}.`:unavailable?'Start the managed server to enable installation.':available?`Version ${release.latest} is available. ${connections?.other_connections?'Notify users so they can finish their work.':'Ready to update when your work is saved.'}`:release?.current===installed?.current?'The STORE OPS web app and server are up to date.':'Check for the latest STORE OPS web app and server release.';
- }
- async function refresh(){
-  if(!alive()||reading||acting)return;reading=true;
-  try{const values=await Promise.all([api('updates'),api('admin/update-connections'),api('update-flow')]);[installed,connections,pending]=values;}
-  catch(e){connections=null;if(alive())get('officeWebError').textContent='Could not verify server readiness: '+e.message;}
-  finally{reading=false;render();}
- }
- async function check(){
-  if(!alive()||checking||acting)return;checking=true;officeWebRelease=null;get('officeWebError').textContent='';render();
-  try{officeWebRelease=await api('update-check',{});}
-  catch(e){if(alive())get('officeWebError').textContent='Update check failed: '+e.message;}
-  finally{checking=false;await refresh();render();}
- }
- async function start(direct){
-  if(acting||checking||!alive())return;
-  if(unfinished()){get('officeWebError').textContent='Save or clear your unfinished entries before requesting a web app update.';return;}
-  await refresh();
-  if(!alive()||!connections||!installed?.launcher||!officeWebRelease?.available||officeWebRelease.current!==installed.current||pending?.active)return;
-  if(direct&&connections.other_connections){get('officeWebError').textContent='Other users are active. Choose Notify users & update when ready.';return;}
-  if(!confirm(direct?'Install the STORE OPS web app and server update? The server will restart and everyone will sign in again.':'Notify active users to finish their work, then update the STORE OPS web app and server? The server will restart after they are ready.'))return;
-  acting=true;get('officeWebError').textContent='';render();
-  try{
-   // Both entry points use the coordinator. A connection arriving after the check
-   // must still finish and acknowledge before the server can restart.
-   flow=await api('update-flow/start',{version:officeWebRelease.latest,ready:true});
-   if(flow.receipt)sessionStorage.setItem('yfc-pos-update-receipt',flow.receipt);
-   flowSeen=flow.id;flowMandatory=true;
-   dialog.close();dialog.remove();showFlow(true);
-  }catch(e){if(alive())get('officeWebError').textContent=e.message;}
-  finally{acting=false;render();}
- }
- get('officeWebCheck').onclick=check;
- get('officeWebNotify').onclick=()=>start(false);get('officeWebInstall').onclick=()=>start(true);
- get('officeWebCancel').onclick=async()=>{
-  if(acting||!pending?.active||!confirm('Cancel the pending STORE OPS web app and server update?'))return;
-  acting=true;render();try{await api('update-flow/cancel',{id:pending.id});get('officeWebError').textContent='';}catch(e){if(alive())get('officeWebError').textContent=e.message;}finally{acting=false;await refresh();}
- };
- const timer=setInterval(refresh,5000);dialog.addEventListener('close',()=>clearInterval(timer),{once:true});refresh();return {check};
-}
-
-if(officeMode){
- const progress=document.createElement('p');progress.id='officeWebProgress';progress.setAttribute('role','status');$('updateText').after(progress);
- const cancel=document.createElement('button');cancel.id='officeWebFlowCancel';cancel.type='button';cancel.textContent='Cancel pending web update';cancel.hidden=true;$('updateReady').after(cancel);
- let cancelBusy=false;
- const previousShowFlow=showFlow;
- showFlow=function(mandatory=false){
-  previousShowFlow(mandatory);
-  const admin=!!user?.admin,active=!!flow?.active;
-  progress.hidden=!admin||!active;
-  if(admin&&active){
-   progress.textContent=flow.phase==='preparing'?'Preparing the STORE OPS web app and server update…':flow.phase==='applying'?'Installing the STORE OPS web app and server update. Reconnecting…':`Waiting for ${flow.waiting} active user(s) to finish and acknowledge.`;
-   if(flow.connections?.length)progress.textContent+=' '+flow.connections.map(p=>p.name+': '+p.status).join(' · ');
-   if(flow.requester){$('updateReady').hidden=true;$('updateText').textContent='Your update request is ready. Staff can finish their current work before the shared server restarts.';}
-  }
-  cancel.hidden=!admin||!active;cancel.disabled=cancelBusy||flow?.phase!=='waiting';
- };
- cancel.onclick=async()=>{
-  if(cancelBusy||!flow?.active||!confirm('Cancel the pending STORE OPS web app and server update?'))return;
-  cancelBusy=true;cancel.disabled=true;$('updateError').textContent='';
-  try{flow=await api('update-flow/cancel',{id:flow.id});showFlow(true);}catch(e){$('updateError').textContent=e.message;}finally{cancelBusy=false;showFlow(true);}
- };
-}
+// Updates are offered by each desktop on startup and hourly. OFFICE shows inventory only.
 
 // END OFFICE UPDATES
 // BEGIN GIVING UI
@@ -1665,7 +1433,7 @@ async function givingOpen(){
 // BEGIN OFFICE STATUS BAR
 // Compact OFFICE application information; no extra server requests.
 if (officeMode) (() => {
- const webVersion = '0.58.4'; // replaced by prepare_web_assets.py
+ const webVersion = '0.59.0'; // replaced by prepare_web_assets.py
  const style = document.createElement('style');
  style.textContent = `
  .retailOffice{--office-status-height:26px}
@@ -1719,7 +1487,7 @@ const officeNavigationSections=[
  ['giving','Giving','♥','Donors, received gifts, monthly giving and statements.'],
  ['staff','Staff','♙','Users, permissions, onboarding and timekeeping.'],
  ['reports','Reports','▥','Sales, store activity and labor reports.'],
- ['system','System','⚙','Stores, checkout screens, printers, computers and updates.']
+ ['system','System','⚙','Stores, checkout screens, printers and installed versions.']
 ];
 const officeNavigationGroups=[
  {section:"giving",id:"giving",title:"Donor management",description:"Keep ministry giving separate from store sales.",actions:["giving-workspace"]},
@@ -1735,12 +1503,12 @@ const officeNavigationGroups=[
  {section:'staff',id:'hr',title:'Human resources',description:'Invite employees and review onboarding progress.',actions:['hr-onboarding']},
  {section:'staff',id:'timekeeping',title:'Timekeeping',description:'Manage time entries, schedules, requests and payroll.',actions:['timekeeping-manage']},
  {section:'staff',id:'communications',title:'Communications oversight',description:'Review retained staff messages and attachments with permission.',actions:['review-communications']},
- {section:'reports',id:'sales',title:'Sales analysis',description:'Sales, tax, cash, products and transaction summaries.',actions:['report-center','reports']},
+ {section:'reports',id:'sales',title:'Sales analysis',description:'Sales, tax, cash, products and transaction summaries.',actions:['report-center','reports','training-report']},
  {section:'reports',id:'store',title:'Store activity',description:'Donations, color tags, pickups, vouchers and employee cash advances.',actions:['thrift-reports','cash-advance-report']},
  {section:'reports',id:'labor',title:'Labor & schedules',description:'Time-entry reports and printable employee schedules.',actions:['labor-reports','schedule-report']},
  {section:'system',id:'stores',title:'Stores & appearance',description:'Store profiles, branding and your color theme.',actions:['stores-profiles','office-appearance']},
  {section:'system',id:'checkout',title:'Checkout & printing',description:'Terminals, DESK layouts, customer displays and ticket printing.',actions:['terminals','layouts','customer-display','printing-categories','printing']},
- {section:'system',id:'computers',title:'Computers & updates',description:'Computer registration, application updates and the shared server.',actions:['computer-register','computer-updates','server']}
+ {section:'system',id:'computers',title:'Computers & versions',description:'Computer registration, installed versions and the shared server.',actions:['computer-register','computer-updates','server']}
 ];
 const officeNavigationAliases={'product-tools':'catalog',receipt:'stores-profiles',cards:'card-future-settings'};
 function officeSettingsPath(entry){
@@ -1853,7 +1621,7 @@ if(officeMode){
   'roles':'security access permissions roles',
   'terminals':'register pc computer checkout device layout',
   'computer-register':'register pc computer mac network device',
-  'computer-updates':'software install version notify staff update website web app ops server',
+  'computer-updates':'software installed versions computer inventory desk office ops server',
   'receipt-design':'receipt logo address phone footer return policy branding',
   'stores-profiles':'store binopoly thrift mart branding receipts price tax',
   'stores-programs':'loyalty points rewards birthday gift certificates cash drawer',
@@ -1989,10 +1757,11 @@ function deskQuantityControl(line,index){
   }
  }
  function openKeypad(input){
+  const openPrice=input.id==='flowOpenPrice';
   const name=fieldName(input),decimal=input.step==='any'||(input.step&&Number(input.step)%1!==0);
   const dialog=flowModal(name,`<form id="deskAmountEntry"><label class="deskKeypadLabel">${esc(name)}<input id="deskKeypadValue" name="value" type="text" inputmode="${decimal?'decimal':'numeric'}" autocomplete="off"></label></form><p class="deskKeypadError" role="alert"></p><div class="deskKeypadGrid">${['7','8','9','4','5','6','1','2','3','clear','0',decimal?'.':'back'].map(key=>`<button type="button" data-key="${key}" aria-label="${key==='clear'?'Clear entry':key==='back'?'Backspace':key==='.'?'Decimal point':key}">${key==='clear'?'Clear':key==='back'?'⌫':key}</button>`).join('')}</div><div class="deskKeypadActions">${decimal?'<button type="button" data-key="back" aria-label="Backspace">⌫ Backspace</button>':''}<button type="button" class="deskKeypadCancel">Cancel</button><button type="button" class="primary deskKeypadApply">Use value</button></div>`);
   dialog.classList.add('deskAmountPad');const value=dialog.querySelector('#deskKeypadValue'),error=dialog.querySelector('.deskKeypadError');value.value=input.value;const entry=dialog.querySelector("#deskAmountEntry");entry.onsubmit=e=>{e.preventDefault();apply();};changedForms.set(entry,snapshot(entry));value.focus();value.select();
-  const openPrice=input.id==='flowOpenPrice',choiceForm=input.form,parentDialog=input.closest('dialog'),moved=[];
+  const choiceForm=input.form,parentDialog=input.closest('dialog'),moved=[];
   if(openPrice){
    dialog.querySelector('.deskKeypadApply').textContent='Okay · Add to sale';
    for(const select of choiceForm.querySelectorAll('select')){const label=select.closest('label'),marker=document.createComment('choice');label.before(marker);moved.push([label,marker]);entry.append(label);}
@@ -2007,6 +1776,17 @@ function deskQuantityControl(line,index){
    else{text=text.slice(0,start)+key+text.slice(end);position=start+key.length;}
    if(text.length<=16&&new RegExp(decimal?'^\\d*(\\.\\d*)?$':'^\\d*$').test(text)){value.value=text;value.dispatchEvent(new Event('input',{bubbles:true}));value.focus();value.setSelectionRange(position,position);error.textContent='';}
   });
+  // Open prices use the same right-to-left cents entry as cash tender.
+  if(openPrice){
+   let digits=input.value?String(Math.round(Number(input.value)*100)):'';
+   const draw=()=>{value.value=digits?(Number(digits)/100).toFixed(2):'';value.dispatchEvent(new Event('change',{bubbles:true}));error.textContent='';};
+   const key=k=>{if(k==='clear')digits='';else if(k==='back')digits=digits.slice(0,-1);else if(/^\d$/.test(k)&&digits.length<9)digits=(digits+k).replace(/^0+(?=\d)/,'');draw();};
+   dialog.querySelectorAll('[data-key]').forEach(b=>{if(b.dataset.key==='.'){b.dataset.key='back';b.textContent='⌫';b.setAttribute('aria-label','Backspace');}b.onclick=()=>key(b.dataset.key);});
+   value.oninput=()=>{digits=value.value.replace(/\D/g,'').slice(0,9);draw();};
+   value.addEventListener('keydown',e=>{if(e.ctrlKey||e.metaKey||e.key==='Tab'||e.key==='Enter')return;if(/^\d$/.test(e.key)||['Backspace','Delete','.'].includes(e.key)){e.preventDefault();if(value.selectionStart===0&&value.selectionEnd===value.value.length)digits='';if(e.key!=='.')key(e.key==='Backspace'?'back':e.key==='Delete'?'clear':e.key);}});
+   value.onpaste=e=>{e.preventDefault();const v=e.clipboardData.getData('text').trim();if(/^\$?\d+(\.\d{1,2})?$/.test(v)){digits=String(v.includes('.')?Math.round(Number(v.replace('$',''))*100):Number(v.replace('$','')));draw();}};
+   const hint=document.createElement('p');hint.textContent='Enter digits as cents: 1000 = $10.00.';value.closest('label').after(hint);draw();
+  }
   function apply(){
    if(!input.isConnected||input.disabled||input.readOnly){error.textContent='This field is no longer available. Close the keypad and reopen the item.';return;}
    const text=value.value.trim(),check=input.cloneNode();check.required=true;check.value=text;
@@ -2090,7 +1870,7 @@ async function checkoutPayment(){
   const payload={cart:cart.id,revision:cart.revision,tender:received,...(method==='credit'?{account:a.id,account_revision:a.revision,amount}: {})};
   const result=await retailSave(method==='credit'?'credit':'cash',payload);
   completed=true;changedForms.delete(form);checkoutClose(d);posCurrent=null;sessionStorage.removeItem('yfc-pos-selected:'+user.name);$('posCash').reset();changedForms.delete($('posCash'));
-  await posLoad();posReceipt(result.sale);posMessage('Payment recorded. Receipt #'+result.sale.id);await pickupAfterPayment(result.sale);
+  await posLoad();posReceipt(result.sale,true);posMessage('Payment recorded. Receipt #'+result.sale.id);await pickupAfterPayment(result.sale);
  }catch(error){checkoutError(d,error);}finally{busy=false;if(d.isConnected){render();const locked=!!pending();for(const el of form.querySelectorAll('input,select,button:not(#checkoutComplete)'))el.disabled=locked||el.dataset.method==='card'||(el.dataset.method==='credit'&&!can('use_store_credit'));if(locked)d.querySelector('#checkoutComplete').textContent='Retry / check this payment';}}};
  render();tender.focus();tender.select();
 }
@@ -2118,16 +1898,18 @@ async function checkoutAdjustments(){
 }
 async function checkoutCancelSale(){
  if(!posCurrent||unfinished()){posMessage('Finish or clear the current entry before canceling the sale.');return;}
- const cart=structuredClone(posCurrent),d=checkoutModal('Cancel sale','<div id="checkoutCancelChoices"></div>');
- try{const {settings}=await checkoutQuery('checkout-settings');d.querySelector('#checkoutCancelChoices').innerHTML=`<form id="checkoutCancelForm"><label>Choose a reason<select name="reason" required><option value="">Select a cancellation reason</option>${settings.reasons.map(r=>`<option value="${esc(r.id)}">${esc(r.name)}</option>`).join('')}</select></label><p>The transaction and cancellation history remain on the server.</p><button class="primary" ${settings.reasons.length?'':'disabled'}>Confirm cancellation</button></form>`;let busy=false;d.beforeDismiss=()=>!busy;d.querySelector('form').onsubmit=async e=>{e.preventDefault();if(busy)return;try{busy=true;await retailSave('discard',{cart:cart.id,revision:cart.revision,reason_id:e.target.elements.reason.value,settings_revision:settings.revision});changedForms.delete(e.target);posCurrent=null;sessionStorage.removeItem('yfc-pos-selected:'+user.name);checkoutClose(d);await posLoad();posMessage('Sale canceled.');}catch(error){checkoutError(d,error);}finally{busy=false;}};}catch(e){checkoutError(d,e);}
+ const cart=structuredClone(posCurrent),d=checkoutModal('Cancel sale','<p>Select the reason to cancel this sale.</p><div id="checkoutCancelChoices" class="checkoutCancelReasons"></div>');
+ try{const {settings}=await checkoutQuery('checkout-settings');let busy=false;d.beforeDismiss=()=>!busy;d.querySelector('#checkoutCancelChoices').innerHTML=settings.reasons.map(r=>`<button type="button" data-cancel-reason="${esc(r.id)}">${esc(r.name)}</button>`).join('')||'<p>No cancellation reasons are configured. Ask a manager to add them in OFFICE.</p>';
+ d.querySelectorAll('[data-cancel-reason]').forEach(b=>b.onclick=async()=>{if(busy)return;try{busy=true;await retailSave('discard',{cart:cart.id,revision:cart.revision,reason_id:b.dataset.cancelReason,settings_revision:settings.revision});posCurrent=null;sessionStorage.removeItem('yfc-pos-selected:'+user.name);checkoutClose(d);await posLoad();posMessage('Sale canceled.');}catch(e){checkoutError(d,e);}finally{busy=false;}});
+ }catch(e){checkoutError(d,e);}
 }
 async function checkoutReceipts(){
  if(unfinished()){posMessage('Finish or clear the current entry before opening receipts.');return;}
  const d=checkoutModal('Print receipts · Today','<div class="checkoutSplit"><section id="checkoutReceiptPreview" class="checkoutPaper"><p>Select a completed transaction.</p></section><section class="checkoutControls"><label>Search today’s receipts<input id="checkoutReceiptSearch" placeholder="Receipt number, item or cashier"></label><div id="checkoutReceiptList" class="checkoutList"></div><div class="checkoutFooter"><button type="button" id="checkoutReceiptPrint" disabled>Print receipt</button><button type="button" id="checkoutReceiptEmail" disabled>Email receipt</button><button type="button" id="checkoutReceiptClose">Close</button></div></section></div>');
  let selected=null;d.querySelector('#checkoutReceiptClose').onclick=()=>d.querySelector('.flowClose').click();
  try{const data=await checkoutQuery('today-receipts');const render=()=>{const q=d.querySelector('input').value.toLowerCase();d.querySelector('#checkoutReceiptList').innerHTML=data.sales.filter(s=>(s.id+' '+s.cashier+' '+s.lines.map(l=>l.name).join(' ')).toLowerCase().includes(q)).map(s=>`<button type="button" data-checkout-receipt="${s.id}" aria-pressed="${s.id===selected?.id}"><strong>#${s.id} · ${posMoney(s.total+(s.cash_rounding||0))}</strong><small>${esc(new Date(s.at).toLocaleTimeString())} · ${esc(s.cashier)} · ${esc(s.method.replaceAll('_',' '))}</small></button>`).join('')||'<p>No completed transactions for this store today.</p>';};d.querySelector('input').oninput=render;render();
- d.querySelector('#checkoutReceiptList').onclick=e=>{const b=e.target.closest('[data-checkout-receipt]');if(!b)return;selected=data.sales.find(s=>String(s.id)===b.dataset.checkoutReceipt);d.querySelector('#checkoutReceiptPreview').innerHTML=checkoutPaper(selected,true);d.querySelector('#checkoutReceiptPrint').disabled=false;d.querySelector('#checkoutReceiptEmail').disabled=false;render();};
- d.querySelector('#checkoutReceiptPrint').onclick=()=>{if(!selected)return;document.body.classList.add('checkoutPrinting');window.print();document.body.classList.remove('checkoutPrinting');};
+ d.querySelector('#checkoutReceiptList').onclick=e=>{const b=e.target.closest('[data-checkout-receipt]');if(!b)return;selected=data.sales.find(s=>String(s.id)===b.dataset.checkoutReceipt);d.querySelector('#checkoutReceiptPreview').innerHTML=checkoutPaper(selected,true);d.querySelector('#checkoutReceiptPrint').disabled=false;d.querySelector('#checkoutReceiptEmail').disabled=!!selected.training;render();};
+ d.querySelector('#checkoutReceiptPrint').onclick=()=>{if(!selected)return;deskPrintReceipt(selected);};
  d.querySelector('#checkoutReceiptEmail').onclick=()=>{if(!selected)return;const mail=checkoutModal('Email receipt #'+selected.id,'<form id="checkoutEmailForm"><label>Customer email<input type="email" name="email" required autocomplete="off"></label><p>A receipt will be sent using the Gmail account configured in OFFICE.</p><button class="primary">Send receipt</button></form>');let busy=false;mail.beforeDismiss=()=>!busy;mail.querySelector('form').onsubmit=async e=>{e.preventDefault();if(busy)return;try{busy=true;await retailSave('email-receipt',{sale:selected.id,email:e.target.elements.email.value,store_id:checkoutStore()});changedForms.delete(e.target);checkoutClose(mail);d.querySelector('.flowError').textContent='Receipt email queued for delivery.';}catch(error){checkoutError(mail,error);}finally{busy=false;}};};
  }catch(e){checkoutError(d,e);}
 }
@@ -2168,7 +1950,7 @@ if(!officeMode){
   recovering=true;const saved=JSON.parse(sessionStorage.getItem(pending.key));
   const d=checkoutModal('Check the last payment','<div id="checkoutRecovery"><p>The last payment response was interrupted. Check its status before starting another payment.</p><button type="button" class="primary" id="checkoutRecover">Retry / check this payment</button></div>');d.beforeDismiss=()=>false;
   let busy=false;
-  const complete=async result=>{sessionStorage.removeItem(pending.key);posCurrent=null;sessionStorage.removeItem('yfc-pos-selected:'+user.name);checkoutClose(d);await posLoad();posReceipt(result.sale);posMessage('Payment confirmed. Receipt #'+result.sale.id);};
+  const complete=async result=>{sessionStorage.removeItem(pending.key);posCurrent=null;sessionStorage.removeItem('yfc-pos-selected:'+user.name);checkoutClose(d);await posLoad();posReceipt(result.sale,true);posMessage('Payment confirmed. Receipt #'+result.sale.id);};
   d.querySelector('#checkoutRecover').onclick=async()=>{if(busy)return;busy=true;try{const result=await api('pos/'+pending.action,{...JSON.parse(saved.payload),request:saved.request});await complete(result);}catch(e){checkoutError(d,e);if(e.status){sessionStorage.removeItem(pending.key);d.beforeDismiss=()=>true;const close=d.querySelector('#checkoutRecover');close.textContent='Close · Return to sale';close.onclick=async()=>{checkoutClose(d);await posLoad();};}}finally{busy=false;recovering=false;}};
   try{const status=await api('pos/checkout-payment-status?request='+encodeURIComponent(saved.request));if(status.confirmed)await complete(status.result);}catch(e){checkoutError(d,e);}finally{recovering=false;}
  }
@@ -2205,7 +1987,7 @@ if(!officeMode){
  const clearForm=form=>{if(typeof changedForms!=='undefined')changedForms.delete(form);};
  const discard=()=>!get('nativeTerminalForm')||!changedForms.has(get('nativeTerminalForm'))||confirm('Discard unsaved terminal registration changes?');
  const required=()=>state&&(!state.computer.registered||(info.app==='pos'&&!state.terminal));
- function label(){if(!button)return;button.textContent=state?.computer.registered?'Terminal: '+state.computer.name+' · Registered':'Terminal setup · Registration required';}
+ function label(){if(!button)return;button.disabled=!user?.admin&&!(typeof can==='function'&&can('manage_pos'));button.textContent=state?.computer.registered?'Terminal: '+state.computer.name+' · Registered':'Terminal setup · Registration required';}
  async function show(){
   if(dialog?.open)return;
   if(!state)return;
@@ -2235,7 +2017,7 @@ if(!officeMode){
   };
   dialog.showModal();
  }
- window.openTerminalRegistration=async()=>{if(dirty()){(typeof posMessage==='function'?posMessage:toast)('Save or finish your current work before opening terminal setup.');return;}await refresh(true);await show();};
+ window.openTerminalRegistration=async()=>{if(!user?.admin&&!(typeof can==='function'&&can('manage_pos')))return;if(dirty()){(typeof posMessage==='function'?posMessage:toast)('Save or finish your current work before opening terminal setup.');return;}await refresh(true);await show();};
  async function refresh(force=false){
   const native=window.pywebview?.api;if(!native?.terminal_info||busy||window.posUpdateInstalling)return;
   if(!user){if(get('login')&&!get('desktopSetupHint')){const hint=document.createElement('p');hint.id='desktopSetupHint';hint.textContent='First-time computer setup: sign in with an administrator account to register this terminal.';get('login').append(hint);}return;}
@@ -2252,13 +2034,7 @@ if(!officeMode){
    if(!button){button=document.createElement('button');button.id='nativeTerminalStatus';button.type='button';button.textContent='Terminal setup';button.onclick=window.openTerminalRegistration;(document.querySelector('.headerRight')||document.querySelector('.connectionInfo')||document.querySelector('body>header')).append(button);}
    state=await api('computers/self',{...info,status:lastStatus});window.terminalRegistration=state;label();if(dialog?.dataset.verifying){delete dialog.dataset.verifying;dialog.close();}
    if(required()){if(!dialog?.open)await show();return;}
-   if(info.app==='ops'&&native.ops_update_status){
-    const job=state.campaign,update=await native.ops_update_status(job?.id||null);
-    let banner=get('opsComputerUpdateBanner');if(!banner){banner=document.createElement('aside');banner.id='opsComputerUpdateBanner';banner.setAttribute('role','status');document.body.prepend(banner);}
-    banner.hidden=!job||update.state==='complete';lastStatus=update.error||update.state||'Connected';
-    banner.textContent=update.error||('STORE OPS update pending. Finish and save your work. '+(update.seconds?'Update in '+update.seconds+' seconds.':'Waiting for unfinished work to be saved.'));
-    if(job&&update.state==='ready'&&!update.seconds&&!dirty()&&!dialog?.open){const result=await native.ops_install_update();if(result.error)banner.textContent=result.error;}
-   }
+
   }catch(error){if(button)button.textContent='Terminal setup · Unable to verify';if(dialog?.open)get('nativeTerminalError').textContent=error.message;}
   finally{busy=false;}
  }
@@ -2276,3 +2052,132 @@ if(!officeMode){
 })();
 
 // END TERMINAL REGISTRATION
+// BEGIN DESK EXPERIENCE
+let deskTraining={enabled:false,revision:0,verified:false};
+async function deskTrainingRefresh(){
+ if(officeMode||!user)return;
+ try{deskTraining={...await api('pos/training-state?device='+encodeURIComponent(await retailDevice())),verified:true};}catch(e){deskTraining.verified=false;posMessage('Could not verify training status: '+e.message);}
+ deskTrainingRender();
+}
+function deskTrainingRender(){
+ if(officeMode)return;
+ const active=deskTraining.enabled,button=$('navSales');
+ button.innerHTML='TRAINING – <span class="trainingStatus">'+(deskTraining.verified?(active?'TRAINING ACTIVE':'OFF'):'Checking…')+'</span>';
+ button.classList.toggle('trainingActive',active);button.setAttribute('aria-pressed',active);button.disabled=!user||!deskTraining.verified;
+ $('deskTrainingBanner').hidden=!active;document.body.classList.toggle('trainingMode',active);
+ $('deskSettings').hidden=!user;$('deskTerminalSettings').hidden=!can('manage_pos');
+ $('deskCreditToggle').hidden=!can('use_store_credit')&&!can('issue_cash_advances');
+}
+async function deskTrainingToggle(){
+ if(!deskTraining.verified||!navigationAllowed()||unfinished()||posPending||writeCount||posBusy)return;
+ const next=!deskTraining.enabled,d=checkoutModal(next?'Start training':'End training',`<p>${next?'Practice transactions will appear only in the training report. No money, store credit, stock or loyalty points will be changed. Credit cards are unavailable.':'The register will return to live sales.'}</p><p>Finish, save with Pay later, or cancel your current transaction before switching.</p><button id="trainingConfirm" class="primary">${next?'Start training':'Return to live sales'}</button>`);
+ d.querySelector('#trainingConfirm').onclick=async()=>{try{deskTraining={...await retailSave('training-mode',{enabled:next,revision:deskTraining.revision}),verified:true};posCurrent=null;sessionStorage.removeItem('yfc-pos-selected:'+user.name);checkoutClose(d);await posLoad();deskTrainingRender();}catch(e){checkoutError(d,e);}};
+}
+async function deskTrainingReport(){
+ const d=flowModal('Training transactions','<p>Practice only. These entries are excluded from sales, cash drawers, stock and customer balances.</p><form id="trainingReportFilter"><label>From<input type="date" name="from"></label><label>Through<input type="date" name="to"></label><button>Run report</button></form><div id="trainingReportRows"></div><button id="trainingReportPrint" type="button">Print report</button>');
+ async function run(){try{const f=d.querySelector('form');const data=await api('pos/training-report?'+new URLSearchParams({from:f.elements.from.value,to:f.elements.to.value}));changedForms.delete(f);d.querySelector('#trainingReportRows').innerHTML=`<h3>${data.count} practice transactions · ${posMoney(data.total)}</h3><table><thead><tr><th>Date / cashier</th><th>Store</th><th>Practice transaction</th><th>Amount</th></tr></thead><tbody>${data.transactions.map(t=>`<tr><td>${esc(new Date(t.at).toLocaleString())}<br>${esc(t.cashier)}</td><td>${esc(t.store_name||t.settings?.store||t.store_id)}</td><td>${esc(t.id)} · ${esc(t.kind)}<br>${esc(t.lines?.map(l=>l.quantity+' × '+l.name).join(', ')||t.employee_name||'')}${t.reason?'<br>'+esc(t.reason):''}</td><td>${posMoney(t.total??t.amount)}</td></tr>`).join('')}</tbody></table>`;}catch(e){d.querySelector('.flowError').textContent=e.message;}}
+ d.querySelector('form').onsubmit=e=>{e.preventDefault();run();};d.querySelector('#trainingReportPrint').onclick=()=>thriftPrint('Training transactions · NOT SALES',d.querySelector('#trainingReportRows').innerHTML);await run();
+}
+officeCards.push({section:'sales',title:'Training transactions',description:'Practice checkouts and advances, excluded from all sales totals.',icon:'▤',action:'training-report',permission:'view_pos_sales'});
+const beforeTrainingOffice=officeAction;officeAction=async function(action){if(action==='training-report')return deskTrainingReport();return beforeTrainingOffice(action);};
+if(!officeMode){
+ const banner=document.createElement('aside');banner.id='deskTrainingBanner';banner.hidden=true;banner.setAttribute('role','status');banner.innerHTML='<span class="trainingDot" aria-hidden="true"></span><strong>TRAINING MODE ACTIVE</strong><span>Practice only · No money collected</span>';$('posPanel').prepend(banner);
+ $('navSales').onclick=deskTrainingToggle;
+ const settings=document.createElement('details');settings.id='deskSettings';settings.innerHTML='<summary>Settings ▾</summary><div class="deskSettingsMenu"><button id="deskTerminalSettings" type="button">Terminal setup</button></div>';retailAppearanceButton.before(settings);settings.querySelector('div').append(retailAppearanceButton);
+ $('deskTerminalSettings').onclick=()=>{settings.open=false;if(can('manage_pos'))retailEnroll();};retailAppearanceButton.addEventListener('click',()=>settings.open=false);
+ const rail=$('posPayNow').parentElement,credit=document.createElement('div');credit.className='deskCreditMenu';credit.innerHTML='<button id="deskCreditToggle" type="button" aria-expanded="false">Credit/ Advances</button><div id="deskCreditChoices" hidden></div>';rail.append(credit);credit.querySelector('div').append($('creditOpen'),$('cashAdvanceOpen'));
+ function closeCredit(){credit.querySelector('div').hidden=true;$('deskCreditToggle').setAttribute('aria-expanded','false');}
+ $('deskCreditToggle').onclick=()=>{const choices=credit.querySelector('div');choices.hidden=!choices.hidden;$('deskCreditToggle').setAttribute('aria-expanded',String(!choices.hidden));};
+ credit.querySelector('div').addEventListener('click',closeCredit);document.addEventListener('pointerdown',e=>{if(!credit.contains(e.target))closeCredit();if(!settings.contains(e.target))settings.open=false;});document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeCredit();settings.open=false;}});
+ rail.append($('posFindCart'),$('posSalesShortcut'),$('posPrintLast'),$('checkoutPayLater'),$('posPayNow'));
+ const load=posLoad;posLoad=async function(...args){await load(...args);await deskTrainingRefresh();};
+ const render=posRender;posRender=function(...args){const result=render(...args);deskTrainingRender();return result;};
+ const receipt=posReceipt;posReceipt=function(sale){receipt(sale);if(sale.training){$('posReceipt').insertAdjacentHTML('afterbegin','<h2>TRAINING · NOT A VALID SALES RECEIPT</h2><p>No payment was collected.</p>');posMessage('Practice transaction saved to the training report. No money collected.');}};
+ const paper=checkoutPaper;checkoutPaper=function(sale,...args){return (sale.training?'<h3>TRAINING · NOT A VALID SALES RECEIPT</h3>':'')+paper(sale,...args);};
+ const followup=pickupAfterPayment;pickupAfterPayment=async function(sale){if(sale.training)return;return followup(sale);};
+ const query=checkoutQuery;checkoutQuery=async function(path){if(path==='today-receipts'&&deskTraining.enabled){const data=await api('pos/training-receipts?from='+[new Date().getFullYear(),String(new Date().getMonth()+1).padStart(2,'0'),String(new Date().getDate()).padStart(2,'0')].join('-')+'&device='+await retailDevice());return {sales:data.transactions.filter(t=>t.kind==='sale'&&(!retailTerminal||t.terminal_id===retailTerminal.id))};}return query(path);};
+ const bootBeforeTraining=boot;boot=async function(...args){await bootBeforeTraining(...args);await deskTrainingRefresh();};deskTrainingRender();
+}
+
+// END DESK EXPERIENCE
+// BEGIN TERMINAL DEVICES
+let receiptTerminalOptions=null;
+async function terminalDeviceOptions(id){
+ if(!can('manage_pos'))return;
+ const args=id?{terminal:id}:{device:await retailDevice()};
+ try{const options=await api('pos/terminal-options?'+new URLSearchParams(args)),native=window.pywebview?.api;
+ let printers=[];if(native?.receipt_printers){const result=await native.receipt_printers();printers=result.printers||[];}
+ const d=flowModal('Terminal setup · '+options.terminal.name,`<p><strong>${esc(options.terminal.store_name)} · Registered</strong></p><form id="terminalDevices"><label>Receipt printer<input name="printer" list="receiptPrinterNames" value="${esc(options.printer)}" maxlength="200" placeholder="Choose or enter its Windows printer name"></label><datalist id="receiptPrinterNames">${printers.map(p=>`<option value="${esc(p)}">`).join('')}</datalist><p>Receipts print automatically after payment. When configuring a different computer, enter the printer name exactly as it appears on that register.</p><label>Assigned customer-display link<input readonly value="${esc(options.display_path?new URL(options.display_path,location.origin).href:'Save to create this register’s display link')}"></label><label><input type="checkbox" name="replace_display"> Replace the display link (revokes its previous link)</label><p>Branding and messages come from ${esc(options.terminal.store_name)}. Keep this limited-access link on store devices.</p><button class="primary">Save terminal settings</button></form>${officeMode?'':'<button id="terminalRegistrationEdit" type="button">Computer registration</button>'}`);
+ d.querySelector('form').onsubmit=async e=>{e.preventDefault();try{const f=e.target.elements;await retailSave('terminal-options-save',{...args,revision:options.revision,printer:f.printer.value.trim(),replace_display:f.replace_display.checked});changedForms.delete(e.target);thriftClose(d);await loadTerminalDevices();await terminalDeviceOptions(id);}catch(error){thriftError(d,error);}};
+ d.querySelector('#terminalRegistrationEdit')?.addEventListener('click',()=>{if(changedForms.has(d.querySelector('form')))return;thriftClose(d);retailEnroll();});
+ }catch(e){if(!officeMode&&!retailTerminal)return retailEnroll();posMessage(e.message);}
+}
+const originalTerminalEditor=retailTerminals;retailTerminals=function(){originalTerminalEditor();for(const edit of $('retailEditor').querySelectorAll('[data-terminal]')){const b=document.createElement('button');b.type='button';b.textContent='Printer & customer display';b.onclick=()=>{if(!unfinished())terminalDeviceOptions(edit.dataset.terminal);};edit.after(b);}};
+customerDisplayEditor=async function(){
+ const root=$('flowOffice');try{const s=await api('pos/store-display?store_id='+encodeURIComponent(retailStoreChoice));root.innerHTML=`<h2>Customer display · ${esc(s.store)}</h2><p>Logo and store name follow this location’s receipt branding. Assign the display link to each register in Terminal setup.</p><form id="customerDisplayForm"><label><input name="enabled" type="checkbox" ${s.enabled?'checked':''}> Enable displays for this store</label><label>Welcome message<input name="welcome" value="${esc(s.welcome)}" maxlength="200" required></label><label>Thank-you message<input name="thanks" value="${esc(s.thanks)}" maxlength="200" required></label><button class="primary">Save display settings</button></form><p id="customerSaveStatus" role="status"></p>`;
+ root.querySelector('form').onsubmit=async e=>{e.preventDefault();try{const f=e.target.elements;await retailSave('store-display-save',{store_id:s.store_id,revision:s.revision,enabled:f.enabled.checked,welcome:f.welcome.value,thanks:f.thanks.value});changedForms.delete(e.target);await customerDisplayEditor();$('customerSaveStatus').textContent='Saved for this store.';}catch(error){$('customerSaveStatus').textContent=error.message;}};
+ }catch(e){root.textContent=e.message;}
+};
+async function loadTerminalDevices(){
+ if(officeMode||!user)return;
+ try{receiptTerminalOptions=await api('pos/terminal-options?device='+encodeURIComponent(await retailDevice()));customerPairToken=receiptTerminalOptions.display_path.split('#')[1]||null;}catch{receiptTerminalOptions=null;customerPairToken=null;}
+}
+let receiptPrintBusy=false,receiptPrintQueue=Promise.resolve();
+function deskPrintReceipt(sale,automatic=false){
+ if(!sale)return Promise.resolve();
+ const work=()=>performReceiptPrint(sale,automatic),result=receiptPrintQueue.then(work,work);
+ receiptPrintQueue=result.catch(()=>{});return result;
+}
+async function performReceiptPrint(sale,automatic=false){
+ const key='receipt-auto:'+location.origin+':'+sale.id;
+ if(automatic&&localStorage.getItem(key))return;
+ const native=window.pywebview?.api,printer=receiptTerminalOptions?.printer;
+ if(automatic&&(!native?.receipt_print||!printer)){posMessage('Transaction saved. Select a receipt printer in Terminal setup to enable automatic printing.');return;}
+ receiptPrintBusy=true;
+ const paper=document.createElement('section');paper.id='automaticReceiptPaper';paper.dataset.sale=String(sale.id);paper.innerHTML=checkoutPaper(sale,true);document.body.append(paper);document.body.classList.add('receiptDirectPrint');
+ try{
+  if(automatic)localStorage.setItem(key,'requested');
+  if(native?.receipt_print&&printer){const result=await native.receipt_print(printer,String(sale.id),automatic);if(result.error)throw Error(result.error);if(automatic)localStorage.setItem(key,'printed');}
+  else window.print();
+ }catch(e){posMessage(e.message);const message=document.createElement('p');message.setAttribute('role','alert');message.textContent=e.message+' Use Print receipts to try again.';$('posReceipt').append(message);}
+ finally{document.body.classList.remove('receiptDirectPrint');paper.remove();receiptPrintBusy=false;}
+}
+if(!officeMode){
+ $('deskTerminalSettings').onclick=()=>{$('deskSettings').open=false;terminalDeviceOptions();};
+ customerPairButton.onclick=async()=>{await loadTerminalDevices();if(!customerPairToken){if(can('manage_pos'))return terminalDeviceOptions();return posMessage('Ask a manager to assign this register’s customer display in Terminal setup.');}const url=new URL(receiptTerminalOptions.display_path,location.origin).href;flowModal('Customer display · '+receiptTerminalOptions.terminal.name,`<p>This link stays assigned to this register and uses ${esc(receiptTerminalOptions.terminal.store_name)} branding. Open it on the customer monitor in a browser profile without a staff login.</p><label>Assigned link<input readonly value="${esc(url)}"></label><a href="${esc(url)}" target="_blank" rel="noopener">Open customer display</a>`);await customerDisplaySync();};
+ customerDisplaySync=async function(){if(!customerPairToken||customerDisplayBusy||!user)return;customerDisplayBusy=true;try{await api('pos/display-state',{device:await retailDevice(),token:customerPairToken,cart:$('posReceipt').hidden?posCurrent?.id||null:null,sale:!$('posReceipt').hidden?posLastReceipt?.id||null:null});}catch(e){if(e.status===404)customerPairToken=null;}finally{customerDisplayBusy=false;}};
+ const load=posLoad;posLoad=async function(...args){await load(...args);await loadTerminalDevices();};
+ const receipt=posReceipt;posReceipt=function(sale,automatic=false){receipt(sale);if(automatic)deskPrintReceipt(sale,true);};
+ $('posPrintLast').onclick=()=>deskPrintReceipt(posLastReceipt);$('posPrint').onclick=()=>deskPrintReceipt(posLastReceipt);
+}
+async function customerCreateTouch(){
+ const d=thriftModal('Add customer',`<div class="customerColumns"><form id="customerTouchCreate"><label>Full name<input name="name" required maxlength="120" autocomplete="name"></label><label>Phone with area code<input name="phone" type="tel" autocomplete="tel" placeholder="(555) 123-4567"></label><label>Email<input name="email" type="email" maxlength="160" autocomplete="email"></label><label><input name="marketing" type="checkbox"> Customer agrees to marketing messages</label><p>Marketing consent is optional.</p><button class="primary">Save customer</button></form><aside><button id="customerSendForm" type="button">Let customer complete on their touchscreen</button><p id="customerEntryState" role="status"></p></aside></div>`);
+ let request=null,timer=null,closing=false;
+ const form=d.querySelector('form');
+ d.querySelector('#customerSendForm').onclick=async()=>{try{request=await retailSave('customer-entry-start',{});d.querySelector('#customerEntryState').textContent='The form is ready on this register’s customer display. Waiting for the customer…';d.querySelector('#customerSendForm').disabled=true;
+ timer=setInterval(async()=>{if(!request||closing)return;try{const result=await api('pos/customer-entry?'+new URLSearchParams({id:request.id,device:await retailDevice()}));if(result.status==='submitted'){clearInterval(timer);for(const [k,v] of Object.entries(result.details)){if(!form.elements[k])continue;if(k==='marketing')form.elements[k].checked=v;else form.elements[k].value=v;}changedForms.set(form,snapshot(form));d.querySelector('#customerEntryState').textContent='Customer finished. Review their details and select Save customer.';}}catch(e){clearInterval(timer);d.querySelector('#customerEntryState').textContent=e.message;}},2000);
+ }catch(e){thriftError(d,e);}};
+ form.onsubmit=async e=>{e.preventDefault();try{const f=form.elements;let digits=f.phone.value.replace(/\D/g,'');if(digits.length===11&&digits[0]==='1')digits=digits.slice(1);if(digits&&digits.length!==10)throw Error('Enter a phone number including the area code.');const phone=digits?'('+digits.slice(0,3)+') '+digits.slice(3,6)+'-'+digits.slice(6):'',contact=[phone,f.email.value.trim()].filter(Boolean).join(' · ');const r=await retailSave('thrift-customer-save',{name:f.name.value,contact,marketing:f.marketing.checked});changedForms.delete(form);if(posCurrent)await posDo('thrift-customer',{cart:posCurrent.id,revision:posCurrent.revision,customer:r.customer.id});thriftClose(d);posMessage('Customer saved'+(deskTraining.enabled?' in training mode.':'.'));}catch(error){thriftError(d,error);}};
+ d.addEventListener('close',()=>{closing=true;clearInterval(timer);if(request)retailSave('customer-entry-close',{id:request.id}).catch(()=>{});},{once:true});
+}
+
+// END TERMINAL DEVICES
+// BEGIN UPDATE NOTICES
+// Notices never close a form, freeze a register, or launch an installer.
+(()=>{
+ const warning=document.createElement('aside'),notice=document.createElement('aside');
+ const style=document.createElement('style');style.textContent='@media screen and (min-width:761px){body.retailOffice .workspace{height:calc(100dvh - var(--office-topbar-height,82px) - var(--office-status-height,26px) - var(--desktop-notice-height,0px))}}@media print{#serverMaintenanceBanner,#desktopVersionNotice{display:none!important}}';document.head.append(style);
+ warning.id='serverMaintenanceBanner';notice.id='desktopVersionNotice';
+ for(const b of [warning,notice]){b.hidden=true;b.setAttribute('role','status');b.style.cssText='position:relative;z-index:1000;padding:12px 18px;background:#fff1c2;color:#312600;border:2px solid #a75e00;font:600 16px/1.4 system-ui;flex-shrink:0';document.body.prepend(b);}
+ warning.textContent='YFC OPERATIONS SERVER UPDATES & RESTARTS AT 4:00AM. SAVE ALL WORK AND EXIT APPLICATIONS UNTIL 04:05. APPLICATIONS WILL BE OFFLINE DURING THIS TIME';
+ const resize=new ResizeObserver(()=>document.body.style.setProperty('--desktop-notice-height',(warning.getBoundingClientRect().height+notice.getBoundingClientRect().height)+'px'));resize.observe(warning);resize.observe(notice);
+ let offset=0,last=0,busy=false;
+ function clock(){const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/Chicago',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(Date.now()+offset));const minutes=Number(parts.find(p=>p.type==='hour').value)*60+Number(parts.find(p=>p.type==='minute').value);warning.hidden=minutes<230||minutes>241;}
+ async function check(){if(busy)return;busy=true;try{
+  const native=window.pywebview?.api;if(native?.desktop_update_status){const status=await native.desktop_update_status();notice.hidden=!status.available;notice.textContent=status.message||'';}
+  if(Date.now()-last>300000){last=Date.now();const response=await fetch('/api/maintenance',{cache:'no-store'});if(response.ok){const data=await response.json();offset=Date.parse(data.time)-Date.now();}}
+ }catch{/* Keep the last notice and clock during a network interruption. */}finally{busy=false;clock();}}
+ window.addEventListener('pywebviewready',check);check();setInterval(check,60000);setInterval(clock,1000);
+})();
+
+// END UPDATE NOTICES

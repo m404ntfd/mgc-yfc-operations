@@ -35,7 +35,7 @@ def run():
    # Pending requests can be safely retried from the account dialog.
    p.locator('#checkoutComplete').click();expect(p.locator('#checkoutPaymentForm')).not_to_be_visible();expect(p.locator('#posReceipt')).to_contain_text('Store credit: $20.00');expect(p.locator('#posReceipt')).to_contain_text('Change: $0.07')
    assert len(f.call('pos/sales')[1]['sales'])==1
-   p.locator('#creditOpen').click();p.locator('[data-credit="1"]').click();expect(p.locator('.creditBalance')).to_contain_text('$35.00');expect(p.locator('#creditHistory tr')).to_have_count(3)
+   p.locator('#deskCreditToggle').click();p.locator('#creditOpen').click();p.locator('[data-credit="1"]').click();expect(p.locator('.creditBalance')).to_contain_text('$35.00');expect(p.locator('#creditHistory tr')).to_have_count(3)
    p.locator('#creditClose').click();p.goto(f'http://127.0.0.1:{f.port}/office');office_setting(p,'accounts').click();p.locator('#creditCreateDetails summary').click();p.locator('#creditCreate [name=name]').fill('New sample account');p.locator('#creditCreate button').first.click();expect(p.locator('#creditSummary')).to_contain_text('New sample account')
    for width,height in [(1366,768),(1024,768)]:
     p.set_viewport_size({'width':width,'height':height});assert p.evaluate('document.documentElement.scrollWidth<=innerWidth')

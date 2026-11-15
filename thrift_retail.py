@@ -203,7 +203,12 @@ def thrift_cart_action(c,u,cart,path,d,finish):
         if amount:cart['lines'].append(dict(name='Voluntary donation',category='Donations',price=amount,quantity=1,subtotal=amount,tax=0,taxable=False,donation=True))
     elif path=='thrift-customer':
         if cart.get('reward'):raise Problem('Remove the reward before changing customers.')
-        ident=d.get('customer');cart['customer']=thrift_customer(c,pos_int(ident,'customer',1))['id'] if ident else None
+        ident=d.get('customer')
+        if cart.get('training') and type(ident) is int and ident<0:
+            row=c.execute('SELECT body FROM retail_training_customers WHERE id=? AND device=?',(-ident,cart['device'])).fetchone()
+            if not row:raise Problem('Practice customer not found.',404)
+            cart['customer']=None;cart['training_customer']=json.loads(row[0])
+        else:cart['customer']=thrift_customer(c,pos_int(ident,'customer',1))['id'] if ident else None
     elif path=='thrift-reward':
         if cart.get('reward'):
             cart['lines']=cart.pop('reward_original');cart.pop('reward')

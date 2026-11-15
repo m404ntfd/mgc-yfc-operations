@@ -13,7 +13,7 @@ try:
    context=browser.new_context(viewport={'width':1440,'height':1000});page=context.new_page();page.on('pageerror',lambda e:errors.append(str(e)))
    info=dict(app=app,device=str(number)*32,version='1.0.0',configured=True,nonce='f'*64,computer=dict(id=str(number)*32,hostname='TEST-PC-'+str(number),macs=[],os='Windows fixture'))
    page.add_init_script("window.fixtureInfo="+json.dumps(info)+";window.pywebview={api:{terminal_info:async()=>window.fixtureInfo}};"+("window.pywebview.api.kiosk_info=async()=>window.fixtureInfo;" if app=='pos' else ''))
-   if app=='ops':page.add_init_script("window.testSeconds=30;window.installAttempts=0;window.pywebview.api.ops_update_status=async id=>id?{state:'ready',seconds:window.testSeconds}:{state:'idle'};window.pywebview.api.ops_install_update=async()=>{window.installAttempts++;return window.posUpdateFreeze()?{ok:true}:{error:'Save your work'};}")
+   if app=='ops':page.add_init_script('window.installAttempts=0;window.pywebview.api.desktop_update_status=async()=>({available:true,message:"An update is available. Restart CoastYouth Retail STORE OPS to install it."})')
    page.goto(f'http://127.0.0.1:{f.f.port}'+path)
    def login(user):
     password_login_page(page);page.locator('#login [name=name]').fill(user);page.locator('#login [name=password]').fill('testpassword');page.locator('#login button[type=submit],#login button:not([type])').first.click()
@@ -35,11 +35,10 @@ try:
    page.locator('#nativeTerminalClose').click()
    if app=='ops':
     page.evaluate("const form=document.createElement('form');form.id='testDraft';document.body.append(form);changedForms.set(form,'unsaved');")
-    code,result=f.f.call('computers/start',dict(computers=['3'*32],seconds=30));assert code==200,result
-    expect(page.locator('#opsComputerUpdateBanner')).to_be_visible(timeout=10000);assert page.evaluate('window.installAttempts')==0
-    page.evaluate('window.testSeconds=0');expect(page.locator('#opsComputerUpdateBanner')).to_contain_text('Waiting for unfinished work',timeout=10000);assert page.evaluate('window.installAttempts')==0
+    code,result=f.f.call('computers/start',dict(computers=['3'*32],seconds=30));assert code==409,result
+    expect(page.locator('#desktopVersionNotice')).to_be_visible();assert page.evaluate('window.installAttempts')==0
+    assert page.evaluate("!document.body.inert && changedForms.has(document.getElementById('testDraft'))")
     page.evaluate("changedForms.clear();document.getElementById('testDraft').remove()")
-    expect(page.locator('body')).to_have_attribute('inert','',timeout=10000);assert page.evaluate('window.installAttempts')==1
    context.close()
   assert not errors,errors;browser.close()
  print('PASS first-time admin registration and persistent named status on OFFICE, DESK and STORE OPS; non-admin setup cannot be dismissed.')

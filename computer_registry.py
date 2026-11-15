@@ -20,8 +20,7 @@ def computer_heartbeat(handler,app,d):
         c.execute('INSERT INTO retail_computer_apps VALUES(?,?,?,?,?,?,?) ON CONFLICT(app,device) DO UPDATE SET version=excluded.version,status=excluded.status,seen=excluded.seen,ip=excluded.ip',(app,d['device'],ident,d['version'],str(d.get('status','Connected'))[:200],time.time(),handler.client_address[0]))
 
 def computer_campaign(c,app):
-    row=c.execute('SELECT body FROM retail_computer_updates WHERE app=?',(app,)).fetchone()
-    return json.loads(row['body']) if row else None
+    return None  # Pending legacy rollouts are retained but no longer dispatched.
 
 def computer_ticket(c,app,ident):
     job=computer_campaign(c,app)
@@ -57,7 +56,7 @@ def computer_check(force=False):
 
 def computer_state(c,u,check=True):
     computer_require_admin(u)
-    if check:computer_check()
+    # Inventory is read-only; clients check releases themselves.
     jobs={app:computer_campaign(c,app) for app in ('pos','office','ops')}
     releases={'pos':POS_UPDATE_RELEASE,'office':OFFICE_UPDATE_RELEASE,'ops':OPS_UPDATE_RELEASE};computers=[]
     for row in c.execute('SELECT * FROM retail_computers ORDER BY registered DESC,name,hostname'):
@@ -75,6 +74,7 @@ def computer_state(c,u,check=True):
 def computer_post(handler,c,u,path,d):
     if path=='self':return computer_self(handler,c,u,d)
     computer_require_admin(u)
+    if path in ('check','start','cancel'):raise Problem('Remote application updates have been retired. Restart each application to update.',409)
     if path=='register':
         ident=d.get('id');row=c.execute('SELECT * FROM retail_computers WHERE id=?',(ident,)).fetchone()
         if not row:raise Problem('Open DESK, STORE OPS or OFFICE on that computer and sign in first.',404)

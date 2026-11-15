@@ -67,7 +67,7 @@ try:
   item(products[4]).tap();expect(p.locator('.deskAmountPad')).to_be_visible();assert p.locator('#flowOpenPrice').evaluate('(e)=>e.parentElement.tagName')=='LABEL', 'Touch controls must not reparent the number field'
   assert p.evaluate('unfinished()'), 'Keypad entry must block an automatic restart'
   p.locator('.deskAmountPad [data-key="0"]').tap();p.locator('.deskKeypadApply').tap();expect(p.locator('.deskKeypadError')).not_to_be_empty();p.locator('.deskAmountPad [data-key="clear"]').tap()
-  for key in '12.50':p.locator('.deskAmountPad [data-key="'+key+'"]').tap()
+  for key in '1250':p.locator('.deskAmountPad [data-key="'+key+'"]').tap()
   for theme in ['harbor-blue','classic-gray','coastal-teal','midnight','coastyouth-red']+['glass-'+v for v in ('blue','teal','violet','rose','graphite')]:
    for mode in ('light','dark'):
     p.evaluate('([theme,mode])=>{document.body.dataset.retailTheme=theme;document.documentElement.dataset.theme=mode}',[theme,mode])

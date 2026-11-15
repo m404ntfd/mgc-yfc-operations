@@ -3,6 +3,10 @@ import base64,json,re
 from pathlib import Path
 def prepare(root=None):
  root=Path(root or Path(__file__).parent)
+ inventory=root/'static/office-expansion.js'
+ content=inventory.read_text(encoding='utf-8')
+ content=re.sub(r'// BEGIN COMPUTER INVENTORY.*?// END COMPUTER INVENTORY',lambda _: '// BEGIN COMPUTER INVENTORY\n'+(root/'static/computer-inventory.js').read_text(encoding='utf-8')+'\n// END COMPUTER INVENTORY',content,flags=re.S)
+ inventory.write_text(content,encoding='utf-8')
  assets=json.loads((root/'assets/home-icons.json').read_text(encoding='ascii'))
  assets['gif']=''.join(part.read_text(encoding='ascii') for part in sorted((root/'assets').glob('plug-*.b64')))
  if not base64.b64decode(assets['gif'],validate=True).startswith((b'GIF87a',b'GIF89a')):raise ValueError('Invalid supplied offline GIF')
@@ -30,6 +34,9 @@ def prepare(root=None):
   if filename=='pos.js':content=re.sub(r'\n*// BEGIN DESK TOUCH.*?// END DESK TOUCH\n*','\n',content,flags=re.S).rstrip()+'\n// BEGIN DESK TOUCH\n'+(root/'static/desk-touch.js').read_text(encoding='utf-8-sig')+'\n// END DESK TOUCH\n'
   if filename=='pos.js':content=re.sub(r'\n*// BEGIN CHECKOUT UI.*?// END CHECKOUT UI\n*','\n',content,flags=re.S).rstrip()+'\n// BEGIN CHECKOUT UI\n'+(root/'static/desk-checkout.js').read_text(encoding='utf-8')+'\n// END CHECKOUT UI\n'
   content=re.sub(r'// BEGIN TERMINAL REGISTRATION.*?// END TERMINAL REGISTRATION','',content,flags=re.S).rstrip()+'\n// BEGIN TERMINAL REGISTRATION\n'+(root/'static/terminal-registration.js').read_text(encoding='utf-8')+'\n// END TERMINAL REGISTRATION\n'
+  if filename=='pos.js':content=re.sub(r'// BEGIN DESK EXPERIENCE.*?// END DESK EXPERIENCE','',content,flags=re.S).rstrip()+'\n// BEGIN DESK EXPERIENCE\n'+(root/'static/desk-experience.js').read_text(encoding='utf-8')+'\n// END DESK EXPERIENCE\n'
+  if filename=='pos.js':content=re.sub(r'// BEGIN TERMINAL DEVICES.*?// END TERMINAL DEVICES','',content,flags=re.S).rstrip()+'\n// BEGIN TERMINAL DEVICES\n'+(root/'static/terminal-devices.js').read_text(encoding='utf-8')+'\n// END TERMINAL DEVICES\n'
+  content=re.sub(r'// BEGIN UPDATE NOTICES.*?// END UPDATE NOTICES','',content,flags=re.S).rstrip()+'\n// BEGIN UPDATE NOTICES\n'+(root/'static/update-notices.js').read_text(encoding='utf-8')+'\n// END UPDATE NOTICES\n'
   file.write_text(content,encoding='utf-8')
  for name in ('pos.css','style.css'):
   css=root/'static'/name;content=css.read_text(encoding='utf-8-sig');content=re.sub(r'\n*/\* BEGIN GLASS THEME \*/.*?/\* END GLASS THEME \*/\n*','\n',content,flags=re.S);css.write_text(content.rstrip()+'\n/* BEGIN GLASS THEME */\n'+(root/'static/glass-theme.css').read_text(encoding='utf-8')+'\n/* END GLASS THEME */\n',encoding='utf-8')
@@ -38,6 +45,7 @@ def prepare(root=None):
  css=root/'static/pos.css';content=css.read_text(encoding='utf-8');content=re.sub(r'\n*/\* BEGIN OFFICE NAVIGATION \*/.*?/\* END OFFICE NAVIGATION \*/\n*','\n',content,flags=re.S);css.write_text(content.rstrip()+'\n/* BEGIN OFFICE NAVIGATION */\n'+(root/'static/office-navigation.css').read_text(encoding='utf-8')+'\n/* END OFFICE NAVIGATION */\n',encoding='utf-8')
  css=root/'static/pos.css';content=css.read_text(encoding='utf-8');content=re.sub(r'\n*/\* BEGIN DESK TOUCH \*/.*?/\* END DESK TOUCH \*/\n*','\n',content,flags=re.S);css.write_text(content.rstrip()+'\n/* BEGIN DESK TOUCH */\n'+(root/'static/desk-touch.css').read_text(encoding='utf-8-sig')+'\n/* END DESK TOUCH */\n',encoding='utf-8')
  css=root/'static/pos.css';content=css.read_text(encoding='utf-8');content=re.sub(r'\n*/\* BEGIN CHECKOUT UI \*/.*?/\* END CHECKOUT UI \*/\n*','\n',content,flags=re.S);css.write_text(content.rstrip()+'\n/* BEGIN CHECKOUT UI */\n'+(root/'static/desk-checkout.css').read_text(encoding='utf-8')+'\n/* END CHECKOUT UI */\n',encoding='utf-8')
+ css=root/'static/pos.css';content=css.read_text(encoding='utf-8');content=re.sub(r'/\* BEGIN DESK EXPERIENCE \*/.*?/\* END DESK EXPERIENCE \*/','',content,flags=re.S);css.write_text(content.rstrip()+'\n/* BEGIN DESK EXPERIENCE */\n'+(root/'static/desk-experience.css').read_text(encoding='utf-8')+'\n/* END DESK EXPERIENCE */\n',encoding='utf-8')
  hr=root/'static/hr.js';content=hr.read_text(encoding='utf-8');content=re.sub(r'// BEGIN HR BROWSER UI.*?// END HR BROWSER UI',lambda _: '// BEGIN HR BROWSER UI\n'+(root/'static/hr-browser.js').read_text(encoding='utf-8')+'\n// END HR BROWSER UI',content,flags=re.S);hr.write_text(content,encoding='utf-8')
  pos={name:(root/'static'/name).read_text(encoding='utf-8') for name in ('pos.html','pos.js','pos.css','customer-display.html','customer-display.js','customer-display.css','hr.html','hr.js','hr.css')}
  source,count=re.subn(r'^POS_ASSETS=.* # prepared POS application assets$',lambda _: 'POS_ASSETS='+repr(pos)+' # prepared POS application assets',source,flags=re.M)
@@ -53,6 +61,9 @@ def prepare(root=None):
  source=re.sub(r'^HR_REFERENCE_FORMS=.* # prepared HR reference forms$',lambda _: 'HR_REFERENCE_FORMS='+repr([item for item in json.loads((root/'assets/hr-reference-forms.json').read_text(encoding='utf-8')) if item['kind']=='deposit'])+' # prepared HR reference forms',source,flags=re.M)
  source=re.sub(r'# BEGIN HR BROWSER.*?# END HR BROWSER',lambda _: '# BEGIN HR BROWSER\n'+(root/'hr_browser.py').read_text(encoding='utf-8')+'\n# END HR BROWSER',source,flags=re.S)
  source=re.sub(r'^HR_SOURCE_FORMS=.* # prepared HR source forms$',lambda _: 'HR_SOURCE_FORMS='+repr(json.loads((root/'assets/hr-source-forms.json').read_text(encoding='utf-8')))+' # prepared HR source forms',source,flags=re.M)
+ source=re.sub(r'# BEGIN RETAIL DEVICES.*?# END RETAIL DEVICES',lambda _: '# BEGIN RETAIL DEVICES\n'+(root/'retail_devices.py').read_text(encoding='utf-8')+'\n# END RETAIL DEVICES',source,flags=re.S)
+ source=re.sub(r'# BEGIN SERVER MAINTENANCE.*?# END SERVER MAINTENANCE',lambda _: '# BEGIN SERVER MAINTENANCE\n'+(root/'server_maintenance.py').read_text(encoding='utf-8')+'\n# END SERVER MAINTENANCE',source,flags=re.S)
+ source=re.sub(r'# BEGIN RETAIL TRAINING.*?# END RETAIL TRAINING',lambda _: '# BEGIN RETAIL TRAINING\n'+(root/'retail_training.py').read_text(encoding='utf-8')+'\n# END RETAIL TRAINING',source,flags=re.S)
  source=re.sub(r'# BEGIN CHECKOUT.*?# END CHECKOUT',lambda _: '# BEGIN CHECKOUT\n'+(root/'checkout.py').read_text(encoding='utf-8')+'\n# END CHECKOUT',source,flags=re.S)
  source=re.sub(r'# BEGIN GIVING.*?# END GIVING',lambda _: '# BEGIN GIVING\n'+(root/'giving.py').read_text(encoding='utf-8')+'\n# END GIVING',source,flags=re.S)
  path.write_text(source,encoding='utf-8')

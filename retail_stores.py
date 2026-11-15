@@ -181,6 +181,11 @@ def stores_get(c,u,path,q):
         request=q.get('request',[''])[0]
         if not re.fullmatch('[0-9a-f]{32}',request):raise Problem('Invalid cash advance reference.')
         row=c.execute('SELECT * FROM retail_cash_advances WHERE request=? AND actor=?',(request,u['receipt_owner'])).fetchone()
+        if not row:
+            saved=c.execute('SELECT payload,result FROM pos_operations WHERE id=? AND owner=?',(request,u['receipt_owner'])).fetchone()
+            if saved and json.loads(saved['payload'])[0]=='cash-advance':
+                advance=json.loads(saved['result']).get('advance')
+                if advance and advance.get('training'):return dict(advance=advance)
         return dict(advance=dict(row) if row else None)
     if path=='cash-advance-setup':
         context=stores_advance_context(c,u,q.get('device',[''])[0])

@@ -8,7 +8,7 @@ try:
 except ImportError:
     from client import Client
 NAME='MGC YFC Operations Remote Manager'
-VERSION='0.58.4'
+VERSION='0.59.0'
 CONFIG=Path(os.environ.get('APPDATA',Path.home()))/'ThriftMartDispatchRemoteManager'/'config.json'
 
 class App:
@@ -21,6 +21,9 @@ class App:
             if icon.exists():root.iconbitmap(str(icon))
         style=ttk.Style();style.theme_use('clam');style.configure('TButton',padding=9);style.configure('TLabel',font=('Segoe UI',10));style.configure('Title.TLabel',font=('Segoe UI',22,'bold'));style.configure('TEntry',padding=7)
         outer=ttk.Frame(container if container is not None else root);outer.pack(fill='both',expand=True)
+        if container is None:
+            from desktop_updates import maintenance_warning
+            self.maintenance_banner=maintenance_warning(root,outer)
         canvas=tk.Canvas(outer,highlightthickness=0);scrollbar=ttk.Scrollbar(outer,orient='vertical',command=canvas.yview)
         scrollbar.pack(side='right',fill='y');canvas.pack(side='left',fill='both',expand=True);canvas.configure(yscrollcommand=scrollbar.set)
         frame=ttk.Frame(canvas,padding=16);window=canvas.create_window((0,0),window=frame,anchor='nw')
@@ -62,7 +65,7 @@ class App:
         self.notes=tk.Text(updates,height=5,wrap='word',font=('Segoe UI',10),state='disabled');self.notes.pack(fill='x',pady=8)
         ttk.Label(frame,text='Manage employees and login security in OFFICE. Closing this panel does not stop the server.',wraplength=690).pack(anchor='w')
         ttk.Button(updates_container if updates_container is not None else frame,text='Server / controller installer downloads',command=lambda:webbrowser.open('https://github.com/m404ntfd/mgc-yfc-operations/releases/latest')).pack(anchor='w',pady=(8,0))
-        ttk.Label(updates_container if updates_container is not None else frame,text='Manage DESK, OFFICE and STORE OPS desktop updates in OFFICE → System → Application updates. OFFICE can also update the STORE OPS web app and shared server.',wraplength=700).pack(anchor='w',pady=16)
+        ttk.Label(updates_container if updates_container is not None else frame,text='The server checks and installs updates at 04:00 AM Central. DESK, OFFICE and STORE OPS desktop check on startup and hourly; restart each app when an update is available. OFFICE lists installed versions.',wraplength=700).pack(anchor='w',pady=16)
         root.after(100,self.deliver)
         root.after(2000,self.poll_connections)
         if local_control and session_path:

@@ -209,6 +209,8 @@ def customer_post(handler,c,u,path,d,finish):
     return None
 
 def customer_display(c,token):
+    configured=devices_display(c,token)
+    if configured is not None:return configured
     key=hashlib.sha256(token.encode()).hexdigest();row=c.execute('SELECT * FROM customer_displays WHERE token_hash=?',(key,)).fetchone()
     if not row or row['expires']<time.time() or not customer_settings(c,'display')['enabled']:raise Problem('Display pairing expired or disabled.',404)
     settings=customer_settings(c,'display');result={'state':'idle','welcome':settings['welcome'],'thanks':settings['thanks'],'store':pos_settings(c)['store']}

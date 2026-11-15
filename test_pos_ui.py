@@ -31,7 +31,7 @@ def run():
    expect(p.locator('#checkoutComplete')).to_have_text('Retry / check this payment');p.locator('#checkoutComplete').click()
    expect(p.locator('#posReceipt')).to_contain_text('Change: $3.72')
    with __import__('server').connect() as c:assert c.execute('SELECT COUNT(*) FROM pos_sales').fetchone()[0]==1
-   p.locator('#navSales').click();expect(p.locator('#checkoutReceiptList')).to_contain_text('$6.28');p.locator('#checkoutReceiptClose').click()
+   p.locator('#posSalesShortcut').click();expect(p.locator('#checkoutReceiptList')).to_contain_text('$6.28');p.locator('#checkoutReceiptClose').click()
    # Opening Operations never replaces the POS or its saved cart.
    expect(p.locator('#posCart')).to_contain_text('Tap a product')
    p.locator('#posCatalog button').filter(has_text='Catalog shirt').click();expect(p.locator('#posCart')).to_contain_text('$4.28')

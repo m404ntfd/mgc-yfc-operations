@@ -7,7 +7,7 @@ const officeNavigationSections=[
  ['giving','Giving','♥','Donors, received gifts, monthly giving and statements.'],
  ['staff','Staff','♙','Users, permissions, onboarding and timekeeping.'],
  ['reports','Reports','▥','Sales, store activity and labor reports.'],
- ['system','System','⚙','Stores, checkout screens, printers, computers and updates.']
+ ['system','System','⚙','Stores, checkout screens, printers and installed versions.']
 ];
 const officeNavigationGroups=[
  {section:"giving",id:"giving",title:"Donor management",description:"Keep ministry giving separate from store sales.",actions:["giving-workspace"]},
@@ -23,12 +23,12 @@ const officeNavigationGroups=[
  {section:'staff',id:'hr',title:'Human resources',description:'Invite employees and review onboarding progress.',actions:['hr-onboarding']},
  {section:'staff',id:'timekeeping',title:'Timekeeping',description:'Manage time entries, schedules, requests and payroll.',actions:['timekeeping-manage']},
  {section:'staff',id:'communications',title:'Communications oversight',description:'Review retained staff messages and attachments with permission.',actions:['review-communications']},
- {section:'reports',id:'sales',title:'Sales analysis',description:'Sales, tax, cash, products and transaction summaries.',actions:['report-center','reports']},
+ {section:'reports',id:'sales',title:'Sales analysis',description:'Sales, tax, cash, products and transaction summaries.',actions:['report-center','reports','training-report']},
  {section:'reports',id:'store',title:'Store activity',description:'Donations, color tags, pickups, vouchers and employee cash advances.',actions:['thrift-reports','cash-advance-report']},
  {section:'reports',id:'labor',title:'Labor & schedules',description:'Time-entry reports and printable employee schedules.',actions:['labor-reports','schedule-report']},
  {section:'system',id:'stores',title:'Stores & appearance',description:'Store profiles, branding and your color theme.',actions:['stores-profiles','office-appearance']},
  {section:'system',id:'checkout',title:'Checkout & printing',description:'Terminals, DESK layouts, customer displays and ticket printing.',actions:['terminals','layouts','customer-display','printing-categories','printing']},
- {section:'system',id:'computers',title:'Computers & updates',description:'Computer registration, application updates and the shared server.',actions:['computer-register','computer-updates','server']}
+ {section:'system',id:'computers',title:'Computers & versions',description:'Computer registration, installed versions and the shared server.',actions:['computer-register','computer-updates','server']}
 ];
 const officeNavigationAliases={'product-tools':'catalog',receipt:'stores-profiles',cards:'card-future-settings'};
 function officeSettingsPath(entry){

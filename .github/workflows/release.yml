@@ -62,6 +62,8 @@ jobs:
       - run: python test_store_checkout_ui.py
       - run: python test_product_tax_checkout_ui.py
       - run: python test_desk_touch_ui.py
+      - run: python -m unittest test_training.TrainingTests test_terminal_devices.TerminalDeviceTests test_update_policy
+      - run: python test_desk_experience_ui.py
       - run: python test_checkout_ui.py
       - run: python -m unittest test_checkout
       - run: python test_pos_kiosk_ui.py
@@ -85,12 +87,8 @@ jobs:
       - run: python test_hr_sources_ui.py
       - run: python test_office_expansion_ui.py
       - run: python test_store_ops_ui.py
-      - run: python test_computer_updates_ui.py
-      - run: python test_office_web_updates_ui.py
       - run: python test_terminal_registration_ui.py
-      - run: python test_computer_auto_ui.py
       - run: python test_pos_redesign_ui.py
-      - run: python test_pos_updates_ui.py
       - run: python test_daily.py
       - run: python test_login.py
       - run: python test_mobile_intro.py
@@ -152,7 +150,7 @@ jobs:
         shell: pwsh
         run: |
           $baseline = Join-Path $env:RUNNER_TEMP 'retail-upgrade-baseline'
-          git clone --depth 1 --branch v0.58.3 https://github.com/m404ntfd/mgc-yfc-operations.git $baseline
+          git clone --depth 1 --branch v0.58.4 https://github.com/m404ntfd/mgc-yfc-operations.git $baseline
           if ($LASTEXITCODE -ne 0) { throw 'Baseline checkout failed' }
           $env:RETAIL_BASE_SOURCE = $baseline
           python test_retail_release_upgrade.py
@@ -174,16 +172,16 @@ jobs:
           & $compiler "/DAppVersion=$version" installer/suite.iss
           if ($LASTEXITCODE -ne 0) { throw "Computer setup installer build failed" }
           $officeInstall = Join-Path $env:RUNNER_TEMP 'OfficeInstallTest'
-          $p = Start-Process -WindowStyle Hidden -FilePath 'dist/CoastYouth-Retail-OFFICE-Setup-v1.15.0.exe' -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$officeInstall") -PassThru -Wait
+          $p = Start-Process -WindowStyle Hidden -FilePath 'dist/CoastYouth-Retail-OFFICE-Setup-v1.16.0.exe' -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$officeInstall") -PassThru -Wait
           if ($p.ExitCode -ne 0) { throw 'OFFICE install failed' }
           $p = Start-Process -WindowStyle Hidden -FilePath (Join-Path $officeInstall 'CoastYouth Retail OFFICE.exe') -ArgumentList '--smoke-test' -PassThru -Wait
           if ($p.ExitCode -ne 0) { throw 'Installed OFFICE failed' }
           $posInstall = Join-Path $env:RUNNER_TEMP 'PosInstallTest'
-          $p = Start-Process -WindowStyle Hidden -FilePath 'dist/MGC-YFC-POS-Setup-v1.18.0.exe' -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$posInstall") -PassThru -Wait
+          $p = Start-Process -WindowStyle Hidden -FilePath 'dist/MGC-YFC-POS-Setup-v1.19.0.exe' -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$posInstall") -PassThru -Wait
           if ($p.ExitCode -ne 0) { throw 'POS install failed' }
           $p = Start-Process -WindowStyle Hidden -FilePath (Join-Path $posInstall 'MGC YFC Point of Sale.exe') -ArgumentList '--smoke-test' -PassThru -Wait
           if ($p.ExitCode -ne 0) { throw 'Installed POS failed' }
-      - run: python test_pos_self_update.py
+      # Restart-time installation is exercised by startup updater tests.
       - run: python installer/test_suite_errors.py
       - run: python installer/test_suite_install.py
       - name: Test installed server and remote connection
@@ -242,4 +240,4 @@ jobs:
             echo "Release already exists; leaving published assets unchanged."
             exit 0
           fi
-          gh release create "$tag" dist/*.exe dist/Store-Dispatch-Update.zip --target "$GITHUB_SHA" --title "CoastYouth Retail Checkout Update $tag" --notes-file RELEASE-NOTES.md
+          gh release create "$tag" dist/*.exe dist/Store-Dispatch-Update.zip --target "$GITHUB_SHA" --title "CoastYouth Retail Training & Checkout $tag" --notes-file RELEASE-NOTES.md

@@ -18,7 +18,7 @@
   'roles':'security access permissions roles',
   'terminals':'register pc computer checkout device layout',
   'computer-register':'register pc computer mac network device',
-  'computer-updates':'software install version notify staff update website web app ops server',
+  'computer-updates':'software installed versions computer inventory desk office ops server',
   'receipt-design':'receipt logo address phone footer return policy branding',
   'stores-profiles':'store binopoly thrift mart branding receipts price tax',
   'stores-programs':'loyalty points rewards birthday gift certificates cash drawer',

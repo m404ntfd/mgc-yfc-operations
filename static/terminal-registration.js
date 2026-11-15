@@ -6,7 +6,7 @@
  const clearForm=form=>{if(typeof changedForms!=='undefined')changedForms.delete(form);};
  const discard=()=>!get('nativeTerminalForm')||!changedForms.has(get('nativeTerminalForm'))||confirm('Discard unsaved terminal registration changes?');
  const required=()=>state&&(!state.computer.registered||(info.app==='pos'&&!state.terminal));
- function label(){if(!button)return;button.textContent=state?.computer.registered?'Terminal: '+state.computer.name+' · Registered':'Terminal setup · Registration required';}
+ function label(){if(!button)return;button.disabled=!user?.admin&&!(typeof can==='function'&&can('manage_pos'));button.textContent=state?.computer.registered?'Terminal: '+state.computer.name+' · Registered':'Terminal setup · Registration required';}
  async function show(){
   if(dialog?.open)return;
   if(!state)return;
@@ -36,7 +36,7 @@
   };
   dialog.showModal();
  }
- window.openTerminalRegistration=async()=>{if(dirty()){(typeof posMessage==='function'?posMessage:toast)('Save or finish your current work before opening terminal setup.');return;}await refresh(true);await show();};
+ window.openTerminalRegistration=async()=>{if(!user?.admin&&!(typeof can==='function'&&can('manage_pos')))return;if(dirty()){(typeof posMessage==='function'?posMessage:toast)('Save or finish your current work before opening terminal setup.');return;}await refresh(true);await show();};
  async function refresh(force=false){
   const native=window.pywebview?.api;if(!native?.terminal_info||busy||window.posUpdateInstalling)return;
   if(!user){if(get('login')&&!get('desktopSetupHint')){const hint=document.createElement('p');hint.id='desktopSetupHint';hint.textContent='First-time computer setup: sign in with an administrator account to register this terminal.';get('login').append(hint);}return;}
@@ -53,13 +53,7 @@
    if(!button){button=document.createElement('button');button.id='nativeTerminalStatus';button.type='button';button.textContent='Terminal setup';button.onclick=window.openTerminalRegistration;(document.querySelector('.headerRight')||document.querySelector('.connectionInfo')||document.querySelector('body>header')).append(button);}
    state=await api('computers/self',{...info,status:lastStatus});window.terminalRegistration=state;label();if(dialog?.dataset.verifying){delete dialog.dataset.verifying;dialog.close();}
    if(required()){if(!dialog?.open)await show();return;}
-   if(info.app==='ops'&&native.ops_update_status){
-    const job=state.campaign,update=await native.ops_update_status(job?.id||null);
-    let banner=get('opsComputerUpdateBanner');if(!banner){banner=document.createElement('aside');banner.id='opsComputerUpdateBanner';banner.setAttribute('role','status');document.body.prepend(banner);}
-    banner.hidden=!job||update.state==='complete';lastStatus=update.error||update.state||'Connected';
-    banner.textContent=update.error||('STORE OPS update pending. Finish and save your work. '+(update.seconds?'Update in '+update.seconds+' seconds.':'Waiting for unfinished work to be saved.'));
-    if(job&&update.state==='ready'&&!update.seconds&&!dirty()&&!dialog?.open){const result=await native.ops_install_update();if(result.error)banner.textContent=result.error;}
-   }
+
   }catch(error){if(button)button.textContent='Terminal setup · Unable to verify';if(dialog?.open)get('nativeTerminalError').textContent=error.message;}
   finally{busy=false;}
  }

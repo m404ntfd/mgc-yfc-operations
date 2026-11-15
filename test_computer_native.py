@@ -31,18 +31,9 @@ class NativeComputerTests(unittest.TestCase):
    with self.assertRaisesRegex(ValueError,'checksum mismatch'):verified_installer('9.0.0','ops')
  def test_native_target_scope_and_uncanceled_work_guard(self):
   bridge=SimpleNamespace(_trusted=lambda:True,_store=SimpleNamespace(data={'device':'a'*32}),_window=Mock())
-  update=PosUpdater(bridge,current='1.0.0');job={'id':'f'*64,'target':'registered','targets':['b'*32],'version':'9.0.0','seconds':30,'mode':'notify','automatic':True}
-  with patch.object(update,'ticket',return_value=job),patch('pos_updater.threading.Thread') as thread:
-   self.assertEqual(update.observe(job['id'])['state'],'idle');thread.assert_not_called()
-   job['targets']=['a'*32];self.assertEqual(update.observe(job['id'])['state'],'downloading');thread.assert_called_once()
-  with tempfile.TemporaryDirectory() as folder:
-   path=Path(folder)/'installer.exe';path.write_bytes(b'fixture-only');update.path=path;update.digest=hashlib.sha256(path.read_bytes()).hexdigest();update.state='ready';update.deadline=0
-   bridge._window.evaluate_js.return_value=False
-   with patch.object(update,'ticket',return_value=job),patch('pos_updater.sys.frozen',True,create=True),patch('pos_updater.subprocess.Popen') as process:
-    with self.assertRaisesRegex(ValueError,'unfinished entries'):update.install()
-    process.assert_not_called();bridge._window.destroy.assert_not_called()
-    self.assertIn('false',bridge._window.evaluate_js.call_args.args[0])
-   with patch.object(update,'ticket',side_effect=ValueError('Canceled')),patch('pos_updater.subprocess.Popen') as process:
-    with self.assertRaisesRegex(ValueError,'Canceled'):update.install()
-    process.assert_not_called()
+  update=PosUpdater(bridge,current='1.0.0')
+  with patch.object(update,'ticket') as ticket,patch('pos_updater.subprocess.Popen') as process:
+   self.assertEqual(update.observe('f'*64)['state'],'idle');ticket.assert_not_called()
+   with self.assertRaisesRegex(ValueError,'Restart this application'):update.install()
+   process.assert_not_called();bridge._window.destroy.assert_not_called()
 if __name__=='__main__':unittest.main()

@@ -3166,129 +3166,7 @@ function installPosNativeToolbar(){
 window.addEventListener('pywebviewready',installPosNativeToolbar);
 installPosNativeToolbar();
 
-// POS update controls shared by the register and Operations screens.
-(()=>{
- const inPos=typeof posPanel!=='undefined',node=document.createElement('section');node.id='posApplicationUpdates';node.hidden=true;
- node.innerHTML='<h2>POS application updates</h2><p>Warn checkout staff, let transactions finish, then update their POS applications.</p><button type="button" id="openPosUpdates">Manage POS updates</button>';
- (inPos?document.getElementById('posAdmin'):document.getElementById('settings')).append(node);
- const dialog=document.createElement('dialog');dialog.id='posUpdatesDialog';dialog.innerHTML='<h2>POS application updates</h2><p>Updates do not change timecards or reservations. Each checkout computer receives its full warning period and waits for staff to finish the current sale.</p><form id="posUpdateSettings"><label>Employee warning (seconds)<input name="seconds" type="number" min="30" max="3600" value="120" required></label><button>Save warning time</button></form><div class="actions"><button type="button" id="checkPosRelease">Check for updates</button><button type="button" id="startPosRelease" disabled>Notify staff and update POS</button><button type="button" id="cancelPosRelease">Cancel update request</button></div><label>Checkout computers<select id="posUpdateTarget"><option value="all">All connected POS computers</option></select></label><p id="posReleaseStatus" role="status"></p><div id="posDeviceList"></div><button type="button" id="closePosUpdates">Close</button>';
- document.body.append(dialog);
- const banner=document.createElement('aside');banner.id='posInstallBanner';banner.hidden=true;banner.setAttribute('role','status');banner.innerHTML='<strong>POS update pending</strong><span id="posInstallMessage"></span><button type="button" id="posInstallReady">My work is finished — update</button>';document.body.append(banner);
- const get=id=>document.getElementById(id);let state=null,info=null,busy=false,lastStatus='',deadline=0,campaignId=null,seconds=0,installing=false,acting=false,staffReady=false,lastUpdate=null,noticeError='',pollError='';
- const setBanner=shown=>{banner.hidden=!shown;document.body.classList.toggle('posInstallWarning',shown);if(!shown){staffReady=false;lastUpdate=null;noticeError='';window.posUpdateCountdownDone=false;}};
- function render(data){
-  state=data;if(!user?.admin)return;
-  const release=data.release||{},campaign=data.campaign;
-  get('posReleaseStatus').textContent=release.checking?'Checking the published POS release…':release.error||('Latest POS: '+(release.version||'Check for updates')+(campaign?' · Update requested by '+campaign.by:''));
-  get('startPosRelease').disabled=!release.version||release.checking||!!campaign;
-  get('cancelPosRelease').disabled=!campaign;
-  const target=get('posUpdateTarget').value;get('posUpdateTarget').replaceChildren(new Option('All connected POS computers','all'));
-  get('posDeviceList').replaceChildren();
-  for(const device of data.devices||[]){
-   const active=Date.now()/1000-device.seen<45;
-   const text=device.user+' · '+device.device.slice(0,6)+' · POS '+device.version+' · '+(active?device.status:'Not recently connected')+(device.updater?'':' · One-time installer required');
-   const row=document.createElement('p');row.textContent=text;get('posDeviceList').append(row);
-   if(active)get('posUpdateTarget').append(new Option(device.user+' · '+device.device.slice(0,6),device.device));
-  }
-  if([...get('posUpdateTarget').options].some(x=>x.value===target))get('posUpdateTarget').value=target;
- }
- async function action(name,body={}){
-  try{render(await api('pos-update/'+name,body));}catch(e){get('posReleaseStatus').textContent=e.message;}
- }
- get('openPosUpdates').onclick=async()=>{dialog.showModal();try{const data=await api('pos-update/state');render(data);get('posUpdateSettings').elements.seconds.value=data.seconds;}catch(e){get('posReleaseStatus').textContent=e.message;}};
- get('closePosUpdates').onclick=()=>dialog.close();get('checkPosRelease').onclick=()=>action('check');get('cancelPosRelease').onclick=()=>action('cancel');
- get('startPosRelease').onclick=()=>action('start',{target:get('posUpdateTarget').value});
- get('posUpdateSettings').onsubmit=async e=>{e.preventDefault();await action('settings',{seconds:Number(e.target.elements.seconds.value)});};
- function drawNotice(){
-  if(banner.hidden||!info?.updater||!lastUpdate)return;
-  seconds=Math.max(0,Math.ceil((deadline-Date.now())/1000));
-  const button=get('posInstallReady');
-  button.disabled=acting||installing;
-  if(!inPos){button.textContent='Return to POS to finish update';}
-  else button.textContent=lastUpdate.state==='error'?'Retry update download':staffReady?'Keep working':'My work is finished — update';
-  window.posUpdateCountdownDone=seconds===0;
-  const wait=seconds?'Warning time remaining: '+seconds+' seconds. ':'';
-  let message=pollError||lastUpdate.error||noticeError;
-  if(!message){
-   if(lastUpdate.state==='downloading')message=wait+'Downloading and verifying the installer. '+(staffReady?'Your work is marked finished. The update will start when the download and warning time are complete.':'Finish your work, then select My work is finished — update when ready.');
-   else if(lastUpdate.state==='ready')message=wait+(staffReady?'Your work is marked finished. Waiting for the warning time to end.':'Finish or hold the current sale and save your work, then select My work is finished — update.');
-   else if(lastUpdate.state==='installing')message='Installing the update. DESK will reopen when finished.';
-   else message=wait+'Checking update readiness. Your work has not been closed.';
-  }
-  if(lastUpdate.state==='error')message='Update paused: '+(message||'The installer could not be prepared.')+' Select Retry update download. Your sale is unchanged.';
-  get('posInstallMessage').textContent=message;
- }
- async function attemptInstall(native){
-  if(acting||installing||lastUpdate?.state!=='ready'||seconds>0)return;
-  acting=true;drawNotice();
-  try{
-   const outcome=await native.install_update();
-   if(outcome?.error){staffReady=false;noticeError=outcome.error;lastStatus=outcome.error;}
-  }catch(error){staffReady=false;noticeError='Update paused: '+error.message;}
-  finally{acting=false;if(!installing)drawNotice();}
- }
- for(const event of ['pointerdown','keydown','input'])document.addEventListener(event,e=>{
-  if(staffReady&&!banner.contains(e.target)){staffReady=false;noticeError='';drawNotice();}
- },true);
- get('posInstallReady').onclick=async()=>{
-  if(acting||installing)return;
-  const native=window.pywebview?.api;
-  if(!inPos){const result=await native.open_operations('pos');if(result.error)get('posInstallMessage').textContent=result.error;return;}
-  if(!info?.updater){get('posInstallMessage').textContent='This older POS needs the one-time installer. Ask an administrator to finish this installation.';return;}
-  noticeError='';
-  if(lastUpdate?.state==='error'){
-   staffReady=false;acting=true;drawNotice();
-   try{
-    // Older installed clients can retry safely too; they repeat their warning period.
-    if(native.retry_update){lastUpdate=await native.retry_update(campaignId);deadline=Date.now()+Math.max(0,lastUpdate.seconds||0)*1000;}
-    else{await native.update_status(null);lastUpdate=null;}
-   }catch(error){noticeError='Unable to retry the download: '+error.message;}
-   finally{acting=false;drawNotice();}
-   await poll();return;
-  }
-  if(staffReady){staffReady=false;drawNotice();return;}
-  if(unfinished()||posCurrent?.lines.length||flow?.active){noticeError='Finish or cancel your current sale, or hold it, and save all unfinished entries before updating.';drawNotice();return;}
-  staffReady=true;drawNotice();await attemptInstall(native);
- };
- async function poll(){
-  if(busy||acting||!user||installing)return;busy=true;
-  try{
-   node.hidden=!user.admin;
-   if(location.hash==='#pos-updates'&&user.admin&&!dialog.open){get('openPosUpdates').click();history.replaceState(null,'',location.pathname);}
-   const native=window.pywebview?.api?.kiosk_info?window.pywebview.api:null;
-   if(native){
-    info=await native.kiosk_info();
-    if(info.device){
-     const result=await api('pos-update/heartbeat',{device:info.device,version:info.version||'1.0.1',updater:!!info.updater,status:lastStatus||'Connected'});render(result);
-    }
-   }else if(user.admin&&dialog.open)render(await api('pos-update/state'));
-   if(!native||!info?.device)return;
-   const campaign=state?.campaign;
-   if(!campaign||(campaign.target!=='all'&&campaign.target!==info.device&&!campaign.targets?.includes(info.device))){setBanner(false);campaignId=null;if(info.updater)await native.update_status(null);return;}
-   if(info.updater){
-    const update=await native.update_status(campaign.id);lastStatus=update.state==='complete'?'Update complete · POS '+info.version:update.error||update.state+(update.seconds?' · '+update.seconds+' seconds':'');
-    if(update.state==='complete'||update.state==='idle'){setBanner(false);return;}
-    if(campaignId!==campaign.id){staffReady=false;noticeError='';}
-    pollError='';lastUpdate=update;seconds=Math.max(0,Number(update.seconds)||0);deadline=Date.now()+seconds*1000;campaignId=campaign.id;setBanner(true);drawNotice();
-    if(inPos&&update.state==='ready'&&seconds===0&&(staffReady||campaign.mode==='force'||campaign.automatic)&&!unfinished())await attemptInstall(native);
-   }else{
-    if(campaignId!==campaign.id){campaignId=campaign.id;deadline=Date.now()+campaign.seconds*1000;}
-    setBanner(true);get('posInstallReady').disabled=true;get('posInstallMessage').textContent='An update is pending. Finish your transaction. This older POS requires an administrator to install the new version once.';lastStatus='One-time installer required';
-   }
-  }catch(e){if(!banner.hidden){pollError='Update paused: '+e.message;get('posInstallMessage').textContent=pollError;}}
-  finally{busy=false;}
- }
- setInterval(drawNotice,1000);
- setInterval(poll,4000);window.addEventListener('pywebviewready',poll);setTimeout(poll,1000);
- if(inPos){
-  window.posUpdateFreeze=()=>{
-   if(unfinished()||posCurrent?.lines.length||flow?.active)return false;
-   installing=true;window.posUpdateInstalling=true;document.body.classList.add('posInstalling');get('posInstallMessage').textContent='Installing POS update. The application will reopen when finished.';return true;
-  };
-  window.posUpdateUnfreeze=()=>{installing=false;window.posUpdateInstalling=false;document.body.classList.remove('posInstalling');};
-  const original=posDo;posDo=async function(action,...args){if(window.posUpdateInstalling)return;if(action==='new'&&window.posUpdateCountdownDone&&!banner.hidden){posMessage('An update is pending. Finish this transaction and update before starting another.');return;}return original(action,...args);};
- }
-})();
+
 
 // BEGIN REPORT CENTER
 // Shared read-only reporting interface embedded into Operations and OFFICE.
@@ -3445,6 +3323,48 @@ const hrOpsButton=document.createElement('button');hrOpsButton.textContent='HR �
 
 api('account/retail-theme').then(pref=>{document.body.dataset.retailTheme=pref.theme==='default'?pref.default:pref.theme;}).catch(()=>{});
 api('session').then(s=>{hrOpsButton.hidden=!s.user||!(s.user.admin||s.user.grants?.manage_hr);}).catch(()=>{});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // BEGIN TERMINAL REGISTRATION
 // Shared native desktop registration; ordinary web browsers keep their current login flow.
 (()=>{
@@ -3454,7 +3374,7 @@ api('session').then(s=>{hrOpsButton.hidden=!s.user||!(s.user.admin||s.user.grant
  const clearForm=form=>{if(typeof changedForms!=='undefined')changedForms.delete(form);};
  const discard=()=>!get('nativeTerminalForm')||!changedForms.has(get('nativeTerminalForm'))||confirm('Discard unsaved terminal registration changes?');
  const required=()=>state&&(!state.computer.registered||(info.app==='pos'&&!state.terminal));
- function label(){if(!button)return;button.textContent=state?.computer.registered?'Terminal: '+state.computer.name+' · Registered':'Terminal setup · Registration required';}
+ function label(){if(!button)return;button.disabled=!user?.admin&&!(typeof can==='function'&&can('manage_pos'));button.textContent=state?.computer.registered?'Terminal: '+state.computer.name+' · Registered':'Terminal setup · Registration required';}
  async function show(){
   if(dialog?.open)return;
   if(!state)return;
@@ -3484,7 +3404,7 @@ api('session').then(s=>{hrOpsButton.hidden=!s.user||!(s.user.admin||s.user.grant
   };
   dialog.showModal();
  }
- window.openTerminalRegistration=async()=>{if(dirty()){(typeof posMessage==='function'?posMessage:toast)('Save or finish your current work before opening terminal setup.');return;}await refresh(true);await show();};
+ window.openTerminalRegistration=async()=>{if(!user?.admin&&!(typeof can==='function'&&can('manage_pos')))return;if(dirty()){(typeof posMessage==='function'?posMessage:toast)('Save or finish your current work before opening terminal setup.');return;}await refresh(true);await show();};
  async function refresh(force=false){
   const native=window.pywebview?.api;if(!native?.terminal_info||busy||window.posUpdateInstalling)return;
   if(!user){if(get('login')&&!get('desktopSetupHint')){const hint=document.createElement('p');hint.id='desktopSetupHint';hint.textContent='First-time computer setup: sign in with an administrator account to register this terminal.';get('login').append(hint);}return;}
@@ -3501,13 +3421,7 @@ api('session').then(s=>{hrOpsButton.hidden=!s.user||!(s.user.admin||s.user.grant
    if(!button){button=document.createElement('button');button.id='nativeTerminalStatus';button.type='button';button.textContent='Terminal setup';button.onclick=window.openTerminalRegistration;(document.querySelector('.headerRight')||document.querySelector('.connectionInfo')||document.querySelector('body>header')).append(button);}
    state=await api('computers/self',{...info,status:lastStatus});window.terminalRegistration=state;label();if(dialog?.dataset.verifying){delete dialog.dataset.verifying;dialog.close();}
    if(required()){if(!dialog?.open)await show();return;}
-   if(info.app==='ops'&&native.ops_update_status){
-    const job=state.campaign,update=await native.ops_update_status(job?.id||null);
-    let banner=get('opsComputerUpdateBanner');if(!banner){banner=document.createElement('aside');banner.id='opsComputerUpdateBanner';banner.setAttribute('role','status');document.body.prepend(banner);}
-    banner.hidden=!job||update.state==='complete';lastStatus=update.error||update.state||'Connected';
-    banner.textContent=update.error||('STORE OPS update pending. Finish and save your work. '+(update.seconds?'Update in '+update.seconds+' seconds.':'Waiting for unfinished work to be saved.'));
-    if(job&&update.state==='ready'&&!update.seconds&&!dirty()&&!dialog?.open){const result=await native.ops_install_update();if(result.error)banner.textContent=result.error;}
-   }
+
   }catch(error){if(button)button.textContent='Terminal setup · Unable to verify';if(dialog?.open)get('nativeTerminalError').textContent=error.message;}
   finally{busy=false;}
  }
@@ -3525,3 +3439,22 @@ api('session').then(s=>{hrOpsButton.hidden=!s.user||!(s.user.admin||s.user.grant
 })();
 
 // END TERMINAL REGISTRATION
+// BEGIN UPDATE NOTICES
+// Notices never close a form, freeze a register, or launch an installer.
+(()=>{
+ const warning=document.createElement('aside'),notice=document.createElement('aside');
+ const style=document.createElement('style');style.textContent='@media screen and (min-width:761px){body.retailOffice .workspace{height:calc(100dvh - var(--office-topbar-height,82px) - var(--office-status-height,26px) - var(--desktop-notice-height,0px))}}@media print{#serverMaintenanceBanner,#desktopVersionNotice{display:none!important}}';document.head.append(style);
+ warning.id='serverMaintenanceBanner';notice.id='desktopVersionNotice';
+ for(const b of [warning,notice]){b.hidden=true;b.setAttribute('role','status');b.style.cssText='position:relative;z-index:1000;padding:12px 18px;background:#fff1c2;color:#312600;border:2px solid #a75e00;font:600 16px/1.4 system-ui;flex-shrink:0';document.body.prepend(b);}
+ warning.textContent='YFC OPERATIONS SERVER UPDATES & RESTARTS AT 4:00AM. SAVE ALL WORK AND EXIT APPLICATIONS UNTIL 04:05. APPLICATIONS WILL BE OFFLINE DURING THIS TIME';
+ const resize=new ResizeObserver(()=>document.body.style.setProperty('--desktop-notice-height',(warning.getBoundingClientRect().height+notice.getBoundingClientRect().height)+'px'));resize.observe(warning);resize.observe(notice);
+ let offset=0,last=0,busy=false;
+ function clock(){const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/Chicago',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(Date.now()+offset));const minutes=Number(parts.find(p=>p.type==='hour').value)*60+Number(parts.find(p=>p.type==='minute').value);warning.hidden=minutes<230||minutes>241;}
+ async function check(){if(busy)return;busy=true;try{
+  const native=window.pywebview?.api;if(native?.desktop_update_status){const status=await native.desktop_update_status();notice.hidden=!status.available;notice.textContent=status.message||'';}
+  if(Date.now()-last>300000){last=Date.now();const response=await fetch('/api/maintenance',{cache:'no-store'});if(response.ok){const data=await response.json();offset=Date.parse(data.time)-Date.now();}}
+ }catch{/* Keep the last notice and clock during a network interruption. */}finally{busy=false;clock();}}
+ window.addEventListener('pywebviewready',check);check();setInterval(check,60000);setInterval(clock,1000);
+})();
+
+// END UPDATE NOTICES

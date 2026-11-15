@@ -64,7 +64,7 @@ def check_release(app, current):
         if match:
             candidates.append((version(match[1]), match[1], asset))
     if not candidates:
-        raise ValueError('No compatible installer was found. Use the update area to check again later.')
+        raise ValueError('No compatible installer was found. Restart the application to check again later.')
     _, target, asset = max(candidates, key=lambda candidate: candidate[0])
     if version(target) <= version(current):
         return None
@@ -151,7 +151,7 @@ def startup_update(app, current, settings):
 
     later = ttk.Button(buttons, text='Continue opening', command=close, padding=12)
     later.pack(side='right')
-    update = ttk.Button(buttons, text='Update', padding=12)
+    update = ttk.Button(buttons, text='Restart & update', padding=12)
 
     def work(fn):
         def worker():
@@ -203,7 +203,7 @@ def startup_update(app, current, settings):
         else:
             state['offer'] = value
             frame.winfo_children()[0].configure(text='Update available')
-            text.set(value['name'] + ' ' + value['version'] + ' is available.\n\nSelect Update to install it and restart this application. Your saved data and connection settings will be kept.')
+            text.set('An update is available. Restart ' + value['name'] + ' to install it.')
             later.configure(text='Not now')
             update.pack(side='right', padx=12)
         state['timer'] = root.after(100, poll)
@@ -223,7 +223,7 @@ def startup_update(app, current, settings):
     if failure:
         # Still perform this launch's check, but keep the failure visible until dismissed.
         progress.stop()
-        text.set('The previous update did not finish. ' + failure + '\nContinue opening to use the application and review updates in settings.')
+        text.set('The previous update did not finish. ' + failure + '\nContinue opening to use the application and restart to check again later.')
     else:
         state['timer'] = root.after(100, poll)
     root.mainloop()

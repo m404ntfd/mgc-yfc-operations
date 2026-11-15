@@ -38,8 +38,8 @@ def run_case(app,action,offline=False,download_error=False):
             if download_error and 'could not be completed' in labels:
                 steps.append('download error');buttons['Continue opening'].invoke();return
             if 'Not now' in buttons and 'chosen' not in steps:
-                assert 'restart this application' in labels
-                steps.append('chosen');buttons[action].invoke()
+                assert 'Restart CoastYouth Retail' in labels
+                steps.append('chosen');buttons['Restart & update' if action=='Update' else action].invoke()
                 if action=='Not now':return
             root.after(50,act)
         root.after(100,act)

@@ -43,10 +43,11 @@ function deskQuantityControl(line,index){
   }
  }
  function openKeypad(input){
+  const openPrice=input.id==='flowOpenPrice';
   const name=fieldName(input),decimal=input.step==='any'||(input.step&&Number(input.step)%1!==0);
   const dialog=flowModal(name,`<form id="deskAmountEntry"><label class="deskKeypadLabel">${esc(name)}<input id="deskKeypadValue" name="value" type="text" inputmode="${decimal?'decimal':'numeric'}" autocomplete="off"></label></form><p class="deskKeypadError" role="alert"></p><div class="deskKeypadGrid">${['7','8','9','4','5','6','1','2','3','clear','0',decimal?'.':'back'].map(key=>`<button type="button" data-key="${key}" aria-label="${key==='clear'?'Clear entry':key==='back'?'Backspace':key==='.'?'Decimal point':key}">${key==='clear'?'Clear':key==='back'?'⌫':key}</button>`).join('')}</div><div class="deskKeypadActions">${decimal?'<button type="button" data-key="back" aria-label="Backspace">⌫ Backspace</button>':''}<button type="button" class="deskKeypadCancel">Cancel</button><button type="button" class="primary deskKeypadApply">Use value</button></div>`);
   dialog.classList.add('deskAmountPad');const value=dialog.querySelector('#deskKeypadValue'),error=dialog.querySelector('.deskKeypadError');value.value=input.value;const entry=dialog.querySelector("#deskAmountEntry");entry.onsubmit=e=>{e.preventDefault();apply();};changedForms.set(entry,snapshot(entry));value.focus();value.select();
-  const openPrice=input.id==='flowOpenPrice',choiceForm=input.form,parentDialog=input.closest('dialog'),moved=[];
+  const choiceForm=input.form,parentDialog=input.closest('dialog'),moved=[];
   if(openPrice){
    dialog.querySelector('.deskKeypadApply').textContent='Okay · Add to sale';
    for(const select of choiceForm.querySelectorAll('select')){const label=select.closest('label'),marker=document.createComment('choice');label.before(marker);moved.push([label,marker]);entry.append(label);}
@@ -61,6 +62,17 @@ function deskQuantityControl(line,index){
    else{text=text.slice(0,start)+key+text.slice(end);position=start+key.length;}
    if(text.length<=16&&new RegExp(decimal?'^\\d*(\\.\\d*)?$':'^\\d*$').test(text)){value.value=text;value.dispatchEvent(new Event('input',{bubbles:true}));value.focus();value.setSelectionRange(position,position);error.textContent='';}
   });
+  // Open prices use the same right-to-left cents entry as cash tender.
+  if(openPrice){
+   let digits=input.value?String(Math.round(Number(input.value)*100)):'';
+   const draw=()=>{value.value=digits?(Number(digits)/100).toFixed(2):'';value.dispatchEvent(new Event('change',{bubbles:true}));error.textContent='';};
+   const key=k=>{if(k==='clear')digits='';else if(k==='back')digits=digits.slice(0,-1);else if(/^\d$/.test(k)&&digits.length<9)digits=(digits+k).replace(/^0+(?=\d)/,'');draw();};
+   dialog.querySelectorAll('[data-key]').forEach(b=>{if(b.dataset.key==='.'){b.dataset.key='back';b.textContent='⌫';b.setAttribute('aria-label','Backspace');}b.onclick=()=>key(b.dataset.key);});
+   value.oninput=()=>{digits=value.value.replace(/\D/g,'').slice(0,9);draw();};
+   value.addEventListener('keydown',e=>{if(e.ctrlKey||e.metaKey||e.key==='Tab'||e.key==='Enter')return;if(/^\d$/.test(e.key)||['Backspace','Delete','.'].includes(e.key)){e.preventDefault();if(value.selectionStart===0&&value.selectionEnd===value.value.length)digits='';if(e.key!=='.')key(e.key==='Backspace'?'back':e.key==='Delete'?'clear':e.key);}});
+   value.onpaste=e=>{e.preventDefault();const v=e.clipboardData.getData('text').trim();if(/^\$?\d+(\.\d{1,2})?$/.test(v)){digits=String(v.includes('.')?Math.round(Number(v.replace('$',''))*100):Number(v.replace('$','')));draw();}};
+   const hint=document.createElement('p');hint.textContent='Enter digits as cents: 1000 = $10.00.';value.closest('label').after(hint);draw();
+  }
   function apply(){
    if(!input.isConnected||input.disabled||input.readOnly){error.textContent='This field is no longer available. Close the keypad and reopen the item.';return;}
    const text=value.value.trim(),check=input.cloneNode();check.required=true;check.value=text;

@@ -92,6 +92,7 @@ body[data-retail-theme] .cardNotice,body[data-retail-theme] .cardNotice p{color:
 .thriftDialog #thriftTagForm,.thriftDialog #thriftDonation{display:inline-block;vertical-align:top;width:calc(50% - 18px);margin-right:16px;padding:16px;border:1px solid #b8c8d6;border-radius:10px}
 .thriftDialog #thriftSettings>button.primary{margin-top:18px}
 @media(max-width:700px){.thriftDialog #thriftTagForm,.thriftDialog #thriftDonation{display:block;width:100%;margin:12px 0}.thriftTagGrid{grid-template-columns:1fr}}
+
 /* BEGIN GLASS THEME */
 /* Readable report cards in every theme; printed pages remain white. */
 @media screen {
@@ -472,3 +473,27 @@ dialog.catalogSetup{width:min(940px,calc(100vw - 48px));max-width:calc(100vw - 4
 }
 
 /* END CHECKOUT UI */
+/* BEGIN DESK EXPERIENCE */
+@media screen{
+ #deskTrainingBanner{display:flex;align-items:center;gap:14px;padding:10px 16px;margin-bottom:10px;background:rgba(255,205,205,.94);border:2px solid #b80016;color:#000;border-radius:9px;flex-shrink:0}
+ #deskTrainingBanner[hidden]{display:none}.trainingDot{width:16px;height:16px;border:1px solid #7c1515;border-radius:50%;background:#d90000;animation:trainingDot 2.4s ease-in-out infinite alternate}
+ .trainingActive .trainingStatus{color:#c00019;animation:trainingText 2.4s ease-in-out infinite alternate}
+ @keyframes trainingText{from{opacity:1}to{opacity:.5}}@keyframes trainingDot{from{background:#d90000}to{background:#ffdc00}}
+ :root body.deskTouch.checkoutRedesign[data-retail-theme] .registerLayout .registerRail #posPayNow{background:#ad1735!important;color:white!important;border-color:#8f102a!important}
+ :root body.deskTouch.checkoutRedesign[data-retail-theme] .registerRail #creditOpen,:root body.deskTouch.checkoutRedesign[data-retail-theme] .registerRail #cashAdvanceOpen,:root body.deskTouch.checkoutRedesign[data-retail-theme] .registerRail #deskCreditToggle{background:#17653d!important;color:white!important;border-color:#104c2d!important}
+ .deskTouch #posPayNow:disabled{opacity:.6}.deskCreditMenu{position:relative}.deskCreditMenu>button{width:100%;height:100%;min-height:62px}
+ #deskCreditChoices{position:absolute;top:0;right:0;width:220px;z-index:80;padding:8px;background:#f5fff7;border:2px solid #17653d;border-radius:10px;box-shadow:0 8px 24px #0006;display:flex;flex-direction:column;gap:10px}
+ #deskCreditChoices[hidden]{display:none}#deskCreditChoices button{min-height:64px;width:100%;margin:0}
+ #deskSettings{position:relative}#deskSettings summary{list-style:none;cursor:pointer;border:1px solid #71899e;border-radius:8px;padding:12px 20px;display:flex;align-items:center}
+ .deskSettingsMenu{position:absolute;right:0;top:100%;z-index:90;min-width:220px;background:var(--panel,#fff);padding:10px;border:1px solid #71899e;border-radius:10px;box-shadow:0 8px 24px #0005}.deskSettingsMenu button{display:block;width:100%;margin:4px 0}
+ .deskTouch #retailEnroll{display:none!important}.deskTouch #posCategories,.deskTouch #posCatalog,.deskTouch .receiptLines{touch-action:pan-y;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}.deskTouch #posCatalog button,.deskTouch #posCategories button{touch-action:pan-y}
+ .checkoutCancelReasons{display:grid;grid-template-columns:1fr 1fr;gap:12px}.checkoutCancelReasons button{min-height:70px;font-size:18px}
+ #trainingReportRows{overflow:auto;max-height:55dvh}#trainingReportRows table{width:100%;border-collapse:collapse}#trainingReportRows th,#trainingReportRows td{text-align:left;border-bottom:1px solid #8090a0;padding:12px}
+ dialog:has(#trainingReportRows){width:min(1050px,94vw);max-width:94vw}#trainingReportFilter{display:flex;align-items:end;gap:16px}#trainingReportFilter>*{flex:1}#trainingReportRows th{background:#173451;color:white}
+}
+@media(prefers-reduced-motion:reduce){.trainingDot,.trainingActive .trainingStatus{animation:none}}
+
+#automaticReceiptPaper{display:none}
+@media print{body.receiptDirectPrint>*{display:none!important}body.receiptDirectPrint>#automaticReceiptPaper{display:block!important;background:white;color:black;max-width:76mm;font:12px Arial,sans-serif}#automaticReceiptPaper h2{font-size:18px}#automaticReceiptPaper img{max-width:60mm;max-height:30mm;object-fit:contain}#automaticReceiptPaper table{width:100%;border-collapse:collapse}#automaticReceiptPaper td{padding:5px 1px;border-bottom:1px solid #ccc}#automaticReceiptPaper small{display:block}#automaticReceiptPaper dl{display:grid;grid-template-columns:1fr auto}#automaticReceiptPaper dd{text-align:right;margin:0}#automaticReceiptPaper p{white-space:pre-wrap}}
+
+/* END DESK EXPERIENCE */

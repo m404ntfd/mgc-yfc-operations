@@ -9,7 +9,7 @@ f=CoordinatorFixture();out=Path(os.environ.get('TEST_ARTIFACTS','output/preview/
 def post(action,**data):
  code,result=f.call('pos/'+action,dict(data,request=uuid.uuid4().hex));assert code==200,(action,result);return result
 try:
- post('settings',store='Thrift Mart · SAMPLE',tax_bps=700,confirmed=True)
+ post('settings',store='Thrift Mart Â· SAMPLE',tax_bps=700,confirmed=True)
  policy=f.call('pos/policies')[1]['policy'];post('policies-save',**dict(policy,cash_rounding='nearest5'))
  settings=f.call('pos/checkout-settings')[1]['settings']
  settings['presets']=[dict(id=mode+scope,name=name,mode=mode,scope=scope,kind='percent',value=amount) for mode,scope,name,amount in [('discount','item','Item markdown',1000),('discount','transaction','Member savings',1000),('surcharge','item','Item service',500),('surcharge','transaction','Service charge',500)]]
@@ -31,7 +31,7 @@ try:
   def settle():p.wait_for_function('()=>!posBusy&&!posPending&&!writeCount')
   product(0).tap();expect(p.locator('#posCart')).to_contain_text('Hardback book');settle()
   product(1).tap();expect(p.locator('.deskAmountPad')).to_be_visible()
-  for key in '12.50':p.locator('.deskAmountPad [data-key="'+key+'"]').tap()
+  for key in '1250':p.locator('.deskAmountPad [data-key="'+key+'"]').tap()
   p.screenshot(path=str(out/'DESK-Open-Price-Keypad.png'))
   p.locator('.deskKeypadApply').tap();expect(p.locator('#flowChoices')).to_have_count(0);expect(p.locator('#posCart')).to_contain_text('Clothes & accessories');settle()
   before=p.evaluate('JSON.stringify(posCurrent)');product(1).tap();p.locator('.deskKeypadCancel').tap();expect(p.locator('dialog[open]')).to_contain_text('Item not added');p.locator('[data-product-cancel-ok]').tap();assert p.evaluate('JSON.stringify(posCurrent)')==before
@@ -61,7 +61,7 @@ try:
   # Open-price products with required choices complete in the same keypad dialog.
   custom=post('product-save',name='Sample size choice',category='Clothes',price=100,taxable=True,rules={'open_priced':True,'modifiers':[{'id':'size','name':'Size','required':True,'options':[{'id':'large','name':'Large','price':100}]}]})['ids'][0]
   p.evaluate('posLoad()');p.locator('[data-pos-product="'+custom+'"]').tap();p.locator('#deskKeypadValue').fill('5.00');p.locator('.deskKeypadApply').tap();expect(p.locator('.deskAmountPad')).to_be_visible();p.locator('#deskAmountEntry select').select_option('large');p.locator('.deskKeypadApply').tap();expect(p.locator('#posCart')).to_contain_text('Size: Large');settle()
-  p.locator('#posDiscard').tap();expect(p.locator('#checkoutCancelForm select')).to_be_visible();p.locator('#checkoutCancelForm select').select_option('entry-error');p.locator('#checkoutCancelForm button').tap();p.wait_for_function('()=>!posCurrent')
+  p.locator('#posDiscard').tap();expect(p.locator('[data-cancel-reason=entry-error]')).to_be_visible();p.locator('[data-cancel-reason=entry-error]').tap();p.wait_for_function('()=>!posCurrent')
   p.goto(origin+'/office');p.wait_for_function('()=>!!user');p.evaluate('officeAction("checkout-buttons")');expect(p.locator('#checkoutChoiceForm')).to_be_visible();p.screenshot(path=str(out/'OFFICE-Checkout-Choices.png'))
   choice=p.locator('#checkoutChoiceForm');choice.locator('[name=name]').fill('Sample button');choice.locator('[name=value]').fill('3');choice.locator('button.primary').click();assert p.evaluate('unfinished()'), 'Unsaved choices must block updates';p.locator('#checkoutSettingsSave').click();expect(p.locator('#checkoutChoiceForm')).to_have_count(0);assert not p.evaluate('unfinished()')
   assert not errors,errors;b.close()
