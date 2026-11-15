@@ -57,13 +57,17 @@ class RegistrationTests(ComputerTests):
    server.init_computers(c);server.init_computers(c)
    for name,rows in before.items():self.assertEqual([tuple(r) for r in c.execute('SELECT * FROM "'+name+'" ORDER BY rowid')],rows,name)
    self.assertEqual(c.execute('PRAGMA integrity_check').fetchone()[0],'ok')
- def test_selected_computer_all_three_apps_and_ops_ticket(self):
+ def test_registered_apps_keep_inventory_without_remote_update_tickets(self):
   for app,device in [('office','b'*32),('ops','c'*32),('pos','a'*32)]:self.f.call('computers/self',self.identity(app,device))
   self.register();self.f.call('computers/self',self.identity('ops','d'*32,'2'*32));self.register('2'*32)
-  code,result=self.f.call('computers/start',dict(computers=['1'*32],seconds=60));self.assertEqual(code,200,result)
-  self.assertEqual(result['campaigns']['ops']['targets'],['c'*32])
-  job=result['campaigns']['ops'];self.assertEqual(self.f.call('ops-update/ticket?id='+job['id'])[0],200)
-  self.assertEqual(self.f.call('computers/self',self.identity('ops','c'*32))[1]['campaign']['id'],job['id'])
+  code,result=self.f.call('computers/start',dict(computers=['1'*32],seconds=60));self.assertEqual(code,409,result)
+  state=self.f.call('computers/state')[1]
+  first=next(pc for pc in state['computers'] if pc['id']=='1'*32)
+  self.assertEqual({app['app'] for app in first['apps']},{'office','ops','pos'})
+  self.assertTrue(all(app['version']=='1.0.0' for app in first['apps']))
+  self.assertTrue(all(value is None for value in state['campaigns'].values()))
+  self.assertEqual(self.f.call('ops-update/ticket?id=retired')[0],404)
+  self.assertNotIn('campaign',self.f.call('computers/self',self.identity('ops','c'*32))[1])
   self.assertNotIn('campaign',self.f.call('computers/self',self.identity('ops','d'*32,'2'*32))[1])
-  self.f.call('computers/cancel',{});self.assertEqual(self.f.call('ops-update/ticket?id='+job['id'])[0],404)
+  self.assertEqual(self.f.call('computers/cancel',{})[0],409)
 if __name__=='__main__':unittest.main()

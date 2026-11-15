@@ -76,7 +76,7 @@ try:
   new=native(info);expect(new.locator('#nativeTerminalForm [name=store_id]')).to_be_visible();new.locator('#nativeTerminalForm [name=name]').fill('Binopoly · New sample register');new.locator('#nativeTerminalForm [name=store_id]').select_option('binopoly')
   new.screenshot(path=str(out/'DESK-Register-Store.png'))
   new.locator('#nativeTerminalForm button').click();expect(new.locator('#nativeTerminalSetup')).not_to_be_visible();expect(new.locator('#retailStoreBadge')).to_have_text('Binopoly · SAMPLE')
-  new.locator('[data-pos-product="'+opened+'"]').tap();new.locator('#deskKeypadValue').fill('12');new.locator('.deskKeypadApply').tap();expect(new.locator('#posCart')).to_contain_text('$13.20')
+  new.locator('[data-pos-product="'+opened+'"]').tap();new.locator('#deskKeypadValue').fill('1200');new.locator('.deskKeypadApply').tap();expect(new.locator('#posCart')).to_contain_text('$13.20')
   for name,values in protected.items():assert rows(name)==values,name
   assert not errors,errors;browser.close()
  print('PASS native saved-session store resolution, first tap during heartbeat, shared receipts/taxes across PCs, cancellation, weight/open price, registration, historical sales and protected records')

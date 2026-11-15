@@ -28,7 +28,7 @@ try:
   p.locator('[data-pos-product="'+fixed+'"]').tap();expect(p.locator('#posCart')).to_contain_text('$2.14');wait_for_pos_save(p);original=p.evaluate('JSON.stringify(posCurrent)')
   p.locator('[data-pos-product="'+opened+'"]').tap();expect(p.locator('#deskKeypadValue')).to_be_visible();p.locator('.deskKeypadCancel').tap();expect(p.locator('dialog[open]')).to_contain_text('because no price was entered');p.locator('[data-product-cancel-ok]').tap();assert p.evaluate('JSON.stringify(posCurrent)')==original
   p.locator('[data-pos-product="'+legacy+'"]').tap();expect(p.locator('#checkoutSetupRequired')).to_be_visible();expect(p.locator('#checkoutSetupRequired')).to_contain_text('confirm the store’s default tax rate');p.locator('#checkoutSetupClose').tap();assert p.evaluate('JSON.stringify(posCurrent)')==original
-  p.locator('[data-pos-product="'+opened+'"]').tap();p.locator('#deskKeypadValue').fill('5');p.locator('.deskKeypadApply').tap();expect(p.locator('#posCart')).to_contain_text('$7.49');wait_for_pos_save(p)
+  p.locator('[data-pos-product="'+opened+'"]').tap();p.locator('#deskKeypadValue').fill('500');p.locator('.deskKeypadApply').tap();expect(p.locator('#posCart')).to_contain_text('$7.49');wait_for_pos_save(p)
   p.locator('[data-pos-product="'+weighed+'"]').tap();p.locator('#storeWeight [name=weight]').fill('2.25');p.locator('#storeWeight button.primary').tap();expect(p.locator('#posCart')).to_contain_text('$12.31');wait_for_pos_save(p)
   p.screenshot(path=str(out/'DESK-Product-Taxes-Receipt.png'))
   p.locator('#posPayNow').tap();p.locator('#checkoutTender').fill('20.00');p.locator('#checkoutComplete').tap();expect(p.locator('#posReceipt')).to_contain_text('$12.31');wait_for_pos_save(p)
