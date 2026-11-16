@@ -720,11 +720,23 @@ function retailReportCenter(root,mode='sales'){
 if(!officeMode){
  const pin=document.createElement('form');pin.id='deskPinForm';pin.innerHTML='<h2>Staff PIN sign-in</h2><p>Enter your six-digit staff PIN. It is managed in OFFICE and shared with Time Clock.</p><label>PIN<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="off" required></label><div class="deskKeypad"></div><button class="primary">Sign in</button><button type="button" id="deskPasswordToggle">Username & password</button><p id="deskPinError" role="alert"></p>';$('login').before(pin);$('login').hidden=true;
  for(const n of ['1','2','3','4','5','6','7','8','9','Clear','0','⌫']){const b=document.createElement('button');b.type='button';b.textContent=n;b.onclick=()=>{const input=pin.elements.pin;input.value=n==='Clear'?'':n==='⌫'?input.value.slice(0,-1):(input.value+n).slice(0,6);};pin.querySelector('.deskKeypad').append(b);}
- $('deskPasswordToggle').onclick=()=>{$('login').hidden=!$('login').hidden;};
+ $('deskPasswordToggle').onclick=()=>{$('login').hidden=!$('login').hidden;if($('login').hidden)restorePinFocus();else $('login').elements.name.focus();};
  pin.onsubmit=async e=>{e.preventDefault();try{await api('pos-pin-login',{pin:pin.elements.pin.value});pin.reset();$('deskPinError').textContent='';await boot();}catch(e){pin.reset();pin.elements.pin.focus();$('deskPinError').textContent=e.message;}};
- const previousBoot=boot;boot=async function(){await previousBoot();if(!user){$('login').hidden=true;pin.reset();requestAnimationFrame(()=>pin.elements.pin.focus());}};
- const focusPin=()=>{if(!user&&!$('auth').hidden&&!document.querySelector('dialog[open]'))pin.elements.pin.focus();};
- new MutationObserver(focusPin).observe($('auth'),{attributes:true,attributeFilter:['hidden']});requestAnimationFrame(focusPin);
+ const previousBoot=boot;boot=async function(){await previousBoot();if(!user){$('login').hidden=true;pin.reset();restorePinFocus();}};
+ window.deskPinReady=()=>!user&&!$('auth').hidden&&$('login').hidden&&pin.getClientRects().length>0&&!document.querySelector('dialog[open]');
+ window.focusDeskPin=()=>{if(window.deskPinReady())pin.elements.pin.focus({preventScroll:true});};
+ let nativePinFocusPending=false;
+ function restorePinFocus(){window.focusDeskPin();requestAnimationFrame(()=>{if(!window.deskPinReady())return;window.focusDeskPin();const focus=window.pywebview?.api?.focus_pin;if(focus&&!nativePinFocusPending){nativePinFocusPending=true;Promise.resolve(focus()).catch(()=>{}).finally(()=>nativePinFocusPending=false);}});}
+ for(const event of ['focus','pageshow','pywebviewready'])window.addEventListener(event,restorePinFocus);
+ document.addEventListener('visibilitychange',()=>{if(!document.hidden)restorePinFocus();});
+ new MutationObserver(restorePinFocus).observe($('auth'),{attributes:true,attributeFilter:['hidden']});restorePinFocus();
+ // If startup or a keypad tap left focus on the page/button, accept the first
+ // physical key immediately. Never intercept password fields or an open dialog.
+ document.addEventListener('keydown',e=>{if(!window.deskPinReady()||e.ctrlKey||e.altKey||e.metaKey||e.isComposing||e.target===pin.elements.pin||e.target.closest?.('input,textarea,select,[contenteditable=true]'))return;
+  if(!/^[0-9]$/.test(e.key)&&!['Backspace','Enter'].includes(e.key))return;
+  e.preventDefault();window.focusDeskPin();if(e.key==='Enter'){if(!e.repeat)pin.requestSubmit();return;}
+  const input=pin.elements.pin;input.value=e.key==='Backspace'?input.value.slice(0,-1):(input.value+e.key).slice(0,6);input.dispatchEvent(new Event('input',{bubbles:true}));
+ });
 }
 officeCards.push({section:'accounts',title:'Employee cash advances',description:'Cash paid to employees by store, date and issuing staff member.',icon:'▤',action:'cash-advance-report',permission:'view_cash_advances'},{section:'sales',title:'Sales analysis',description:'Sales, cash, products, taxes and transaction reports.',icon:'▥',action:'report-center',permission:'view_pos_sales'},
  {section:'security',title:'Login security / unlock',description:'Review locked users and configure login attempt limits.',icon:'♙',action:'login-security',permission:'unlock_users'},
@@ -1433,7 +1445,7 @@ async function givingOpen(){
 // BEGIN OFFICE STATUS BAR
 // Compact OFFICE application information; no extra server requests.
 if (officeMode) (() => {
- const webVersion = '0.59.0'; // replaced by prepare_web_assets.py
+ const webVersion = '0.59.1'; // replaced by prepare_web_assets.py
  const style = document.createElement('style');
  style.textContent = `
  .retailOffice{--office-status-height:26px}
@@ -2086,9 +2098,21 @@ if(!officeMode){
  const settings=document.createElement('details');settings.id='deskSettings';settings.innerHTML='<summary>Settings ▾</summary><div class="deskSettingsMenu"><button id="deskTerminalSettings" type="button">Terminal setup</button></div>';retailAppearanceButton.before(settings);settings.querySelector('div').append(retailAppearanceButton);
  $('deskTerminalSettings').onclick=()=>{settings.open=false;if(can('manage_pos'))retailEnroll();};retailAppearanceButton.addEventListener('click',()=>settings.open=false);
  const rail=$('posPayNow').parentElement,credit=document.createElement('div');credit.className='deskCreditMenu';credit.innerHTML='<button id="deskCreditToggle" type="button" aria-expanded="false">Credit/ Advances</button><div id="deskCreditChoices" hidden></div>';rail.append(credit);credit.querySelector('div').append($('creditOpen'),$('cashAdvanceOpen'));
- function closeCredit(){credit.querySelector('div').hidden=true;$('deskCreditToggle').setAttribute('aria-expanded','false');}
- $('deskCreditToggle').onclick=()=>{const choices=credit.querySelector('div');choices.hidden=!choices.hidden;$('deskCreditToggle').setAttribute('aria-expanded',String(!choices.hidden));};
- credit.querySelector('div').addEventListener('click',closeCredit);document.addEventListener('pointerdown',e=>{if(!credit.contains(e.target))closeCredit();if(!settings.contains(e.target))settings.open=false;});document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeCredit();settings.open=false;}});
+ const choices=$('deskCreditChoices'),creditToggle=$('deskCreditToggle');
+ // A scrollable rail clips wide children, regardless of their z-index.
+ // Keep the menu outside it, using the browser's top layer when available.
+ document.body.append(choices);if(typeof choices.showPopover==='function')choices.setAttribute('popover','manual');
+ creditToggle.setAttribute('aria-controls',choices.id);
+ function closeCredit(){if(choices.hidePopover&&choices.matches(':popover-open'))choices.hidePopover();choices.hidden=true;creditToggle.setAttribute('aria-expanded','false');}
+ function placeCredit(){
+  if(choices.hidden)return;const anchor=creditToggle.getBoundingClientRect(),box=choices.getBoundingClientRect(),gap=8;
+  choices.style.left=Math.max(gap,Math.min(innerWidth-box.width-gap,anchor.right-box.width))+'px';
+  choices.style.top=Math.max(gap,Math.min(innerHeight-box.height-gap,anchor.top))+'px';
+ }
+ creditToggle.onclick=()=>{if(!choices.hidden){closeCredit();return;}choices.hidden=false;if(choices.showPopover)choices.showPopover();placeCredit();creditToggle.setAttribute('aria-expanded','true');};
+ choices.addEventListener('click',closeCredit);document.addEventListener('pointerdown',e=>{if(!credit.contains(e.target)&&!choices.contains(e.target))closeCredit();if(!settings.contains(e.target))settings.open=false;});document.addEventListener('keydown',e=>{if(e.key==='Escape'){const wasOpen=!choices.hidden;closeCredit();if(wasOpen)creditToggle.focus();settings.open=false;}});
+ window.addEventListener('resize',placeCredit);document.addEventListener('scroll',e=>{if(!choices.contains(e.target))closeCredit();},true);
+ new MutationObserver(()=>{if($('posRoot').hidden)closeCredit();}).observe($('posRoot'),{attributes:true,attributeFilter:['hidden']});
  rail.append($('posFindCart'),$('posSalesShortcut'),$('posPrintLast'),$('checkoutPayLater'),$('posPayNow'));
  const load=posLoad;posLoad=async function(...args){await load(...args);await deskTrainingRefresh();};
  const render=posRender;posRender=function(...args){const result=render(...args);deskTrainingRender();return result;};

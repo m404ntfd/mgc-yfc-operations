@@ -2,11 +2,23 @@
 if(!officeMode){
  const pin=document.createElement('form');pin.id='deskPinForm';pin.innerHTML='<h2>Staff PIN sign-in</h2><p>Enter your six-digit staff PIN. It is managed in OFFICE and shared with Time Clock.</p><label>PIN<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="off" required></label><div class="deskKeypad"></div><button class="primary">Sign in</button><button type="button" id="deskPasswordToggle">Username & password</button><p id="deskPinError" role="alert"></p>';$('login').before(pin);$('login').hidden=true;
  for(const n of ['1','2','3','4','5','6','7','8','9','Clear','0','⌫']){const b=document.createElement('button');b.type='button';b.textContent=n;b.onclick=()=>{const input=pin.elements.pin;input.value=n==='Clear'?'':n==='⌫'?input.value.slice(0,-1):(input.value+n).slice(0,6);};pin.querySelector('.deskKeypad').append(b);}
- $('deskPasswordToggle').onclick=()=>{$('login').hidden=!$('login').hidden;};
+ $('deskPasswordToggle').onclick=()=>{$('login').hidden=!$('login').hidden;if($('login').hidden)restorePinFocus();else $('login').elements.name.focus();};
  pin.onsubmit=async e=>{e.preventDefault();try{await api('pos-pin-login',{pin:pin.elements.pin.value});pin.reset();$('deskPinError').textContent='';await boot();}catch(e){pin.reset();pin.elements.pin.focus();$('deskPinError').textContent=e.message;}};
- const previousBoot=boot;boot=async function(){await previousBoot();if(!user){$('login').hidden=true;pin.reset();requestAnimationFrame(()=>pin.elements.pin.focus());}};
- const focusPin=()=>{if(!user&&!$('auth').hidden&&!document.querySelector('dialog[open]'))pin.elements.pin.focus();};
- new MutationObserver(focusPin).observe($('auth'),{attributes:true,attributeFilter:['hidden']});requestAnimationFrame(focusPin);
+ const previousBoot=boot;boot=async function(){await previousBoot();if(!user){$('login').hidden=true;pin.reset();restorePinFocus();}};
+ window.deskPinReady=()=>!user&&!$('auth').hidden&&$('login').hidden&&pin.getClientRects().length>0&&!document.querySelector('dialog[open]');
+ window.focusDeskPin=()=>{if(window.deskPinReady())pin.elements.pin.focus({preventScroll:true});};
+ let nativePinFocusPending=false;
+ function restorePinFocus(){window.focusDeskPin();requestAnimationFrame(()=>{if(!window.deskPinReady())return;window.focusDeskPin();const focus=window.pywebview?.api?.focus_pin;if(focus&&!nativePinFocusPending){nativePinFocusPending=true;Promise.resolve(focus()).catch(()=>{}).finally(()=>nativePinFocusPending=false);}});}
+ for(const event of ['focus','pageshow','pywebviewready'])window.addEventListener(event,restorePinFocus);
+ document.addEventListener('visibilitychange',()=>{if(!document.hidden)restorePinFocus();});
+ new MutationObserver(restorePinFocus).observe($('auth'),{attributes:true,attributeFilter:['hidden']});restorePinFocus();
+ // If startup or a keypad tap left focus on the page/button, accept the first
+ // physical key immediately. Never intercept password fields or an open dialog.
+ document.addEventListener('keydown',e=>{if(!window.deskPinReady()||e.ctrlKey||e.altKey||e.metaKey||e.isComposing||e.target===pin.elements.pin||e.target.closest?.('input,textarea,select,[contenteditable=true]'))return;
+  if(!/^[0-9]$/.test(e.key)&&!['Backspace','Enter'].includes(e.key))return;
+  e.preventDefault();window.focusDeskPin();if(e.key==='Enter'){if(!e.repeat)pin.requestSubmit();return;}
+  const input=pin.elements.pin;input.value=e.key==='Backspace'?input.value.slice(0,-1):(input.value+e.key).slice(0,6);input.dispatchEvent(new Event('input',{bubbles:true}));
+ });
 }
 officeCards.push({section:'accounts',title:'Employee cash advances',description:'Cash paid to employees by store, date and issuing staff member.',icon:'▤',action:'cash-advance-report',permission:'view_cash_advances'},{section:'sales',title:'Sales analysis',description:'Sales, cash, products, taxes and transaction reports.',icon:'▥',action:'report-center',permission:'view_pos_sales'},
  {section:'security',title:'Login security / unlock',description:'Review locked users and configure login attempt limits.',icon:'♙',action:'login-security',permission:'unlock_users'},

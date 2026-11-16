@@ -78,6 +78,24 @@ class KioskBridge:
    raise ValueError(message) from e
  def terminal_info(self):
   info=self.kiosk_info();return {**info,'app':'pos'}
+ def focus_pin(self):
+  """Give the foreground WebView keyboard focus after the sign-in page is ready."""
+  try:
+   if not self._trusted() or self._window.evaluate_js('Boolean(window.deskPinReady && window.deskPinReady())') is not True:return {'focused':False}
+   from System import Action
+   form=self._window.native
+   def focus():
+    # Do not activate DESK or steal keys from another application/dialog.
+    if form.IsDisposed or not form.ContainsFocus:return
+    control=form.browser.webview
+    if control.CoreWebView2 is None:return
+    control.Focus()
+    control.CoreWebView2.ExecuteScriptAsync('window.focusDeskPin && window.focusDeskPin()')
+   form.BeginInvoke(Action(focus))
+   return {'focused':True}
+  except Exception:return {'focused':False}
+ def _focus_pin_ready(self,*_):
+  self.focus_pin()
  def kiosk_info(self):
   if not self._trusted():return {'error':'Open the configured Operations server.'}
   from pos_updater import VERSION

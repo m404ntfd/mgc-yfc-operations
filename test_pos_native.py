@@ -13,6 +13,8 @@ def run():
  bridge=KioskBridge(store,origin)
  w=webview.create_window('POS isolated native test',origin+'/pos?kiosk=1',js_api=bridge,hidden=True,fullscreen=True,frameless=True,easy_drag=False,resizable=False)
  bridge._window=w;w.events.closing+=bridge._closing
+ w.events.loaded+=bridge._focus_pin_ready
+ w.events.shown+=bridge._focus_pin_ready
  w.events.loaded+=lambda:print('Native page loaded',flush=True)
  def wait(js):
   for _ in range(100):
@@ -20,10 +22,13 @@ def run():
     if w.events.loaded.is_set() and w.evaluate_js("document.readyState==='complete' && ("+js+")"):return
    except Exception:pass
    time.sleep(.1)
+  print('Focus state:',w.evaluate_js("({ready:window.deskPinReady?.(),authHidden:document.getElementById('auth')?.hidden,passwordHidden:document.getElementById('login')?.hidden,active:document.activeElement?.tagName,name:document.activeElement?.name,dialogs:document.querySelectorAll('dialog[open]').length})"),flush=True)
   raise AssertionError('Timed out: '+js)
  def test():
   try:
    wait("window.pywebview && document.querySelector('#posExitButton') && !document.querySelector('#posExitButton').hidden")
+   wait("window.deskPinReady && window.deskPinReady() && document.activeElement===document.querySelector('#deskPinForm [name=pin]')")
+   assert bridge.focus_pin().get('focused')
    assert w.fullscreen and w.frameless and not w.resizable
    w.evaluate_js("document.querySelector('#login [name=name]').value='Admin';document.querySelector('#login [name=password]').value='testpassword';document.querySelector('#login').requestSubmit()")
    wait("document.querySelector('#kioskSetupDialog').open")

@@ -6,6 +6,18 @@ from pos_kiosk import KioskStore,KioskBridge
 from test_update_coordination import CoordinatorFixture
 
 class StoreTests(unittest.TestCase):
+ def test_pin_focus_only_on_foreground_trusted_sign_in(self):
+  import sys,types
+  with tempfile.TemporaryDirectory() as tmp,patch.dict(sys.modules,{'System':types.SimpleNamespace(Action=lambda callback:callback)}):
+   b=KioskBridge(KioskStore(Path(tmp)/'settings.json'),'http://localhost:8080');w=Mock();b._window=w
+   w.get_current_url.return_value='http://localhost:8080/pos?kiosk=1';w.evaluate_js.return_value=True
+   form=w.native;form.IsDisposed=False;form.ContainsFocus=True;form.BeginInvoke.side_effect=lambda callback:callback()
+   self.assertTrue(b.focus_pin()['focused']);form.browser.webview.Focus.assert_called_once()
+   form.browser.webview.CoreWebView2.ExecuteScriptAsync.assert_called_once()
+   form.browser.webview.Focus.reset_mock();form.ContainsFocus=False;b.focus_pin();form.browser.webview.Focus.assert_not_called()
+   form.ContainsFocus=True;w.evaluate_js.return_value=False;self.assertFalse(b.focus_pin()['focused']);form.browser.webview.Focus.assert_not_called()
+   w.evaluate_js.return_value=True;w.get_current_url.return_value='https://other.example/pos';self.assertFalse(b.focus_pin()['focused']);form.browser.webview.Focus.assert_not_called()
+
  def test_storage_lockout_and_change(self):
   with tempfile.TemporaryDirectory() as tmp:
    path=Path(tmp)/'settings.json';path.write_text(json.dumps({'server':'http://localhost:8080'}))

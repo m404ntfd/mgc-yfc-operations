@@ -3365,6 +3365,8 @@ api('session').then(s=>{hrOpsButton.hidden=!s.user||!(s.user.admin||s.user.grant
 
 
 
+
+
 // BEGIN TERMINAL REGISTRATION
 // Shared native desktop registration; ordinary web browsers keep their current login flow.
 (()=>{

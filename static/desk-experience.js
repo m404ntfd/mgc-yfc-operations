@@ -31,9 +31,21 @@ if(!officeMode){
  const settings=document.createElement('details');settings.id='deskSettings';settings.innerHTML='<summary>Settings ▾</summary><div class="deskSettingsMenu"><button id="deskTerminalSettings" type="button">Terminal setup</button></div>';retailAppearanceButton.before(settings);settings.querySelector('div').append(retailAppearanceButton);
  $('deskTerminalSettings').onclick=()=>{settings.open=false;if(can('manage_pos'))retailEnroll();};retailAppearanceButton.addEventListener('click',()=>settings.open=false);
  const rail=$('posPayNow').parentElement,credit=document.createElement('div');credit.className='deskCreditMenu';credit.innerHTML='<button id="deskCreditToggle" type="button" aria-expanded="false">Credit/ Advances</button><div id="deskCreditChoices" hidden></div>';rail.append(credit);credit.querySelector('div').append($('creditOpen'),$('cashAdvanceOpen'));
- function closeCredit(){credit.querySelector('div').hidden=true;$('deskCreditToggle').setAttribute('aria-expanded','false');}
- $('deskCreditToggle').onclick=()=>{const choices=credit.querySelector('div');choices.hidden=!choices.hidden;$('deskCreditToggle').setAttribute('aria-expanded',String(!choices.hidden));};
- credit.querySelector('div').addEventListener('click',closeCredit);document.addEventListener('pointerdown',e=>{if(!credit.contains(e.target))closeCredit();if(!settings.contains(e.target))settings.open=false;});document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeCredit();settings.open=false;}});
+ const choices=$('deskCreditChoices'),creditToggle=$('deskCreditToggle');
+ // A scrollable rail clips wide children, regardless of their z-index.
+ // Keep the menu outside it, using the browser's top layer when available.
+ document.body.append(choices);if(typeof choices.showPopover==='function')choices.setAttribute('popover','manual');
+ creditToggle.setAttribute('aria-controls',choices.id);
+ function closeCredit(){if(choices.hidePopover&&choices.matches(':popover-open'))choices.hidePopover();choices.hidden=true;creditToggle.setAttribute('aria-expanded','false');}
+ function placeCredit(){
+  if(choices.hidden)return;const anchor=creditToggle.getBoundingClientRect(),box=choices.getBoundingClientRect(),gap=8;
+  choices.style.left=Math.max(gap,Math.min(innerWidth-box.width-gap,anchor.right-box.width))+'px';
+  choices.style.top=Math.max(gap,Math.min(innerHeight-box.height-gap,anchor.top))+'px';
+ }
+ creditToggle.onclick=()=>{if(!choices.hidden){closeCredit();return;}choices.hidden=false;if(choices.showPopover)choices.showPopover();placeCredit();creditToggle.setAttribute('aria-expanded','true');};
+ choices.addEventListener('click',closeCredit);document.addEventListener('pointerdown',e=>{if(!credit.contains(e.target)&&!choices.contains(e.target))closeCredit();if(!settings.contains(e.target))settings.open=false;});document.addEventListener('keydown',e=>{if(e.key==='Escape'){const wasOpen=!choices.hidden;closeCredit();if(wasOpen)creditToggle.focus();settings.open=false;}});
+ window.addEventListener('resize',placeCredit);document.addEventListener('scroll',e=>{if(!choices.contains(e.target))closeCredit();},true);
+ new MutationObserver(()=>{if($('posRoot').hidden)closeCredit();}).observe($('posRoot'),{attributes:true,attributeFilter:['hidden']});
  rail.append($('posFindCart'),$('posSalesShortcut'),$('posPrintLast'),$('checkoutPayLater'),$('posPayNow'));
  const load=posLoad;posLoad=async function(...args){await load(...args);await deskTrainingRefresh();};
  const render=posRender;posRender=function(...args){const result=render(...args);deskTrainingRender();return result;};

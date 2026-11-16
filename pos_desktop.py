@@ -15,6 +15,8 @@ def open_pos(address,store):
  window=webview.create_window('CoastYouth Retail DESK',address+'/pos?kiosk=1',js_api=bridge,fullscreen=True,frameless=True,easy_drag=False,resizable=False,confirm_close=False)
  bridge._window=window
  window.events.closing+=bridge._closing
+ window.events.loaded+=bridge._focus_pin_ready
+ window.events.shown+=bridge._focus_pin_ready
  webview.settings['OPEN_DEVTOOLS_IN_DEBUG']=False
  webview.start(gui='edgechromium',debug=False,private_mode=False,storage_path=str(store.path.parent/'webview'))
 
