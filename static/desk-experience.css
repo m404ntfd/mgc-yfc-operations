@@ -16,6 +16,7 @@
  dialog:has(#trainingReportRows){width:min(1050px,94vw);max-width:94vw}#trainingReportFilter{display:flex;align-items:end;gap:16px}#trainingReportFilter>*{flex:1}#trainingReportRows th{background:#173451;color:white}
 }
 @media(prefers-reduced-motion:reduce){.trainingDot,.trainingActive .trainingStatus{animation:none}}
+@media print{#deskCreditChoices{display:none!important}}
 
 #automaticReceiptPaper{display:none}
 @media print{body.receiptDirectPrint>*{display:none!important}body.receiptDirectPrint>#automaticReceiptPaper{display:block!important;background:white;color:black;max-width:76mm;font:12px Arial,sans-serif}#automaticReceiptPaper h2{font-size:18px}#automaticReceiptPaper img{max-width:60mm;max-height:30mm;object-fit:contain}#automaticReceiptPaper table{width:100%;border-collapse:collapse}#automaticReceiptPaper td{padding:5px 1px;border-bottom:1px solid #ccc}#automaticReceiptPaper small{display:block}#automaticReceiptPaper dl{display:grid;grid-template-columns:1fr auto}#automaticReceiptPaper dd{text-align:right;margin:0}#automaticReceiptPaper p{white-space:pre-wrap}}

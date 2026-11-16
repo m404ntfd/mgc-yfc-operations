@@ -59,7 +59,7 @@ try:
             p.locator('#deskCreditToggle').tap();p.locator('#creditOpen').tap();expect(p.locator('#creditDialog')).to_be_visible();expect(p.locator('#deskCreditChoices')).to_be_hidden();p.locator('#creditClose').tap()
             p.locator('#deskCreditToggle').tap();p.locator('#cashAdvanceOpen').tap();expect(p.locator('#cashAdvanceDialog')).to_be_visible();expect(p.locator('#deskCreditChoices')).to_be_hidden();p.locator('#cashAdvanceDialog .flowClose').tap();expect(p.locator('#cashAdvanceDialog')).to_have_count(0)
         p.set_viewport_size({'width':1920,'height':1080})
-        p.locator('#deskCreditToggle').tap();p.locator('#posStatus').tap();expect(p.locator('#deskCreditChoices')).to_be_hidden()
+        p.locator('#deskCreditToggle').tap();p.emulate_media(media='print');expect(p.locator('#deskCreditChoices')).to_be_hidden();p.emulate_media(media='screen');p.locator('#posStatus').tap();expect(p.locator('#deskCreditChoices')).to_be_hidden()
         # Resize while open; the whole menu must remain reachable.
         p.locator('#deskCreditToggle').tap();p.set_viewport_size({'width':1366,'height':768})
         p.wait_for_function('()=>{const r=document.getElementById("deskCreditChoices").getBoundingClientRect();return r.right<=innerWidth&&r.bottom<=innerHeight}')
