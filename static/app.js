@@ -303,7 +303,7 @@ function applyPermissions(){
 }
 
 let requestPhotos=[];
-function photoLinks(j){return Array.from({length:j.photoCount||0},(_,i)=>`<a class="photoLink" href="/api/photo/${encodeURIComponent(j.id)}/${i}" target="_blank" rel="noopener">View photo ${i+1}</a>`).join(' ');}
+function photoLinks(j){return Array.from({length:j.photoCount||0},(_,i)=>`<button type="button" class="photoLink" data-photo-job="${esc(j.id)}" data-photo-index="${i}" aria-haspopup="dialog">View photo ${i+1}</button>`).join(' ');}
 const requestSection=document.createElement('section');requestSection.id='requestPhotoSection';requestSection.innerHTML='<hr><h3>Photos (optional)</h3><button id="addPhotos" type="button">Add photos</button><p>Up to 3 photos. Images are resized before uploading.</p><p id="photoMessage" role="status"></p><div id="photoPreviews"></div><hr>';
 const optionalDivider=document.createElement('div');optionalDivider.id='optionalDivider';optionalDivider.innerHTML='<hr><h3>Additional details (optional)</h3>';
 const jobGrid=$('jobForm').querySelector('.grid'),originalFields=[...jobGrid.children],originalActions=$('jobForm').querySelector('.actions');
@@ -372,9 +372,23 @@ function renderReviewPhotos(){
  reviewPhotos.hidden=!editing;
  reviewPhotos.innerHTML=editing?`<h3>Photos</h3>${editing.photoCount?'<p>Select a photo to open a larger preview.</p><div class="reviewPhotoGrid">'+Array.from({length:editing.photoCount},(_,i)=>`<button type="button" data-preview-photo="${i}" aria-label="Preview photo ${i+1}"><img src="/api/photo/${encodeURIComponent(editing.id)}/${i}" alt="Request photo ${i+1}"><span>View photo ${i+1}</span></button>`).join('')+'</div>':'<p>No photos attached.</p>'}<hr>`:'';
 }
-reviewPhotos.onclick=e=>{const button=e.target.closest('[data-preview-photo]');if(!button||!editing)return;const index=Number(button.dataset.previewPhoto);$('photoPreviewTitle').textContent=`${editing.customer} — Photo ${index+1}`;$('photoPreviewError').textContent='';$('largePhoto').src=`/api/photo/${encodeURIComponent(editing.id)}/${index}`;$('photoPreviewDialog').showModal();};
+function openRequestPhoto(job,index){
+ if(!job||!Number.isInteger(index)||index<0||index>=(job.photoCount||0)||!requireSignIn())return;
+ $('photoPreviewTitle').textContent=`${job.customer} — Photo ${index+1}`;
+ $('photoPreviewError').textContent='';
+ // Keep protected photos in the current session. Desktop external-browser links
+ // use a separate cookie store and cannot inherit the employee's sign-in.
+ $('largePhoto').src=`/api/photo/${encodeURIComponent(job.id)}/${index}`;
+ $('photoPreviewDialog').showModal();
+}
+document.addEventListener('click',e=>{
+ const button=e.target.closest('button[data-photo-job]');if(!button)return;
+ const job=[...state.jobs,...(state.requests||[])].find(j=>j.id===button.dataset.photoJob);
+ openRequestPhoto(job,Number(button.dataset.photoIndex));
+});
+reviewPhotos.onclick=e=>{const button=e.target.closest('[data-preview-photo]');if(button)openRequestPhoto(editing,Number(button.dataset.previewPhoto));};
 $('largePhoto').onerror=()=>$('photoPreviewError').textContent='Unable to load this photo. Check your connection and try again.';
-$('closePhotoPreview').onclick=()=>$('photoPreviewDialog').close();
+$('closePhotoPreview').onclick=()=>{$('largePhoto').removeAttribute('src');$('photoPreviewDialog').close();};
 $('photoPreviewDialog').addEventListener('close',()=>{$('largePhoto').removeAttribute('src');});
 
 $('jobs').addEventListener('keydown',e=>{const header=e.target.closest('[data-toggle-appointment]');if(header&&(e.key==='Enter'||e.key===' ')){e.preventDefault();const id=header.dataset.toggleAppointment;header.click();document.querySelector(`[data-toggle-appointment="${id}"]`)?.focus();}});
@@ -3323,6 +3337,8 @@ const hrOpsButton=document.createElement('button');hrOpsButton.textContent='HR �
 
 api('account/retail-theme').then(pref=>{document.body.dataset.retailTheme=pref.theme==='default'?pref.default:pref.theme;}).catch(()=>{});
 api('session').then(s=>{hrOpsButton.hidden=!s.user||!(s.user.admin||s.user.grants?.manage_hr);}).catch(()=>{});
+
+
 
 
 

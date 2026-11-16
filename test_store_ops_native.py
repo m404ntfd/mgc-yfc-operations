@@ -5,11 +5,14 @@ from pathlib import Path
 import webview
 from store_ops_desktop import ops_window
 from test_update_coordination import CoordinatorFixture
+from test_request_photos_ui import seed_photos
+from unittest.mock import patch
 
 def run():
     import faulthandler
     faulthandler.dump_traceback_later(100, exit=True)
     f = CoordinatorFixture(); tmp = tempfile.TemporaryDirectory(); errors = []
+    seed_photos(f)
     os.environ['APPDATA']=tmp.name
     w = ops_window(f"http://127.0.0.1:{f.port}", hidden=True)
     def wait(js):
@@ -29,6 +32,16 @@ def run():
             wait("document.querySelector('#nativeTerminalForm')")
             w.evaluate_js("document.querySelector('#nativeTerminalForm').requestSubmit()")
             wait("document.querySelector('#nativeTerminalStatus').textContent.includes('Registered') && !document.querySelector('#nativeTerminalSetup').open")
+            # Protected attachments must use this WebView's cookies, never the default browser.
+            with patch('webbrowser.open') as external:
+                w.evaluate_js("document.querySelector('#sectionChooser').close();storeSection('dispatch');document.querySelector('#requestsList').hidden=false")
+                wait("document.querySelector('#requestsList .photoLink')")
+                w.evaluate_js("document.querySelector('#requestsList .photoLink').click()")
+                wait("document.querySelector('#photoPreviewDialog').open && document.querySelector('#largePhoto').naturalWidth===240")
+                assert w.get_current_url() == f'http://127.0.0.1:{f.port}/'
+                assert not external.called
+                w.evaluate_js("document.querySelector('#closePhotoPreview').click()")
+                wait("!document.querySelector('#photoPreviewDialog').open && !document.querySelector('#largePhoto').getAttribute('src')")
             # Exercise the shared unsaved-work guard without creating business records.
             w.evaluate_js("let f=document.createElement('form');f.id='opsTestForm';f.innerHTML='<input name=test>';document.body.append(f);changedForms.set(f,'test')")
             w.destroy(); time.sleep(.5)
@@ -42,7 +55,7 @@ def run():
     try:
         webview.start(test, gui='edgechromium', debug=False, private_mode=True, storage_path=str(Path(tmp.name)/'webview'))
         if errors: raise AssertionError(errors[0])
-        print('PASS native STORE OPS login, full web app, no POS controls, unsaved-work close guard')
+        print('PASS native STORE OPS login, authenticated photo preview, full web app, unsaved-work close guard')
     finally:
         f.close()
         for _ in range(30):

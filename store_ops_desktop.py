@@ -6,7 +6,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 TITLE = "CoastYouth Retail STORE OPS"
-VERSION = "1.5.1"
+VERSION = "1.5.2"
 DEFAULT_SERVER = "https://operations.coastyfc.com"
 
 from desktop_connection import server_url, connect_before_open
