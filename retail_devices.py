@@ -84,6 +84,7 @@ def devices_display_state(handler,c,u,d):
     if sale:
         practice=str(sale).startswith('T');sr=c.execute('SELECT body FROM '+('retail_training_transactions' if practice else 'pos_sales')+' WHERE id=?',(str(sale)[1:] if practice else sale,)).fetchone()
         if not sr or json.loads(sr[0]).get('terminal_id')!=terminal['id']:raise Problem('Receipt belongs to another register.',403)
+    customer_prompt_state(c,token,cart,d)
     c.execute('UPDATE retail_terminal_options SET cart=?,sale=?,heartbeat=? WHERE terminal=?',(cart,str(sale) if sale else None,time.time(),terminal['id']))
     c.commit();handler.send({'ok':True});return True
 
@@ -112,6 +113,7 @@ def devices_display(c,token):
         if not data.get('held') and stores_id(data)==terminal['store_id']:
             result.update(state='sale',training=bool(data.get('training')),lines=[{k:l.get(k) for k in ('name','quantity','subtotal','weight_milli','price_per_lb')} for l in data['lines']],subtotal=data['subtotal'],tax=data['tax'],total=data['total'])
             if data.get('adjustment'):result['adjustment']={k:data['adjustment'][k] for k in ('mode','amount')}
+            result['roundup']=customer_prompt(c,token,data)
     return result
 
 def devices_customer_submit(c,token,d):

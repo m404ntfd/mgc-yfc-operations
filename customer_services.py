@@ -20,7 +20,38 @@ CREATE TABLE IF NOT EXISTS reservation_contacts(job TEXT PRIMARY KEY,email TEXT 
 CREATE TABLE IF NOT EXISTS customer_delivery(id INTEGER PRIMARY KEY,job TEXT NOT NULL,kind TEXT NOT NULL,fingerprint TEXT NOT NULL,recipient TEXT NOT NULL,due REAL NOT NULL,status TEXT NOT NULL,body TEXT NOT NULL,error TEXT NOT NULL DEFAULT '',updated REAL NOT NULL,UNIQUE(job,kind,fingerprint));
 CREATE TABLE IF NOT EXISTS reservation_message_versions(job TEXT PRIMARY KEY,signature TEXT NOT NULL,generation INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS customer_displays(token_hash TEXT PRIMARY KEY,owner TEXT NOT NULL,connection TEXT NOT NULL,expires REAL NOT NULL,heartbeat REAL NOT NULL,cart TEXT,sale INTEGER);
+CREATE TABLE IF NOT EXISTS customer_checkout_prompts(token_hash TEXT PRIMARY KEY,cart TEXT NOT NULL,revision INTEGER NOT NULL,expires REAL NOT NULL,body TEXT NOT NULL);
 ''')
+
+def customer_roundup_amount(cart):
+    if not cart.get('lines') or cart.get('held') or cart.get('total',0)<=0 or any(l.get('donation') for l in cart['lines']):return 0
+    return (-cart['total'])%100
+
+def customer_prompt_state(c,token,cart_id,d):
+    # Called only after the display's staff/terminal ownership checks succeed.
+    key=hashlib.sha256(str(token).encode()).hexdigest()
+    c.execute('DELETE FROM customer_checkout_prompts WHERE expires<?',(time.time(),))
+    prompt=d.get('roundup')
+    if not prompt or not cart_id or d.get('sale'):
+        c.execute('DELETE FROM customer_checkout_prompts WHERE token_hash=?',(key,));return
+    if not isinstance(prompt,dict):raise Problem('Invalid checkout prompt.')
+    row=c.execute("SELECT * FROM pos_carts WHERE id=? AND status='open'",(cart_id,)).fetchone()
+    if not row:return
+    cart=pos_cart(row);amount=customer_roundup_amount(cart)
+    if prompt.get('revision')!=cart['revision'] or not amount or not thrift_settings(c)['donations']:
+        c.execute('DELETE FROM customer_checkout_prompts WHERE token_hash=?',(key,));return
+    theme={};supplied_theme=prompt.get('theme') or {}
+    if not isinstance(supplied_theme,dict):raise Problem('Invalid checkout colors.')
+    for name,value in supplied_theme.items():
+        if name in ('surface','text','muted','accent','on-accent','border') and isinstance(value,str) and re.fullmatch(r'#[0-9a-fA-F]{6}|rgb\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*\)',value):theme[name]=value
+    body=dict(amount=amount,total=cart['total']+amount,theme=theme)
+    c.execute('INSERT INTO customer_checkout_prompts VALUES(?,?,?,?,?) ON CONFLICT(token_hash) DO UPDATE SET cart=excluded.cart,revision=excluded.revision,expires=excluded.expires,body=excluded.body',(key,cart_id,cart['revision'],time.time()+8,json.dumps(body)))
+
+def customer_prompt(c,token,cart):
+    key=hashlib.sha256(str(token).encode()).hexdigest()
+    row=c.execute('SELECT * FROM customer_checkout_prompts WHERE token_hash=? AND cart=? AND revision=? AND expires>?',(key,cart['id'],cart['revision'],time.time())).fetchone()
+    if row and customer_roundup_amount(cart) and thrift_settings(c)['donations']:return json.loads(row['body'])
+    return None
 
 def customer_settings(c,kind):
     row=c.execute('SELECT * FROM customer_settings WHERE kind=?',(kind,)).fetchone()
@@ -204,6 +235,7 @@ def customer_post(handler,c,u,path,d,finish):
         cart=d.get('cart');sale=d.get('sale')
         if cart and not c.execute('SELECT 1 FROM pos_carts WHERE id=? AND owner=?',(cart,u['receipt_owner'])).fetchone():raise Problem('Sale not available.',403)
         if sale and not c.execute('SELECT 1 FROM pos_sales WHERE id=? AND owner=?',(sale,u['receipt_owner'])).fetchone():raise Problem('Receipt not available.',403)
+        customer_prompt_state(c,token,cart,d)
         c.execute('UPDATE customer_displays SET cart=?,sale=?,heartbeat=? WHERE token_hash=?',(cart,sale,time.time(),key))
         return handler.send({'ok':True})
     return None
@@ -227,5 +259,6 @@ def customer_display(c,token):
         if not data.get('held'):
             result.update(state='sale',lines=[dict(name=l['name'],quantity=l['quantity'],subtotal=l['subtotal'],weight_milli=l.get('weight_milli'),price_per_lb=l.get('price_per_lb')) for l in data['lines']],subtotal=data['subtotal'],tax=data['tax'],total=data['total'])
             result['donation_prompt']='Would you like to round up or add a donation? Please tell your cashier.' if thrift_settings(c)['donations'] and not any(l.get('donation') for l in data['lines']) else ''
+            result['roundup']=customer_prompt(c,token,data)
             if data.get('adjustment'):result['adjustment']={k:data['adjustment'][k] for k in ('mode','amount')}
     return result

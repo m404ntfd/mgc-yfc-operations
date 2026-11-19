@@ -92,7 +92,6 @@ body[data-retail-theme] .cardNotice,body[data-retail-theme] .cardNotice p{color:
 .thriftDialog #thriftTagForm,.thriftDialog #thriftDonation{display:inline-block;vertical-align:top;width:calc(50% - 18px);margin-right:16px;padding:16px;border:1px solid #b8c8d6;border-radius:10px}
 .thriftDialog #thriftSettings>button.primary{margin-top:18px}
 @media(max-width:700px){.thriftDialog #thriftTagForm,.thriftDialog #thriftDonation{display:block;width:100%;margin:12px 0}.thriftTagGrid{grid-template-columns:1fr}}
-
 /* BEGIN GLASS THEME */
 /* Readable report cards in every theme; printed pages remain white. */
 @media screen {
@@ -498,3 +497,45 @@ dialog.catalogSetup{width:min(940px,calc(100vw - 48px));max-width:calc(100vw - 4
 @media print{body.receiptDirectPrint>*{display:none!important}body.receiptDirectPrint>#automaticReceiptPaper{display:block!important;background:white;color:black;max-width:76mm;font:12px Arial,sans-serif}#automaticReceiptPaper h2{font-size:18px}#automaticReceiptPaper img{max-width:60mm;max-height:30mm;object-fit:contain}#automaticReceiptPaper table{width:100%;border-collapse:collapse}#automaticReceiptPaper td{padding:5px 1px;border-bottom:1px solid #ccc}#automaticReceiptPaper small{display:block}#automaticReceiptPaper dl{display:grid;grid-template-columns:1fr auto}#automaticReceiptPaper dd{text-align:right;margin:0}#automaticReceiptPaper p{white-space:pre-wrap}}
 
 /* END DESK EXPERIENCE */
+/* BEGIN CHECKOUT ROUNDUP */
+/* Shared scenery and layout. Cashier colors inherit the current user's theme. */
+.roundupDialog,.roundupOverlay{--roundup-surface:var(--rt-surface,var(--panel,#fff));--roundup-text:var(--rt-text,var(--text,#21384e));--roundup-muted:var(--rt-muted,var(--muted,#4b6278));--roundup-accent:var(--rt-accent,var(--accent,#245c8e));--roundup-on-accent:#fff;--roundup-border:var(--rt-border,var(--border,#bdcddd))}
+:root body dialog.roundupDialog,:root body[data-retail-theme] dialog.roundupDialog{width:min(820px,94vw);max-height:92dvh;overflow:auto;padding:32px;background:var(--roundup-surface)!important;color:var(--roundup-text)!important;border:1px solid var(--roundup-border)!important;border-radius:24px;isolation:isolate}
+.roundupDialog .flowDialogHeading,.roundupContent,.roundupDialog .flowError{position:relative;z-index:1}
+.roundupDialog .flowDialogHeading{align-items:flex-start;margin-bottom:38px}
+.roundupDialog .flowDialogHeading h2{font-size:26px;max-width:580px;line-height:1.25;margin:0;color:inherit!important}
+.roundupScene{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:-1;border-radius:inherit;background:linear-gradient(150deg,color-mix(in srgb,var(--roundup-accent) 13%,transparent),transparent 60%)}
+.roundupSun{position:absolute;width:230px;height:230px;border:34px solid var(--roundup-accent);border-radius:50%;right:-55px;top:-65px;opacity:.08}
+.roundupWave{position:absolute;width:140%;height:140px;border-radius:50%;background:var(--roundup-accent);opacity:.07;bottom:-75px;left:-20%;transform:rotate(-9deg)}
+.roundupWave.two{transform:rotate(8deg);bottom:-95px;opacity:.1}
+:root body .roundupDialog .roundupEyebrow,.roundupOverlay .roundupEyebrow{font-size:13px;font-weight:750;letter-spacing:.13em;color:var(--roundup-muted)!important;margin:0 0 14px}
+:root body .roundupDialog .roundupQuestion,.roundupOverlay .roundupQuestion{font-size:28px;line-height:1.35;font-weight:650;color:var(--roundup-text)!important;margin:0 0 24px}
+.roundupAmounts{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--roundup-border);border-radius:16px;background:var(--roundup-surface);margin:24px 0}
+.roundupAmounts>div{display:flex;flex-direction:column;gap:6px;padding:22px}
+.roundupAmounts>div+div{border-left:1px solid var(--roundup-border)}
+:root body .roundupAmounts span{font-size:17px;color:var(--roundup-muted)!important}
+:root body .roundupAmounts strong{font-size:38px;line-height:1.2;color:var(--roundup-text)!important}
+:root body .roundupDialog .roundupNote,.roundupOverlay .roundupNote{color:var(--roundup-muted)!important;font-size:16px;line-height:1.5}
+.roundupActions{display:grid;grid-template-columns:1.6fr 1fr;gap:16px;margin-top:28px}
+:root body dialog.roundupDialog .roundupActions button{min-height:78px;border-radius:14px;font-size:22px;padding:18px;border:1px solid var(--roundup-border);touch-action:manipulation}
+:root body dialog.roundupDialog #checkoutRoundupYes{background:var(--roundup-accent)!important;color:var(--roundup-on-accent)!important;font-weight:750;border-color:var(--roundup-accent);box-shadow:0 5px 12px #0002}
+:root body dialog.roundupDialog #checkoutRoundupYes span{color:inherit!important;margin-left:8px}
+:root body dialog.roundupDialog #checkoutRoundupNo{background:var(--roundup-surface)!important;color:var(--roundup-text)!important;font-weight:500;box-shadow:none}
+:root body dialog.roundupDialog .roundupActions button:disabled{opacity:.6}
+.roundupOverlay{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:36px;background:#07111dd9;backdrop-filter:blur(7px)}
+.roundupCustomerCard{position:relative;isolation:isolate;overflow:auto;max-height:94dvh;width:min(1100px,94vw);padding:64px 70px;border:1px solid var(--roundup-border);border-radius:30px;background:var(--roundup-surface);color:var(--roundup-text);box-shadow:0 24px 70px #0004;text-align:center}
+.roundupOverlay h1{font-size:clamp(34px,4vw,58px);line-height:1.08;margin:20px 0 24px;color:var(--roundup-text)}
+.roundupOverlay .roundupQuestion{font-weight:400;font-size:clamp(22px,2vw,30px);max-width:850px;margin:0 auto 24px}
+.roundupOverlay .roundupAmounts{max-width:650px;margin:30px auto}
+.roundupOverlay .roundupAmounts strong{font-size:48px}
+.roundupOverlay .roundupEyebrow{font-size:16px}
+.roundupOverlay .roundupSun{width:400px;height:400px;right:-110px;top:-180px;border-width:65px}
+.roundupOverlay .roundupWave{height:210px;bottom:-120px}
+.roundupOverlay .roundupWave.two{bottom:-150px}
+.roundupOverlay .roundupNote{font-size:20px}
+.roundupOverlay[hidden]{display:none!important}
+#displayTraining{position:relative;z-index:51}
+@media(max-width:650px){:root body dialog.roundupDialog{padding:22px}.roundupDialog .flowDialogHeading h2{font-size:22px}:root body .roundupDialog .roundupQuestion{font-size:23px}.roundupAmounts>div{padding:16px}:root body .roundupAmounts strong{font-size:30px}.roundupCustomerCard{padding:32px 22px}.roundupOverlay{padding:12px}.roundupActions{grid-template-columns:1fr 1fr;gap:10px}:root body dialog.roundupDialog .roundupActions button{font-size:18px}}
+@media print{.roundupOverlay,.roundupDialog{display:none!important}}
+
+/* END CHECKOUT ROUNDUP */

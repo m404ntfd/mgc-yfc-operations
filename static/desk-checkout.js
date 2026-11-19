@@ -10,9 +10,51 @@ function checkoutPaper(s,paid=false){
 }
 function checkoutModal(title,body){const d=flowModal(title,body);d.classList.add('checkoutDialog');return d;}
 let checkoutOpening=false;
+let checkoutRoundupState=null;
+const checkoutRoundupDeclined=new Map();
+function checkoutRoundupPalette(d){
+ const style=getComputedStyle(d),yes=getComputedStyle(d.querySelector('#checkoutRoundupYes'));
+ return {surface:style.backgroundColor,text:style.color,muted:getComputedStyle(d.querySelector('.roundupNote')).color,accent:yes.backgroundColor,'on-accent':yes.color,border:style.borderColor};
+}
+function checkoutRoundupDisplay(){
+ const state=checkoutRoundupState;
+ if(!state||!state.dialog.isConnected||state.cart!==posCurrent?.id||state.revision!==posCurrent?.revision)return null;
+ return {revision:state.revision,theme:checkoutRoundupPalette(state.dialog)};
+}
+async function checkoutRoundup(){
+ const cart=structuredClone(posCurrent),amount=(100-cart.total%100)%100;
+ if(!amount||cart.total<=0||cart.lines.some(l=>l.donation)||checkoutRoundupDeclined.get(cart.id)===cart.revision)return true;
+ const {settings}=await api('pos/thrift-config');if(!settings.donations)return true;
+ return new Promise(resolve=>{
+  const d=checkoutModal('Ask about rounding up for Youth for Christ',`<div class="roundupScene" aria-hidden="true"><i class="roundupSun"></i><i class="roundupWave one"></i><i class="roundupWave two"></i></div><div class="roundupContent"><p class="roundupEyebrow">A LITTLE CHANGE. A LASTING IMPACT.</p><p class="roundupQuestion">Would you like to round up to the next dollar to support the ministry of Youth for Christ?</p><div class="roundupAmounts"><div><span>Donation</span><strong>+${posMoney(amount)}</strong></div><div><span>Total with donation</span><strong>${posMoney(cart.total+amount)}</strong></div></div><p class="roundupNote">Optional donation · Added only with the customer’s permission.</p><div class="roundupActions"><button type="button" class="primary" id="checkoutRoundupYes">Yes, round up <span>+${posMoney(amount)}</span></button><button type="button" id="checkoutRoundupNo">No</button></div></div>`);
+  d.classList.add('roundupDialog');d.setAttribute('aria-labelledby','checkoutRoundupTitle');d.querySelector('h2').id='checkoutRoundupTitle';d.querySelector('h2').tabIndex=-1;d.querySelector('h2').focus();
+  let busy=false,settled=false;
+  const pending=()=>sessionStorage.getItem('retail-save:'+user.name+':thrift-donation');
+  const finish=proceed=>{if(settled)return;settled=true;checkoutRoundupState=null;checkoutClose(d);customerDisplaySync();resolve(proceed);};
+  checkoutRoundupState={dialog:d,cart:cart.id,revision:cart.revision};customerDisplaySync();
+  d.beforeDismiss=()=>{if(busy||pending()){checkoutError(d,Error('The donation save is unconfirmed. Select Yes, round up again to check the same save.'));return false;}return true;};
+  d.onDismiss=()=>finish(false);
+  d.querySelector('#checkoutRoundupNo').onclick=()=>{if(busy||pending())return;checkoutRoundupDeclined.set(cart.id,cart.revision);if(checkoutRoundupDeclined.size>100)checkoutRoundupDeclined.delete(checkoutRoundupDeclined.keys().next().value);finish(true);};
+  d.querySelector('#checkoutRoundupYes').onclick=async()=>{
+   if(busy)return;busy=true;
+   try{const result=await retailSave('thrift-donation',{cart:cart.id,revision:cart.revision,amount:0,roundup:true});posCurrent=result.cart;posRender();finish(true);}
+   catch(error){checkoutError(d,error);d.querySelector('#checkoutRoundupNo').disabled=!!pending();}
+   finally{busy=false;}
+  };
+ });
+}
 async function checkoutPayment(){
  if(checkoutOpening||document.querySelector('#checkoutPaymentForm'))return;checkoutOpening=true;
- try{for(let i=0;i<400&&(posBusy||writeCount||flowProductStarting);i++)await new Promise(resolve=>setTimeout(resolve,50));}finally{checkoutOpening=false;}
+ try{
+  for(let i=0;i<400&&(posBusy||writeCount||flowProductStarting);i++)await new Promise(resolve=>setTimeout(resolve,50));
+  if(posBusy||writeCount||flowProductStarting)return posMessage('Please wait for the current item to finish saving.');
+  if(!navigationAllowed())return;
+  if(!posCurrent?.lines.length||posCurrent.held)return posMessage('Select a product or find a saved sale first.');
+  if(unfinished())return posMessage('Finish or clear the current entry before taking payment.');
+  if(await checkoutRoundup())await checkoutPaymentForm();
+ }catch(error){posMessage(error.message);}finally{checkoutOpening=false;}
+}
+async function checkoutPaymentForm(){
  if(!navigationAllowed())return;
  if(!posCurrent?.lines.length||posCurrent.held){posMessage('Select a product or find a saved sale first.');return;}
  if(unfinished()){posMessage('Finish or clear the current entry before taking payment.');return;}

@@ -195,12 +195,17 @@ def thrift_tag(c,cart,d):
 def thrift_cart_action(c,u,cart,path,d,finish):
     if path=='thrift-tag':thrift_tag(c,cart,d)
     elif path=='thrift-donation':
-        if cart.get('adjustment') or cart.get('reward'):raise Problem('Restore discounts/rewards before changing donation amounts.')
         if not thrift_settings(c)['donations']:raise Problem('Donation prompts are disabled in OFFICE.')
         cart['lines']=[l for l in cart['lines'] if not l.get('donation')]
         amount=pos_int(d.get('amount'),'donation',0,100000)
         if d.get('roundup') is True:amount=(-sum(l['subtotal']+l['tax'] for l in cart['lines']))%100
-        if amount:cart['lines'].append(dict(name='Voluntary donation',category='Donations',price=amount,quantity=1,subtotal=amount,tax=0,taxable=False,donation=True))
+        donation=dict(name='Voluntary donation',category='Donations',price=amount,quantity=1,subtotal=amount,tax=0,taxable=False,donation=True)
+        if amount:cart['lines'].append(donation)
+        # Restoring a merchandise discount or reward must preserve the agreed donation.
+        for key in ('original_lines','reward_original'):
+            if key in cart:
+                cart[key]=[l for l in cart[key] if not l.get('donation')]
+                if amount:cart[key].append(dict(donation))
     elif path=='thrift-customer':
         if cart.get('reward'):raise Problem('Remove the reward before changing customers.')
         ident=d.get('customer')

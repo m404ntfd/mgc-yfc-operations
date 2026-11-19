@@ -26,6 +26,7 @@ jobs:
       - run: python -m unittest test_server test_updater test_remote test_lockout test_journal test_receipts test_daily_session test_native_revision test_login_counts test_revision29 test_page_colors test_receipt_assignment test_roles test_comms test_workforce test_web_push test_web_assets test_mobile_media test_store_ops_review test_computer_updates test_computer_native test_terminal_registration test_startup_updates test_desktop_connection test_store_checkout test_product_tax_checkout
       - run: node --check static/app.js
       - run: node --check static/pos.js
+      - run: python -m unittest test_checkout_roundup.RoundupTests
       - run: python -m unittest test_cash_advances test_thrift_retail.ThriftTests test_retail_stores.StoreTests test_pickup_followup.PickupTests test_hr_catalog test_catalog_hierarchy test_hr_browser test_hr_completion test_hr_formats test_hr_sources
       - run: python -m unittest test_schedule_redesign test_data_integrity test_update_connections test_update_coordination test_activity_controller test_pos test_pos_quantity.QuantityTests test_pos_credit test_pos_kiosk test_pos_updates
   mobile-browser:
@@ -66,6 +67,7 @@ jobs:
       - run: python test_desk_experience_ui.py
       - run: python test_desk_focus_menu_ui.py
       - run: python test_checkout_ui.py
+      - run: python test_checkout_roundup_ui.py
       - run: python -m unittest test_checkout
       - run: python test_pos_kiosk_ui.py
       - run: python test_pos_credit_ui.py
@@ -152,7 +154,7 @@ jobs:
         shell: pwsh
         run: |
           $baseline = Join-Path $env:RUNNER_TEMP 'retail-upgrade-baseline'
-          git clone --depth 1 --branch v0.59.1 https://github.com/m404ntfd/mgc-yfc-operations.git $baseline
+          git clone --depth 1 --branch v0.59.2 https://github.com/m404ntfd/mgc-yfc-operations.git $baseline
           if ($LASTEXITCODE -ne 0) { throw 'Baseline checkout failed' }
           $env:RETAIL_BASE_SOURCE = $baseline
           python test_retail_release_upgrade.py
@@ -179,7 +181,7 @@ jobs:
           $p = Start-Process -WindowStyle Hidden -FilePath (Join-Path $officeInstall 'CoastYouth Retail OFFICE.exe') -ArgumentList '--smoke-test' -PassThru -Wait
           if ($p.ExitCode -ne 0) { throw 'Installed OFFICE failed' }
           $posInstall = Join-Path $env:RUNNER_TEMP 'PosInstallTest'
-          $p = Start-Process -WindowStyle Hidden -FilePath 'dist/MGC-YFC-POS-Setup-v1.19.2.exe' -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$posInstall") -PassThru -Wait
+          $p = Start-Process -WindowStyle Hidden -FilePath 'dist/MGC-YFC-POS-Setup-v1.20.0.exe' -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$posInstall") -PassThru -Wait
           if ($p.ExitCode -ne 0) { throw 'POS install failed' }
           $p = Start-Process -WindowStyle Hidden -FilePath (Join-Path $posInstall 'MGC YFC Point of Sale.exe') -ArgumentList '--smoke-test' -PassThru -Wait
           if ($p.ExitCode -ne 0) { throw 'Installed POS failed' }
@@ -242,4 +244,4 @@ jobs:
             echo "Release already exists; leaving published assets unchanged."
             exit 0
           fi
-          gh release create "$tag" dist/*.exe dist/Store-Dispatch-Update.zip --target "$GITHUB_SHA" --title "CoastYouth Retail STORE OPS Photo Fix $tag" --notes-file RELEASE-NOTES.md
+          gh release create "$tag" dist/*.exe dist/Store-Dispatch-Update.zip --target "$GITHUB_SHA" --title "CoastYouth Retail Round-Up Checkout $tag" --notes-file RELEASE-NOTES.md

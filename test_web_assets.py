@@ -13,6 +13,7 @@ class WebAssetTests(unittest.TestCase):
    for path in [source/'assets/home-icons.json',source/'assets/hr-reference-forms.json',source/'assets/hr-source-forms.json',*sorted((source/'assets').glob('plug-*.b64'))]:shutil.copyfile(path,root/'assets'/path.name)
    for name in ('pos.html','pos.js','pos.css','customer-office.js','customer-display.html','customer-display.js','customer-display.css','report-center.js','office-expansion.js','thrift-retail.js','retail-stores.js','fulfillment-print.js','pickup-followup.js','delivery-workspace.js','office-security.js','report-document.css','glass-theme.css','terminal-registration.js','terminal-registration.css','catalog-editor.js','cash-advances.js','office-updates.js','giving-office.js','office-status.js','office-search.js','office-navigation.js','office-navigation.css','desk-touch.js','desk-touch.css','desk-checkout.js','desk-checkout.css','hr-browser.js','hr.html','hr.js','hr.css'):shutil.copyfile(source/'static'/name,root/'static'/name)
    shutil.copyfile(source/'customer_services.py',root/'customer_services.py')
+   shutil.copyfile(source/'static/checkout-roundup.css',root/'static/checkout-roundup.css')
    for name in ('computer-inventory.js','desk-experience.js','desk-experience.css','terminal-devices.js','update-notices.js'):shutil.copyfile(source/'static'/name,root/'static'/name)
    for name in ('retail_devices.py','retail_training.py','server_maintenance.py'):shutil.copyfile(source/name,root/name)
    shutil.copyfile(source/'retail_reports.py',root/'retail_reports.py')
@@ -43,6 +44,8 @@ class WebAssetTests(unittest.TestCase):
    self.assertEqual(decoded,ast.literal_eval(pos.value))
    self.assertIn((source/'static/office-navigation.js').read_text(encoding='utf-8'),decoded['pos.js'])
    self.assertIn((source/'static/office-navigation.css').read_text(encoding='utf-8'),decoded['pos.css'])
+   for name in ('pos.css','customer-display.css'):
+    self.assertIn((source/'static/checkout-roundup.css').read_text(encoding='utf-8'),decoded[name])
    for name in ('desk-touch.js','desk-touch.css','desk-checkout.js','desk-checkout.css'):self.assertIn((source/'static'/name).read_text(encoding='utf-8-sig'),decoded['pos.'+name.rsplit('.',1)[1]])
    self.assertEqual(release_bytes(root,'server.py'),packed_source)
    self.assertTrue(any(isinstance(node,ast.FunctionDef) and node.name=='checkout_init' for node in module.body))

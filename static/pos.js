@@ -688,7 +688,7 @@ async function customerReservationList(){try{const data=await api('pos/reservati
 const customerPairButton=document.createElement('button');customerPairButton.id='customerPair';customerPairButton.textContent='Customer display';customerPairButton.hidden=officeMode;document.querySelector('.headerRight').append(customerPairButton);
 let customerPairToken=null,customerDisplayBusy=false;
 customerPairButton.onclick=async()=>{if(!user)return;try{const r=await retailSave('display-pair',{});customerPairToken=r.token;const url=new URL(r.path,location.origin).href;const d=flowModal('Open the customer screen',`<p>Open this limited-access display on the customer monitor, then select Full screen. Use a separate browser profile without a staff login on customer-accessible touchscreens. Pairing lasts 12 hours. Keep this link on your store’s devices.</p><label>Display link<input id="customerPairLink" readonly value="${esc(url)}"></label><a id="customerOpenDisplay" href="${esc(url)}" target="_blank" rel="noopener">Open customer display</a><p>Only this checkout’s products and totals are shared.</p>`);await customerDisplaySync();}catch(e){posMessage(e.message);}};
-async function customerDisplaySync(){if(!customerPairToken||customerDisplayBusy)return;customerDisplayBusy=true;try{await api('pos/display-state',{token:customerPairToken,cart:user&&$('posReceipt').hidden?posCurrent?.id||null:null,sale:user&&!$('posReceipt').hidden?posLastReceipt?.id||null:null});}catch(e){if(e.status===404||e.status===401)customerPairToken=null;}finally{customerDisplayBusy=false;}}
+async function customerDisplaySync(){if(!customerPairToken||customerDisplayBusy)return;customerDisplayBusy=true;try{await api('pos/display-state',{token:customerPairToken,roundup:checkoutRoundupDisplay(),cart:user&&$('posReceipt').hidden?posCurrent?.id||null:null,sale:user&&!$('posReceipt').hidden?posLastReceipt?.id||null:null});}catch(e){if(e.status===404||e.status===401)customerPairToken=null;}finally{customerDisplayBusy=false;}}
 setInterval(()=>customerDisplaySync(),2000);
 
 // END CUSTOMER OFFICE
@@ -1445,7 +1445,7 @@ async function givingOpen(){
 // BEGIN OFFICE STATUS BAR
 // Compact OFFICE application information; no extra server requests.
 if (officeMode) (() => {
- const webVersion = '0.59.2'; // replaced by prepare_web_assets.py
+ const webVersion = '0.60.0'; // replaced by prepare_web_assets.py
  const style = document.createElement('style');
  style.textContent = `
  .retailOffice{--office-status-height:26px}
@@ -1837,9 +1837,51 @@ function checkoutPaper(s,paid=false){
 }
 function checkoutModal(title,body){const d=flowModal(title,body);d.classList.add('checkoutDialog');return d;}
 let checkoutOpening=false;
+let checkoutRoundupState=null;
+const checkoutRoundupDeclined=new Map();
+function checkoutRoundupPalette(d){
+ const style=getComputedStyle(d),yes=getComputedStyle(d.querySelector('#checkoutRoundupYes'));
+ return {surface:style.backgroundColor,text:style.color,muted:getComputedStyle(d.querySelector('.roundupNote')).color,accent:yes.backgroundColor,'on-accent':yes.color,border:style.borderColor};
+}
+function checkoutRoundupDisplay(){
+ const state=checkoutRoundupState;
+ if(!state||!state.dialog.isConnected||state.cart!==posCurrent?.id||state.revision!==posCurrent?.revision)return null;
+ return {revision:state.revision,theme:checkoutRoundupPalette(state.dialog)};
+}
+async function checkoutRoundup(){
+ const cart=structuredClone(posCurrent),amount=(100-cart.total%100)%100;
+ if(!amount||cart.total<=0||cart.lines.some(l=>l.donation)||checkoutRoundupDeclined.get(cart.id)===cart.revision)return true;
+ const {settings}=await api('pos/thrift-config');if(!settings.donations)return true;
+ return new Promise(resolve=>{
+  const d=checkoutModal('Ask about rounding up for Youth for Christ',`<div class="roundupScene" aria-hidden="true"><i class="roundupSun"></i><i class="roundupWave one"></i><i class="roundupWave two"></i></div><div class="roundupContent"><p class="roundupEyebrow">A LITTLE CHANGE. A LASTING IMPACT.</p><p class="roundupQuestion">Would you like to round up to the next dollar to support the ministry of Youth for Christ?</p><div class="roundupAmounts"><div><span>Donation</span><strong>+${posMoney(amount)}</strong></div><div><span>Total with donation</span><strong>${posMoney(cart.total+amount)}</strong></div></div><p class="roundupNote">Optional donation · Added only with the customer’s permission.</p><div class="roundupActions"><button type="button" class="primary" id="checkoutRoundupYes">Yes, round up <span>+${posMoney(amount)}</span></button><button type="button" id="checkoutRoundupNo">No</button></div></div>`);
+  d.classList.add('roundupDialog');d.setAttribute('aria-labelledby','checkoutRoundupTitle');d.querySelector('h2').id='checkoutRoundupTitle';d.querySelector('h2').tabIndex=-1;d.querySelector('h2').focus();
+  let busy=false,settled=false;
+  const pending=()=>sessionStorage.getItem('retail-save:'+user.name+':thrift-donation');
+  const finish=proceed=>{if(settled)return;settled=true;checkoutRoundupState=null;checkoutClose(d);customerDisplaySync();resolve(proceed);};
+  checkoutRoundupState={dialog:d,cart:cart.id,revision:cart.revision};customerDisplaySync();
+  d.beforeDismiss=()=>{if(busy||pending()){checkoutError(d,Error('The donation save is unconfirmed. Select Yes, round up again to check the same save.'));return false;}return true;};
+  d.onDismiss=()=>finish(false);
+  d.querySelector('#checkoutRoundupNo').onclick=()=>{if(busy||pending())return;checkoutRoundupDeclined.set(cart.id,cart.revision);if(checkoutRoundupDeclined.size>100)checkoutRoundupDeclined.delete(checkoutRoundupDeclined.keys().next().value);finish(true);};
+  d.querySelector('#checkoutRoundupYes').onclick=async()=>{
+   if(busy)return;busy=true;
+   try{const result=await retailSave('thrift-donation',{cart:cart.id,revision:cart.revision,amount:0,roundup:true});posCurrent=result.cart;posRender();finish(true);}
+   catch(error){checkoutError(d,error);d.querySelector('#checkoutRoundupNo').disabled=!!pending();}
+   finally{busy=false;}
+  };
+ });
+}
 async function checkoutPayment(){
  if(checkoutOpening||document.querySelector('#checkoutPaymentForm'))return;checkoutOpening=true;
- try{for(let i=0;i<400&&(posBusy||writeCount||flowProductStarting);i++)await new Promise(resolve=>setTimeout(resolve,50));}finally{checkoutOpening=false;}
+ try{
+  for(let i=0;i<400&&(posBusy||writeCount||flowProductStarting);i++)await new Promise(resolve=>setTimeout(resolve,50));
+  if(posBusy||writeCount||flowProductStarting)return posMessage('Please wait for the current item to finish saving.');
+  if(!navigationAllowed())return;
+  if(!posCurrent?.lines.length||posCurrent.held)return posMessage('Select a product or find a saved sale first.');
+  if(unfinished())return posMessage('Finish or clear the current entry before taking payment.');
+  if(await checkoutRoundup())await checkoutPaymentForm();
+ }catch(error){posMessage(error.message);}finally{checkoutOpening=false;}
+}
+async function checkoutPaymentForm(){
  if(!navigationAllowed())return;
  if(!posCurrent?.lines.length||posCurrent.held){posMessage('Select a product or find a saved sale first.');return;}
  if(unfinished()){posMessage('Finish or clear the current entry before taking payment.');return;}
@@ -2169,7 +2211,7 @@ async function performReceiptPrint(sale,automatic=false){
 if(!officeMode){
  $('deskTerminalSettings').onclick=()=>{$('deskSettings').open=false;terminalDeviceOptions();};
  customerPairButton.onclick=async()=>{await loadTerminalDevices();if(!customerPairToken){if(can('manage_pos'))return terminalDeviceOptions();return posMessage('Ask a manager to assign this register’s customer display in Terminal setup.');}const url=new URL(receiptTerminalOptions.display_path,location.origin).href;flowModal('Customer display · '+receiptTerminalOptions.terminal.name,`<p>This link stays assigned to this register and uses ${esc(receiptTerminalOptions.terminal.store_name)} branding. Open it on the customer monitor in a browser profile without a staff login.</p><label>Assigned link<input readonly value="${esc(url)}"></label><a href="${esc(url)}" target="_blank" rel="noopener">Open customer display</a>`);await customerDisplaySync();};
- customerDisplaySync=async function(){if(!customerPairToken||customerDisplayBusy||!user)return;customerDisplayBusy=true;try{await api('pos/display-state',{device:await retailDevice(),token:customerPairToken,cart:$('posReceipt').hidden?posCurrent?.id||null:null,sale:!$('posReceipt').hidden?posLastReceipt?.id||null:null});}catch(e){if(e.status===404)customerPairToken=null;}finally{customerDisplayBusy=false;}};
+ customerDisplaySync=async function(){if(!customerPairToken||customerDisplayBusy||!user)return;customerDisplayBusy=true;try{await api('pos/display-state',{device:await retailDevice(),token:customerPairToken,roundup:checkoutRoundupDisplay(),cart:$('posReceipt').hidden?posCurrent?.id||null:null,sale:!$('posReceipt').hidden?posLastReceipt?.id||null:null});}catch(e){if(e.status===404)customerPairToken=null;}finally{customerDisplayBusy=false;}};
  const load=posLoad;posLoad=async function(...args){await load(...args);await loadTerminalDevices();};
  const receipt=posReceipt;posReceipt=function(sale,automatic=false){receipt(sale);if(automatic)deskPrintReceipt(sale,true);};
  $('posPrintLast').onclick=()=>deskPrintReceipt(posLastReceipt);$('posPrint').onclick=()=>deskPrintReceipt(posLastReceipt);

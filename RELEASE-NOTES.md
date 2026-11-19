@@ -1,24 +1,26 @@
-# CoastYouth Retail STORE OPS Photo Fix — v0.59.2
+# CoastYouth Retail Round-Up Checkout — v0.60.0
 
-Request and appointment photos now open inside STORE OPS using the current sign-in. Previously, the View photo link opened the default browser, which could display “Please sign in again” because the desktop app and browser have separate sessions.
+When a cashier selects Pay now, DESK asks whether the customer would like to round up to the next dollar to support Youth for Christ. The cashier sees the exact donation and resulting total, with a prominent Yes, round up button on the left and No on the right. A coordinated customer-display overlay explains the ministry's mission on the Gulf Coast. Both screens follow the signed-in cashier's current theme, including glass palettes and dark themes.
 
-## Fixes
+## Checkout behavior
 
-- View photo opens an in-app preview from pending requests, scheduled appointments, and the request editor, on desktop and mobile.
-- Closing a photo returns to the same screen and preserves unfinished request edits.
-- Photo access still requires sign-in and the existing permissions. No public attachment links or shared credentials are introduced.
-- This release includes all previously published checkout, keyboard PIN, Credit/ Advances menu, training, printer, customer-display and update-policy changes.
+- Uses the existing donation setting in OFFICE. Enable donation prompts there to use the new flow; saved settings are retained.
+- The donation is optional, added only after Yes, and recorded as a separate nontaxable receipt line. No leaves the sale unchanged and continues to payment. Closing the prompt returns to the sale.
+- Whole-dollar totals and sales that already contain a donation skip the round-up question. A declined question is not repeated for the unchanged sale.
+- Existing merchandise discounts, loyalty rewards and taxes are preserved. Retrying an interrupted save cannot duplicate the donation.
+- The customer overlay clears when the cashier answers, cancels, changes the sale or disconnects. Training notices remain visible.
+- Includes all previously published STORE OPS photo, checkout, credit/advance, printer, customer-display and update-policy improvements.
 
 ## Installation and data preservation
 
-Versions: Server / Computer Setup **0.59.2**, DESK **1.19.2**, OFFICE **1.16.2**, STORE OPS desktop **1.5.2**.
+Versions: Server / Computer Setup **0.60.0**, DESK **1.20.0**. OFFICE **1.16.2** and STORE OPS desktop **1.5.2** remain compatible and are included in Computer Setup without a separate feature-version change.
 
-Verify a current server backup and update the shared server first. The server supplies the corrected STORE OPS screens to both the web app and desktop app. Reopen STORE OPS after the server update. Individual desktop installers and the combined Computer Setup installer are also provided.
+Verify a current server backup, let staff finish/save their work, and update the shared server first. The server supplies the new checkout and customer-display screens. Then update/reopen DESK. Install over the existing applications and retain their data folders, server addresses and terminal registrations.
 
-Install over the existing applications and retain their data folders. This fix does not change the database schema or operational records. Existing timecards, punches, breaks, reservations, sales, photos, users, settings and terminal registrations are preserved. Publishing the release does not itself install or restart the live server; the configured server update schedule remains in effect.
+This release adds only a separate table for short-lived customer-display prompts. Existing timecards, punches, breaks, reservations, sales, photos, users, prices, account balances and settings are not reset or rewritten. Publishing does not itself install or restart the live server; its configured update policy remains in effect. The web app remains available.
 
 ## Verification
 
-Checks cover the real Windows STORE OPS WebView2 window, desktop and mobile photo previews, multiple attachments, unauthorized access, missing-photo recovery, and preservation of unsaved request edits. Test appointment records and photo bytes remain identical after viewing.
+Checks cover 20 rendered theme/mode combinations, touch targets at 1920 × 1080, customer-display pairing and terminal isolation, consent/cancellation, discounts and rewards, whole-dollar totals, receipt output and interrupted-save retries.
 
-Publication requires the application suites, Windows installer builds, fresh and repeat installations, and a populated **0.59.1** upgrade with backup and rollback verification. Tests use isolated synthetic records and destinations, never the live store database.
+Publication requires the application suites, Windows installer checks, repeat-install preservation, and a populated **0.59.2** upgrade with backup and rollback verification. All checks use isolated sample records, never the live store database.

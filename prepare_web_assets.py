@@ -47,6 +47,9 @@ def prepare(root=None):
  css=root/'static/pos.css';content=css.read_text(encoding='utf-8');content=re.sub(r'\n*/\* BEGIN CHECKOUT UI \*/.*?/\* END CHECKOUT UI \*/\n*','\n',content,flags=re.S);css.write_text(content.rstrip()+'\n/* BEGIN CHECKOUT UI */\n'+(root/'static/desk-checkout.css').read_text(encoding='utf-8')+'\n/* END CHECKOUT UI */\n',encoding='utf-8')
  css=root/'static/pos.css';content=css.read_text(encoding='utf-8');content=re.sub(r'/\* BEGIN DESK EXPERIENCE \*/.*?/\* END DESK EXPERIENCE \*/','',content,flags=re.S);css.write_text(content.rstrip()+'\n/* BEGIN DESK EXPERIENCE */\n'+(root/'static/desk-experience.css').read_text(encoding='utf-8')+'\n/* END DESK EXPERIENCE */\n',encoding='utf-8')
  hr=root/'static/hr.js';content=hr.read_text(encoding='utf-8');content=re.sub(r'// BEGIN HR BROWSER UI.*?// END HR BROWSER UI',lambda _: '// BEGIN HR BROWSER UI\n'+(root/'static/hr-browser.js').read_text(encoding='utf-8')+'\n// END HR BROWSER UI',content,flags=re.S);hr.write_text(content,encoding='utf-8')
+ for name in ('pos.css','customer-display.css'):
+  css=root/'static'/name;content=css.read_text(encoding='utf-8');content=re.sub(r'\n*/\* BEGIN CHECKOUT ROUNDUP \*/.*?/\* END CHECKOUT ROUNDUP \*/\n*','\n',content,flags=re.S)
+  css.write_text(content.rstrip()+'\n/* BEGIN CHECKOUT ROUNDUP */\n'+(root/'static/checkout-roundup.css').read_text(encoding='utf-8')+'\n/* END CHECKOUT ROUNDUP */\n',encoding='utf-8')
  pos={name:(root/'static'/name).read_text(encoding='utf-8') for name in ('pos.html','pos.js','pos.css','customer-display.html','customer-display.js','customer-display.css','hr.html','hr.js','hr.css')}
  source,count=re.subn(r'^POS_ASSETS=.* # prepared POS application assets$',lambda _: 'POS_ASSETS='+repr(pos)+' # prepared POS application assets',source,flags=re.M)
  if count!=1:raise ValueError('POS asset marker missing')
