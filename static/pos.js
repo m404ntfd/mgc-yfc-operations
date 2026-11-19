@@ -975,7 +975,7 @@ async function thriftOffice(action){
 }
 async function thriftSettings(){
  const [{settings:initial},{programs:programs}]=await Promise.all([api('pos/thrift-config'),api('pos/programs')]);let s=initial;
- const d=thriftModal('Thrift store rules',`<nav class="flowTabs"><button type="button" data-thrift-tab="tags">Color tags</button><button type="button" data-thrift-tab="donations">Donations</button><button type="button" data-thrift-tab="loyalty">Loyalty</button></nav><section data-thrift-panel="tags"><p>Set the color, discount, dates and eligible Sub Departments before clicking Add. Saved sales keep their original prices.</p><div id="thriftTagSetup"></div></section><form id="thriftSettings"><section data-thrift-panel="donations" hidden><h3>Donations</h3>${thriftCheck('Offer voluntary round-ups and custom donations','donations',s.donations)}<p>Donations are recorded separately from merchandise sales.</p></section><section data-thrift-panel="loyalty" hidden><label>Points and rewards apply<select name="loyalty_scope"><option value="shared" ${programs.loyalty_scope==='shared'?'selected':''}>Collectively across all stores</option><option value="store" ${programs.loyalty_scope==='store'?'selected':''}>Separately per store</option></select></label>${thriftCheck('Enable customer rewards','loyalty',s.loyalty)}${thriftField('Merchandise spend to earn one point ($)','earn',flowMoney(s.earn_cents),'number','min="0.01" step="0.01" required')}${thriftField('Points needed for one reward','points',s.reward_points,'number','min="1" required')}${thriftField('Reward discount ($)','reward',flowMoney(s.reward_cents),'number','min="0.01" step="0.01" required')}${thriftCheck('Allow manual discounts and rewards on color-discounted items','stack_tags',s.stack_tags)}<p>Cash merchandise purchases earn points after discounts, excluding gift certificate issuance, tax and donations. Store-credit and voucher purchases do not earn points. Returns correct points. Rewards cannot combine with manual adjustments.</p></section><button class="primary" id="thriftSaveRules" hidden>Save thrift rules</button><p id="thriftRulesStatus" role="status"></p></form>`);
+ const d=thriftModal('Thrift store rules',`<nav class="flowTabs"><button type="button" data-thrift-tab="tags">Color tags</button><button type="button" data-thrift-tab="donations">Donations</button><button type="button" data-thrift-tab="loyalty">Loyalty</button></nav><section data-thrift-panel="tags"><p>Set the color, discount, dates and eligible Sub Departments before clicking Add. Saved sales keep their original prices.</p><div id="thriftTagSetup"></div></section><form id="thriftSettings"><section data-thrift-panel="donations" hidden><h3>Donations</h3>${thriftCheck('Offer voluntary round-ups and custom donations','donations',s.donations)}<p>On by default. At Pay now, ask whether the customer wants to round up to the next dollar for Youth for Christ. Add a donation only when the customer agrees. Donations are recorded separately from merchandise sales; cash-change rounding is a separate setting.</p></section><section data-thrift-panel="loyalty" hidden><label>Points and rewards apply<select name="loyalty_scope"><option value="shared" ${programs.loyalty_scope==='shared'?'selected':''}>Collectively across all stores</option><option value="store" ${programs.loyalty_scope==='store'?'selected':''}>Separately per store</option></select></label>${thriftCheck('Enable customer rewards','loyalty',s.loyalty)}${thriftField('Merchandise spend to earn one point ($)','earn',flowMoney(s.earn_cents),'number','min="0.01" step="0.01" required')}${thriftField('Points needed for one reward','points',s.reward_points,'number','min="1" required')}${thriftField('Reward discount ($)','reward',flowMoney(s.reward_cents),'number','min="0.01" step="0.01" required')}${thriftCheck('Allow manual discounts and rewards on color-discounted items','stack_tags',s.stack_tags)}<p>Cash merchandise purchases earn points after discounts, excluding gift certificate issuance, tax and donations. Store-credit and voucher purchases do not earn points. Returns correct points. Rewards cannot combine with manual adjustments.</p></section><button class="primary" id="thriftSaveRules" hidden>Save thrift rules</button><p id="thriftRulesStatus" role="status"></p></form>`);
  const ruleForm=d.querySelector('#thriftSettings');
  for(const button of d.querySelectorAll('[data-thrift-tab]'))button.onclick=()=>{for(const panel of d.querySelectorAll('[data-thrift-panel]'))panel.hidden=panel.dataset.thriftPanel!==button.dataset.thriftTab;for(const tab of d.querySelectorAll('[data-thrift-tab]'))tab.setAttribute('aria-pressed',String(tab===button));d.querySelector('#thriftSaveRules').hidden=button.dataset.thriftTab==='tags';};
  const storeTags=async tags=>{const result=await retailSave('thrift-settings',{...s,tags});s=result.settings;return s.tags;};
@@ -1445,7 +1445,7 @@ async function givingOpen(){
 // BEGIN OFFICE STATUS BAR
 // Compact OFFICE application information; no extra server requests.
 if (officeMode) (() => {
- const webVersion = '0.60.0'; // replaced by prepare_web_assets.py
+ const webVersion = '0.61.0'; // replaced by prepare_web_assets.py
  const style = document.createElement('style');
  style.textContent = `
  .retailOffice{--office-status-height:26px}
@@ -2041,7 +2041,7 @@ if(!officeMode){
  const clearForm=form=>{if(typeof changedForms!=='undefined')changedForms.delete(form);};
  const discard=()=>!get('nativeTerminalForm')||!changedForms.has(get('nativeTerminalForm'))||confirm('Discard unsaved terminal registration changes?');
  const required=()=>state&&(!state.computer.registered||(info.app==='pos'&&!state.terminal));
- function label(){if(!button)return;button.disabled=!user?.admin&&!(typeof can==='function'&&can('manage_pos'));button.textContent=state?.computer.registered?'Terminal: '+state.computer.name+' · Registered':'Terminal setup · Registration required';}
+ function label(){if(!button)return;button.disabled=!user?.admin&&!(typeof can==='function'&&can('manage_pos'));button.textContent=state?.computer.registered&&!required()?'Terminal: '+state.computer.name+' · Registered':'Terminal setup · Registration required';}
  async function show(){
   if(dialog?.open)return;
   if(!state)return;
@@ -2086,7 +2086,8 @@ if(!officeMode){
   try{
    info=await native.terminal_info();if(info.error)throw Error(info.error);window.nativeTerminalAvailable=true;
    if(!button){button=document.createElement('button');button.id='nativeTerminalStatus';button.type='button';button.textContent='Terminal setup';button.onclick=window.openTerminalRegistration;(document.querySelector('.headerRight')||document.querySelector('.connectionInfo')||document.querySelector('body>header')).append(button);}
-   state=await api('computers/self',{...info,status:lastStatus});window.terminalRegistration=state;label();if(dialog?.dataset.verifying){delete dialog.dataset.verifying;dialog.close();}
+   const wasRequired=required();state=await api('computers/self',{...info,status:lastStatus});window.terminalRegistration=state;label();if(dialog?.dataset.verifying){delete dialog.dataset.verifying;dialog.close();}
+   if(wasRequired&&!required()&&dialog?.open&&!changedForms.has(get('nativeTerminalForm')))dialog.close();
    if(required()){if(!dialog?.open)await show();return;}
 
   }catch(error){if(button)button.textContent='Terminal setup · Unable to verify';if(dialog?.open)get('nativeTerminalError').textContent=error.message;}
@@ -2178,7 +2179,32 @@ async function terminalDeviceOptions(id){
  d.querySelector('#terminalRegistrationEdit')?.addEventListener('click',()=>{if(changedForms.has(d.querySelector('form')))return;thriftClose(d);retailEnroll();});
  }catch(e){if(!officeMode&&!retailTerminal)return retailEnroll();posMessage(e.message);}
 }
-const originalTerminalEditor=retailTerminals;retailTerminals=function(){originalTerminalEditor();for(const edit of $('retailEditor').querySelectorAll('[data-terminal]')){const b=document.createElement('button');b.type='button';b.textContent='Printer & customer display';b.onclick=()=>{if(!unfinished())terminalDeviceOptions(edit.dataset.terminal);};edit.after(b);}};
+const originalTerminalEditor=retailTerminals;retailTerminals=function(){
+ originalTerminalEditor();const root=$('retailEditor');
+ for(const edit of root.querySelectorAll('[data-terminal]')){
+  const b=document.createElement('button');b.type='button';b.textContent='Printer & customer display';b.onclick=()=>{if(!unfinished())terminalDeviceOptions(edit.dataset.terminal);};edit.after(b);
+  if(officeMode){const remove=document.createElement('button');remove.type='button';remove.className='danger';remove.dataset.terminalRemove=edit.dataset.terminal;remove.textContent='Remove';remove.setAttribute('aria-label','Remove '+retailState.terminals.find(t=>t.id===edit.dataset.terminal).name);remove.onclick=()=>terminalRemoval(edit.dataset.terminal);b.after(remove);}
+ }
+ if(officeMode&&retailState.removed_terminals?.length){
+  const history=document.createElement('details');history.id='removedTerminals';history.innerHTML=`<summary>Removed terminals (${retailState.removed_terminals.length})</summary><p>Sales, receipts, drawer history and settings are retained. Restore a terminal here to use its existing registration again.</p><table><thead><tr><th>Terminal</th><th>Store</th><th>Removed by</th><th>Removed</th><th></th></tr></thead><tbody>${retailState.removed_terminals.map(t=>`<tr><td>${esc(t.name)}</td><td>${esc(t.store_name)}</td><td>${esc(t.removed_by)}</td><td>${esc(new Date(t.removed_at).toLocaleString())}</td><td><button type="button" data-terminal-restore="${esc(t.id)}">Restore</button></td></tr>`).join('')}</tbody></table>`;root.append(history);
+  for(const b of history.querySelectorAll('[data-terminal-restore]'))b.onclick=()=>terminalRemoval(b.dataset.terminalRestore,true);
+ }
+};
+async function terminalRemoval(id,restore=false){
+ if(!officeMode||!can('manage_pos'))return;
+ if(unfinished()){posMessage('Save or clear the current form before changing terminal registration.');return;}
+ const terminal=(restore?retailState.removed_terminals:retailState.terminals).find(t=>t.id===id);if(!terminal)return;
+ const title=restore?'Restore terminal':'Remove terminal';
+ const d=flowModal(title,`<p><strong>${esc(terminal.name)}</strong><br>${esc(terminal.store_name)}</p><p>${restore?'Restore this terminal with its previous store, layout, printer and device registration?':'Remove this terminal from the active list? Its checkout and customer display will stop working until an authorized user restores it in OFFICE.'}</p><p>Sales and cash-drawer activity stay in reports under the original terminal name. All audit logs are retained.</p><p>Existing sales, receipts, timecards, reservations and other records will stay intact.</p>${restore?'':'<p>Complete or cancel open and saved sales, and close its cash drawer before removing it.</p>'}<div class="flowToolbar"><button id="terminalRemovalConfirm" type="button" class="${restore?'primary':'danger'}">${title}</button><button id="terminalRemovalCancel" type="button">Cancel</button></div>`);
+ let saving=false;d.beforeDismiss=()=>!saving;
+ d.querySelector('#terminalRemovalCancel').onclick=()=>d.querySelector('.flowClose').click();
+ d.querySelector('#terminalRemovalConfirm').onclick=async()=>{
+  if(saving)return;saving=true;
+  try{await retailSave(restore?'terminal-restore':'terminal-remove',{id,revision:terminal.revision,confirmed:true});thriftClose(d);retailState=await api('pos/retail-config');retailTerminals();$('terminalStatus').textContent=terminal.name+(restore?' restored.':' removed. Historical records are retained.');}
+  catch(error){if(d.isConnected)thriftError(d,error);else posMessage('Terminal updated. Refresh the list to see the change.');}
+  finally{saving=false;}
+ };
+}
 customerDisplayEditor=async function(){
  const root=$('flowOffice');try{const s=await api('pos/store-display?store_id='+encodeURIComponent(retailStoreChoice));root.innerHTML=`<h2>Customer display · ${esc(s.store)}</h2><p>Logo and store name follow this location’s receipt branding. Assign the display link to each register in Terminal setup.</p><form id="customerDisplayForm"><label><input name="enabled" type="checkbox" ${s.enabled?'checked':''}> Enable displays for this store</label><label>Welcome message<input name="welcome" value="${esc(s.welcome)}" maxlength="200" required></label><label>Thank-you message<input name="thanks" value="${esc(s.thanks)}" maxlength="200" required></label><button class="primary">Save display settings</button></form><p id="customerSaveStatus" role="status"></p>`;
  root.querySelector('form').onsubmit=async e=>{e.preventDefault();try{const f=e.target.elements;await retailSave('store-display-save',{store_id:s.store_id,revision:s.revision,enabled:f.enabled.checked,welcome:f.welcome.value,thanks:f.thanks.value});changedForms.delete(e.target);await customerDisplayEditor();$('customerSaveStatus').textContent='Saved for this store.';}catch(error){$('customerSaveStatus').textContent=error.message;}};

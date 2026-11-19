@@ -9,7 +9,32 @@ async function terminalDeviceOptions(id){
  d.querySelector('#terminalRegistrationEdit')?.addEventListener('click',()=>{if(changedForms.has(d.querySelector('form')))return;thriftClose(d);retailEnroll();});
  }catch(e){if(!officeMode&&!retailTerminal)return retailEnroll();posMessage(e.message);}
 }
-const originalTerminalEditor=retailTerminals;retailTerminals=function(){originalTerminalEditor();for(const edit of $('retailEditor').querySelectorAll('[data-terminal]')){const b=document.createElement('button');b.type='button';b.textContent='Printer & customer display';b.onclick=()=>{if(!unfinished())terminalDeviceOptions(edit.dataset.terminal);};edit.after(b);}};
+const originalTerminalEditor=retailTerminals;retailTerminals=function(){
+ originalTerminalEditor();const root=$('retailEditor');
+ for(const edit of root.querySelectorAll('[data-terminal]')){
+  const b=document.createElement('button');b.type='button';b.textContent='Printer & customer display';b.onclick=()=>{if(!unfinished())terminalDeviceOptions(edit.dataset.terminal);};edit.after(b);
+  if(officeMode){const remove=document.createElement('button');remove.type='button';remove.className='danger';remove.dataset.terminalRemove=edit.dataset.terminal;remove.textContent='Remove';remove.setAttribute('aria-label','Remove '+retailState.terminals.find(t=>t.id===edit.dataset.terminal).name);remove.onclick=()=>terminalRemoval(edit.dataset.terminal);b.after(remove);}
+ }
+ if(officeMode&&retailState.removed_terminals?.length){
+  const history=document.createElement('details');history.id='removedTerminals';history.innerHTML=`<summary>Removed terminals (${retailState.removed_terminals.length})</summary><p>Sales, receipts, drawer history and settings are retained. Restore a terminal here to use its existing registration again.</p><table><thead><tr><th>Terminal</th><th>Store</th><th>Removed by</th><th>Removed</th><th></th></tr></thead><tbody>${retailState.removed_terminals.map(t=>`<tr><td>${esc(t.name)}</td><td>${esc(t.store_name)}</td><td>${esc(t.removed_by)}</td><td>${esc(new Date(t.removed_at).toLocaleString())}</td><td><button type="button" data-terminal-restore="${esc(t.id)}">Restore</button></td></tr>`).join('')}</tbody></table>`;root.append(history);
+  for(const b of history.querySelectorAll('[data-terminal-restore]'))b.onclick=()=>terminalRemoval(b.dataset.terminalRestore,true);
+ }
+};
+async function terminalRemoval(id,restore=false){
+ if(!officeMode||!can('manage_pos'))return;
+ if(unfinished()){posMessage('Save or clear the current form before changing terminal registration.');return;}
+ const terminal=(restore?retailState.removed_terminals:retailState.terminals).find(t=>t.id===id);if(!terminal)return;
+ const title=restore?'Restore terminal':'Remove terminal';
+ const d=flowModal(title,`<p><strong>${esc(terminal.name)}</strong><br>${esc(terminal.store_name)}</p><p>${restore?'Restore this terminal with its previous store, layout, printer and device registration?':'Remove this terminal from the active list? Its checkout and customer display will stop working until an authorized user restores it in OFFICE.'}</p><p>Sales and cash-drawer activity stay in reports under the original terminal name. All audit logs are retained.</p><p>Existing sales, receipts, timecards, reservations and other records will stay intact.</p>${restore?'':'<p>Complete or cancel open and saved sales, and close its cash drawer before removing it.</p>'}<div class="flowToolbar"><button id="terminalRemovalConfirm" type="button" class="${restore?'primary':'danger'}">${title}</button><button id="terminalRemovalCancel" type="button">Cancel</button></div>`);
+ let saving=false;d.beforeDismiss=()=>!saving;
+ d.querySelector('#terminalRemovalCancel').onclick=()=>d.querySelector('.flowClose').click();
+ d.querySelector('#terminalRemovalConfirm').onclick=async()=>{
+  if(saving)return;saving=true;
+  try{await retailSave(restore?'terminal-restore':'terminal-remove',{id,revision:terminal.revision,confirmed:true});thriftClose(d);retailState=await api('pos/retail-config');retailTerminals();$('terminalStatus').textContent=terminal.name+(restore?' restored.':' removed. Historical records are retained.');}
+  catch(error){if(d.isConnected)thriftError(d,error);else posMessage('Terminal updated. Refresh the list to see the change.');}
+  finally{saving=false;}
+ };
+}
 customerDisplayEditor=async function(){
  const root=$('flowOffice');try{const s=await api('pos/store-display?store_id='+encodeURIComponent(retailStoreChoice));root.innerHTML=`<h2>Customer display · ${esc(s.store)}</h2><p>Logo and store name follow this location’s receipt branding. Assign the display link to each register in Terminal setup.</p><form id="customerDisplayForm"><label><input name="enabled" type="checkbox" ${s.enabled?'checked':''}> Enable displays for this store</label><label>Welcome message<input name="welcome" value="${esc(s.welcome)}" maxlength="200" required></label><label>Thank-you message<input name="thanks" value="${esc(s.thanks)}" maxlength="200" required></label><button class="primary">Save display settings</button></form><p id="customerSaveStatus" role="status"></p>`;
  root.querySelector('form').onsubmit=async e=>{e.preventDefault();try{const f=e.target.elements;await retailSave('store-display-save',{store_id:s.store_id,revision:s.revision,enabled:f.enabled.checked,welcome:f.welcome.value,thanks:f.thanks.value});changedForms.delete(e.target);await customerDisplayEditor();$('customerSaveStatus').textContent='Saved for this store.';}catch(error){$('customerSaveStatus').textContent=error.message;}};

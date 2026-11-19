@@ -29,3 +29,15 @@ def wait_for_pos_save(page):
   if page.evaluate('!posBusy && !posPending && !flowProductStarting'):return
   page.wait_for_timeout(50)
  raise AssertionError('The checkout action did not finish saving and refreshing.')
+
+
+def open_checkout(page,touch=False):
+ """Payment-focused checks decline the default voluntary donation prompt."""
+ button=page.locator('#posPayNow')
+ button.tap() if touch else button.click()
+ page.locator('.roundupDialog,#checkoutPaymentForm').first.wait_for(state='visible')
+ if page.locator('.roundupDialog').is_visible():
+  before=page.evaluate('JSON.stringify(posCurrent)')
+  no=page.locator('#checkoutRoundupNo');no.tap() if touch else no.click()
+  page.locator('#checkoutPaymentForm').wait_for(state='visible')
+  assert page.evaluate('JSON.stringify(posCurrent)')==before,'Declining a donation must not alter the sale'

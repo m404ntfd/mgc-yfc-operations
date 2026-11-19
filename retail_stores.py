@@ -66,6 +66,7 @@ def stores_terminal_details(c,terminal):
     return dict(terminal,store_id=profile['id'],store_name=profile['name'])
 
 def stores_assign_terminal(c,terminal,store,previous=None,check_previous=False):
+    if devices_removed(c,terminal['id']):raise Problem('This terminal was removed. Restore it in OFFICE before changing its store.',409)
     profile=stores_profile(c,store)
     current=stores_terminal_details(c,terminal)['store_id']
     if check_previous and previous!=current:raise Problem('Assignment changed. Reopen before saving.',409)
@@ -81,6 +82,7 @@ def stores_assign_terminal(c,terminal,store,previous=None,check_previous=False):
 def stores_context(c,u,d):
     terminal=stores_terminal(c,d.get('device'))
     if terminal:
+        if devices_removed(c,terminal['id']):raise Problem('This terminal was removed. Ask an administrator to restore it in OFFICE.',403)
         if not terminal['enabled']:raise Problem('This terminal is disabled.',403)
         return terminal['store_id'],terminal
     ident=d.get('store_id') or 'thrift-mart'

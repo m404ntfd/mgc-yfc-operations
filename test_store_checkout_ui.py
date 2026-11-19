@@ -2,6 +2,7 @@
 import json,os,uuid
 from pathlib import Path
 from playwright.sync_api import sync_playwright,expect
+from test_ui_helpers import open_checkout
 from test_update_coordination import CoordinatorFixture
 from test_ui_helpers import password_login_page,office_setting,wait_for_pos_save
 import server
@@ -58,13 +59,13 @@ try:
   p.locator('[data-pos-product="'+weighed+'"]').tap();p.locator('#storeWeight [name=weight]').fill('2.25');p.locator('#storeWeight button.primary').tap();expect(p.locator('#posCart')).to_contain_text('$10.45');wait_for_pos_save(p)
   expect(p.locator('#posStatus')).to_contain_text('added to the sale and saved')
   p.screenshot(path=str(out/'DESK-Registered-Store-Receipt.png'))
-  p.locator('#posPayNow').tap();p.locator('#checkoutTender').fill('20.00');p.locator('#checkoutComplete').tap();expect(p.locator('#posReceipt')).to_contain_text(receipt['footer']);wait_for_pos_save(p)
+  open_checkout(p,touch=True);p.locator('#checkoutTender').fill('20.00');p.locator('#checkoutComplete').tap();expect(p.locator('#posReceipt')).to_contain_text(receipt['footer']);wait_for_pos_save(p)
   previous=rows('pos_sales');p.reload();expect(p.locator('#retailStoreBadge')).to_have_text('Binopoly · SAMPLE')
   p.locator('[data-pos-product="'+fixed+'"]').tap();expect(p.locator('#posCart')).to_contain_text('$5.50');assert p.evaluate('posCurrent.id')!=first
   # A second registered PC uses exactly the same store receipt and tax configuration.
   second=native(infos[1]);expect(second.locator('#retailStoreBadge')).to_have_text('Binopoly · SAMPLE');expect(second.locator('#nativeTerminalSetup')).not_to_be_visible()
   second.locator('[data-pos-product="'+fixed+'"]').click();expect(second.locator('#posCart')).to_contain_text('$5.50');wait_for_pos_save(second)
-  second.locator('#posPayNow').click();second.locator('#checkoutTender').fill('10.00');second.locator('#checkoutComplete').click();expect(second.locator('#posReceipt')).to_contain_text(receipt['footer']);wait_for_pos_save(second)
+  open_checkout(second);second.locator('#checkoutTender').fill('10.00');second.locator('#checkoutComplete').click();expect(second.locator('#posReceipt')).to_contain_text(receipt['footer']);wait_for_pos_save(second)
   assert rows('pos_sales')[:len(previous)]==previous
   # OFFICE exposes store assignments beside terminals, not per-terminal tax/receipt settings.
   officeContext=browser.new_context(viewport={'width':1920,'height':1080});assert officeContext.request.post(origin+'/api/login',data={'name':'Admin','password':'testpassword'},headers={'X-Dispatch':'1'}).status==200

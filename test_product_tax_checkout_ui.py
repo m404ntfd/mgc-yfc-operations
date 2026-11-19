@@ -2,6 +2,7 @@
 import json,os,uuid
 from pathlib import Path
 from playwright.sync_api import sync_playwright,expect
+from test_ui_helpers import open_checkout
 from test_update_coordination import CoordinatorFixture
 from test_ui_helpers import wait_for_pos_save
 import server
@@ -31,7 +32,7 @@ try:
   p.locator('[data-pos-product="'+opened+'"]').tap();p.locator('#deskKeypadValue').fill('500');p.locator('.deskKeypadApply').tap();expect(p.locator('#posCart')).to_contain_text('$7.49');wait_for_pos_save(p)
   p.locator('[data-pos-product="'+weighed+'"]').tap();p.locator('#storeWeight [name=weight]').fill('2.25');p.locator('#storeWeight button.primary').tap();expect(p.locator('#posCart')).to_contain_text('$12.31');wait_for_pos_save(p)
   p.screenshot(path=str(out/'DESK-Product-Taxes-Receipt.png'))
-  p.locator('#posPayNow').tap();p.locator('#checkoutTender').fill('20.00');p.locator('#checkoutComplete').tap();expect(p.locator('#posReceipt')).to_contain_text('$12.31');wait_for_pos_save(p)
+  open_checkout(p,touch=True);p.locator('#checkoutTender').fill('20.00');p.locator('#checkoutComplete').tap();expect(p.locator('#posReceipt')).to_contain_text('$12.31');wait_for_pos_save(p)
   assert p.evaluate('posOverview.settings.tax_bps') is None;assert not errors,errors;browser.close()
  print('PASS native first product tap without a default tax, correct totals, open-price cancellation, missing-tax guidance, weighed items and completed receipt')
 finally:f.close()

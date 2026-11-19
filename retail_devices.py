@@ -5,7 +5,42 @@ def devices_init(c):
     CREATE TABLE IF NOT EXISTS retail_terminal_options(terminal TEXT PRIMARY KEY,revision INTEGER NOT NULL,printer TEXT NOT NULL,display_token TEXT NOT NULL UNIQUE,cart TEXT,sale TEXT,heartbeat REAL NOT NULL DEFAULT 0);
     CREATE TABLE IF NOT EXISTS retail_store_displays(store TEXT PRIMARY KEY,revision INTEGER NOT NULL,body TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS retail_customer_requests(id TEXT PRIMARY KEY,terminal TEXT NOT NULL,owner TEXT NOT NULL,expires REAL NOT NULL,status TEXT NOT NULL,body TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS retail_removed_terminals(terminal TEXT PRIMARY KEY REFERENCES retail_terminals(id),at TEXT NOT NULL,actor TEXT NOT NULL,enabled INTEGER NOT NULL);
     ''')
+
+def devices_removed(c,terminal):
+    return c.execute('SELECT * FROM retail_removed_terminals WHERE terminal=?',(terminal,)).fetchone()
+
+def devices_remove(c,u,d,finish):
+    if not has_permission(u,'manage_pos'):raise Problem('Manage POS permission required.',403)
+    ident=pos_text(d.get('id'),'a terminal identifier',64)
+    row=c.execute('SELECT * FROM retail_terminals WHERE id=?',(ident,)).fetchone()
+    if not row:raise Problem('Terminal not found. Refresh the terminal list.',404)
+    if d.get('revision')!=row['revision']:raise Problem('Terminal changed. Refresh the terminal list before removing it.',409)
+    if devices_removed(c,row['id']):raise Problem('This terminal has already been removed.',409)
+    if d.get('confirmed') is not True:raise Problem('Confirm removal of this terminal.')
+    if c.execute('SELECT 1 FROM retail_drawers WHERE terminal=? AND closed IS NULL',(row['id'],)).fetchone():raise Problem('Close and reconcile this terminal’s cash drawer before removing it.',409)
+    for record in c.execute("SELECT body FROM pos_carts WHERE status='open'"):
+        cart=json.loads(record[0])
+        linked=cart.get('terminal_id')==row['id'] or (row['device'] and cart.get('device')==row['device']) or (not cart.get('terminal_id') and cart.get('terminal')==row['name'])
+        if linked:raise Problem('Complete or cancel this terminal’s open and saved sales before removing it.',409)
+    # Keep the terminal and every historical relationship. Removal is an audited
+    # registration state, not deletion of sales, settings, or computer inventory.
+    c.execute('INSERT INTO retail_removed_terminals VALUES(?,?,?,?)',(row['id'],dt.datetime.now().astimezone().isoformat(timespec='seconds'),u['name'],row['enabled']))
+    c.execute('UPDATE retail_terminals SET enabled=0,revision=revision+1 WHERE id=?',(row['id'],))
+    return finish({'ok':True,'id':row['id'],'revision':row['revision']+1},'Removed terminal '+row['name']+' ('+row['id']+'); history retained') or True
+
+def devices_restore(c,u,d,finish):
+    if not has_permission(u,'manage_pos'):raise Problem('Manage POS permission required.',403)
+    ident=pos_text(d.get('id'),'a terminal identifier',64)
+    row=c.execute('SELECT * FROM retail_terminals WHERE id=?',(ident,)).fetchone()
+    removed=devices_removed(c,ident)
+    if not row or not removed:raise Problem('Removed terminal not found. Refresh the terminal list.',409)
+    if d.get('revision')!=row['revision']:raise Problem('Terminal changed. Refresh the terminal list before restoring it.',409)
+    if d.get('confirmed') is not True:raise Problem('Confirm restoration of this terminal.')
+    c.execute('UPDATE retail_terminals SET enabled=?,revision=revision+1 WHERE id=?',(removed['enabled'],row['id']))
+    c.execute('DELETE FROM retail_removed_terminals WHERE terminal=?',(row['id'],))
+    return finish({'ok':True,'id':row['id'],'revision':row['revision']+1},'Restored terminal '+row['name']+' ('+row['id']+')') or True
 
 def devices_terminal(c,u,d,manage=False):
     if manage and not has_permission(u,'manage_pos'):raise Problem('Manage POS permission required.',403)
@@ -42,6 +77,8 @@ def devices_get(c,u,path,q):
     return None
 
 def devices_post(handler,c,u,path,d,finish):
+    if path=='terminal-remove':return devices_remove(c,u,d,finish)
+    if path=='terminal-restore':return devices_restore(c,u,d,finish)
     if path=='terminal-options-save':
         terminal=devices_terminal(c,u,d,True);old=devices_options(c,terminal)
         if d.get('revision')!=old['revision']:raise Problem('Terminal settings changed. Reopen them before saving.',409)

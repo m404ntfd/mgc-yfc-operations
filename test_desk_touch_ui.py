@@ -2,6 +2,7 @@
 import os,json,uuid
 from pathlib import Path
 from playwright.sync_api import sync_playwright,expect
+from test_ui_helpers import open_checkout
 from test_update_coordination import CoordinatorFixture
 from test_ui_helpers import password_login_page
 import server
@@ -106,7 +107,7 @@ try:
   assert not [r for r in theme_results if r['issues']],theme_results
   p.evaluate("document.body.dataset.retailTheme='harbor-blue';document.documentElement.dataset.theme='light'")
   # Cash keypad updates the existing change preview, with explicit payment confirmation.
-  p.locator('#posPayNow').tap()
+  open_checkout(p,touch=True)
   for key in '10000':p.locator('[data-money-key="'+key+'"]').tap()
   expect(p.locator('#checkoutChange')).not_to_be_empty();p.locator('#checkoutComplete').tap();expect(p.locator('#posReceipt')).to_contain_text('Receipt #')
   assert p.locator('#posReceipt .deskQuantity').count()==0

@@ -3,6 +3,7 @@ from test_ui_helpers import password_login_page
 import os
 from pathlib import Path
 from playwright.sync_api import sync_playwright,expect
+from test_ui_helpers import open_checkout
 from test_update_coordination import CoordinatorFixture
 
 def run():
@@ -27,7 +28,7 @@ def run():
    p.locator('#creditAdjust button').first.click();expect(p.locator('.creditBalance')).to_contain_text('$55.00');expect(p.locator('#creditHistory tr')).to_have_count(2)
    assert not p.evaluate('changedForms.has(document.querySelector("#creditAdjust"))')
    out=Path(os.environ.get('TEST_ARTIFACTS','test-artifacts'));out.mkdir(parents=True,exist_ok=True);p.screenshot(path=str(out/'POS-Store-Credit-Accounts-Preview.png'))
-   p.locator('#creditClose').click();p.goto(f'http://127.0.0.1:{f.port}/pos');select_saved_sale(p,cart['id']);p.locator('#posPayNow').click();p.locator('[data-method=credit]').click();p.locator('#checkoutAccount').select_option('1');p.locator('#checkoutCreditAmount').fill('20');p.locator('#checkoutTender').fill('10.00');expect(p.locator('#checkoutDue')).to_contain_text('$9.93')
+   p.locator('#creditClose').click();p.goto(f'http://127.0.0.1:{f.port}/pos');select_saved_sale(p,cart['id']);open_checkout(p);p.locator('[data-method=credit]').click();p.locator('#checkoutAccount').select_option('1');p.locator('#checkoutCreditAmount').fill('20');p.locator('#checkoutTender').fill('10.00');expect(p.locator('#checkoutDue')).to_contain_text('$9.93')
    # Server commits, response is lost: retry must retrieve the original sale.
    def lose(route):
     route.fetch();route.abort();p.unroute('**/api/pos/credit',lose)

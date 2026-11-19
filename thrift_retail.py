@@ -18,7 +18,9 @@ CREATE TRIGGER IF NOT EXISTS thrift_points_no_delete BEFORE DELETE ON thrift_poi
 
 def thrift_settings(c):
     row=c.execute('SELECT * FROM thrift_settings WHERE id=1').fetchone()
-    return dict(json.loads(row['body']),revision=row['revision']) if row else dict(revision=0,tags=[],donations=False,loyalty=False,earn_cents=100,reward_points=100,reward_cents=500,stack_tags=False)
+    settings=dict(revision=0,tags=[],donations=True,loyalty=False,earn_cents=100,reward_points=100,reward_cents=500,stack_tags=False)
+    if row:settings.update(json.loads(row['body']),revision=row['revision'])
+    return settings
 
 def thrift_require(u,permission):
     if not has_permission(u,permission):raise Problem('Required permission: '+permission.replace('_',' '),403)

@@ -4,6 +4,7 @@ from test_ui_helpers import password_login_page
 import os,json,uuid,datetime as dt,struct
 from pathlib import Path
 from playwright.sync_api import sync_playwright,expect
+from test_ui_helpers import open_checkout
 from test_update_coordination import CoordinatorFixture
 import server
 
@@ -26,7 +27,7 @@ try:
   device='e'*32;post('terminal-save',name='Sample register',device=device,enabled=True);terminal=post('terminal-options-save',device=device,revision=0,printer='',replace_display=False);ctx.add_init_script("localStorage.setItem('coastyouth-retail-device','"+device+"')");desk=ctx.new_page();desk.on('pageerror',lambda e:errors.append(str(e)));desk.goto(origin+'/pos');desk.locator('#posCatalog button').filter(has_text='Adult shirt').click();expect(desk.locator('#posCart')).to_contain_text('Adult shirt');wait_for_pos_save(desk);desk.locator('#posCatalog button').filter(has_text='Paperback book').click();expect(desk.locator('#posCart')).to_contain_text('$10.40');desk.locator('#customerPair').click();expect(desk.locator('dialog[open] input[readonly]')).to_be_visible();link=desk.locator('dialog[open] input[readonly]').input_value();desk.locator('.flowClose').click()
   # Separate unauthenticated browser context: the display must not need staff cookies.
   display=browser.new_page(viewport={'width':1440,'height':900});display.on('pageerror',lambda e:errors.append(str(e)));display.goto(link);expect(display.locator('#total')).to_have_text('$10.40');expect(display.locator('#lines')).to_contain_text('Paperback book');assert display.locator('body').inner_text().find('Admin')<0;display.screenshot(path=str(out/'Customer-Checkout-Display.png'));display.reload();expect(display.locator('#total')).to_have_text('$10.40')
-  desk.locator('#posPayNow').click();desk.locator('#checkoutTender').fill('20.00');desk.locator('#checkoutComplete').click();expect(desk.locator('#posReceipt')).to_contain_text('Thank you for supporting our community!');expect(desk.locator('#posReceipt .receiptLogo')).to_be_visible();expect(display.locator('#welcomeText')).to_contain_text('Thank you');expect(display.locator('#welcomeNote')).to_contain_text('$9.60');display.screenshot(path=str(out/'Customer-Thank-You-Display.png'))
+  open_checkout(desk);desk.locator('#checkoutTender').fill('20.00');desk.locator('#checkoutComplete').click();expect(desk.locator('#posReceipt')).to_contain_text('Thank you for supporting our community!');expect(desk.locator('#posReceipt .receiptLogo')).to_be_visible();expect(display.locator('#welcomeText')).to_contain_text('Thank you');expect(display.locator('#welcomeNote')).to_contain_text('$9.60');display.screenshot(path=str(out/'Customer-Thank-You-Display.png'))
   display.route('**/api/customer-display',lambda route:route.abort());expect(display.locator('#status')).to_contain_text('Disconnected',timeout=10000);expect(display.locator('#sale')).to_be_hidden();expect(display.locator('#lines')).to_be_empty()
   p.set_viewport_size({'width':1024,'height':900});assert p.evaluate('document.documentElement.scrollWidth<=innerWidth');p.locator('#officeBack').click();office_setting(p,'receipt-design').click();assert p.evaluate('document.documentElement.scrollWidth<=innerWidth')
   with server.connect() as c:

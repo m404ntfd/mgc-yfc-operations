@@ -11,7 +11,7 @@ def run():
   code,result=f.call('pos/'+action,dict(data,request=uuid.uuid4().hex));assert code==200,(action,result);return result
  try:
   post('settings',store='Thrift Mart · SAMPLE',tax_bps=0,confirmed=True)
-  settings=f.call('pos/thrift-config')[1]['settings'];post('thrift-settings',**dict(settings,donations=True))
+  settings=f.call('pos/thrift-config')[1]['settings'];assert settings['donations'] and settings['revision']==0,settings
   products=[post('product-save',name=name,category='Household',price=price,taxable=False)['ids'][0] for name,price in [('Sample housewares',1237),('Sample book',200)]]
   device='a'*32;terminal=post('terminal-save',name='Thrift Mart Register 1',device=device,enabled=True)['id']
   post('terminal-options-save',terminal=terminal,revision=0,printer='')

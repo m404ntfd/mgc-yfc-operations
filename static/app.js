@@ -3392,7 +3392,7 @@ api('session').then(s=>{hrOpsButton.hidden=!s.user||!(s.user.admin||s.user.grant
  const clearForm=form=>{if(typeof changedForms!=='undefined')changedForms.delete(form);};
  const discard=()=>!get('nativeTerminalForm')||!changedForms.has(get('nativeTerminalForm'))||confirm('Discard unsaved terminal registration changes?');
  const required=()=>state&&(!state.computer.registered||(info.app==='pos'&&!state.terminal));
- function label(){if(!button)return;button.disabled=!user?.admin&&!(typeof can==='function'&&can('manage_pos'));button.textContent=state?.computer.registered?'Terminal: '+state.computer.name+' · Registered':'Terminal setup · Registration required';}
+ function label(){if(!button)return;button.disabled=!user?.admin&&!(typeof can==='function'&&can('manage_pos'));button.textContent=state?.computer.registered&&!required()?'Terminal: '+state.computer.name+' · Registered':'Terminal setup · Registration required';}
  async function show(){
   if(dialog?.open)return;
   if(!state)return;
@@ -3437,7 +3437,8 @@ api('session').then(s=>{hrOpsButton.hidden=!s.user||!(s.user.admin||s.user.grant
   try{
    info=await native.terminal_info();if(info.error)throw Error(info.error);window.nativeTerminalAvailable=true;
    if(!button){button=document.createElement('button');button.id='nativeTerminalStatus';button.type='button';button.textContent='Terminal setup';button.onclick=window.openTerminalRegistration;(document.querySelector('.headerRight')||document.querySelector('.connectionInfo')||document.querySelector('body>header')).append(button);}
-   state=await api('computers/self',{...info,status:lastStatus});window.terminalRegistration=state;label();if(dialog?.dataset.verifying){delete dialog.dataset.verifying;dialog.close();}
+   const wasRequired=required();state=await api('computers/self',{...info,status:lastStatus});window.terminalRegistration=state;label();if(dialog?.dataset.verifying){delete dialog.dataset.verifying;dialog.close();}
+   if(wasRequired&&!required()&&dialog?.open&&!changedForms.has(get('nativeTerminalForm')))dialog.close();
    if(required()){if(!dialog?.open)await show();return;}
 
   }catch(error){if(button)button.textContent='Terminal setup · Unable to verify';if(dialog?.open)get('nativeTerminalError').textContent=error.message;}

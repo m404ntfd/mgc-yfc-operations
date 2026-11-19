@@ -4,6 +4,7 @@ from test_ui_helpers import password_login_page
 import os
 from pathlib import Path
 from playwright.sync_api import sync_playwright,expect
+from test_ui_helpers import open_checkout
 from test_update_coordination import CoordinatorFixture
 import server
 
@@ -39,7 +40,7 @@ def run():
    expect(desk.locator('#posCart')).to_contain_text('Adult shirt')
    wait_for_pos_save(desk)
    desk.locator('#posCatalog button').filter(has_text='Table lamp').click();expect(desk.locator('#posCart')).to_contain_text('$20.31');desk.screenshot(path=str(out/'CoastYouth-Retail-DESK-Preview.png'))
-   desk.locator('#posPayNow').click();desk.locator('#checkoutTender').fill('25.00');desk.locator('#checkoutComplete').click();expect(desk.locator('#posReceipt')).to_contain_text('Change: $4.69')
+   open_checkout(desk);desk.locator('#checkoutTender').fill('25.00');desk.locator('#checkoutComplete').click();expect(desk.locator('#posReceipt')).to_contain_text('Change: $4.69')
    p.locator('#officeBack').click();office_setting(p,'history').click();p.locator('#posSaleList button').first.click();expect(p.locator('#officeReceipt')).to_be_visible();expect(p.locator('#posReceipt')).to_contain_text('Change: $4.69');p.emulate_media(media='print');expect(p.locator('#posReceipt')).to_be_visible();p.emulate_media(media='screen');p.locator('.receiptBack').click();office_setting(p,'roles').click()
    # A user-management role can open OFFICE without checkout permission.
    f.call('admin/permissions',dict(name='Employee',grants={'manage_users':True},can_create=False,see_requests=False))

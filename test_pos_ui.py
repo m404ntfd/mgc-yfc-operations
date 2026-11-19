@@ -3,6 +3,7 @@ from test_ui_helpers import password_login_page
 import os
 from pathlib import Path
 from playwright.sync_api import sync_playwright,expect
+from test_ui_helpers import open_checkout
 from test_update_coordination import CoordinatorFixture
 
 def run():
@@ -27,7 +28,7 @@ def run():
    def lose(route):
     route.fetch();route.abort();p.unroute('**/api/pos/cash',lose)
    p.route('**/api/pos/cash',lose)
-   p.locator('#posPayNow').click();p.locator('#checkoutTender').fill('10.00');p.locator('#checkoutComplete').click()
+   open_checkout(p);p.locator('#checkoutTender').fill('10.00');p.locator('#checkoutComplete').click()
    expect(p.locator('#checkoutComplete')).to_have_text('Retry / check this payment');p.locator('#checkoutComplete').click()
    expect(p.locator('#posReceipt')).to_contain_text('Change: $3.72')
    with __import__('server').connect() as c:assert c.execute('SELECT COUNT(*) FROM pos_sales').fetchone()[0]==1

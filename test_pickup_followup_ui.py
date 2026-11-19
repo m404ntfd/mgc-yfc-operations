@@ -2,6 +2,7 @@ from test_ui_helpers import office_setting
 import os,uuid,datetime as dt
 from pathlib import Path
 from playwright.sync_api import sync_playwright,expect
+from test_ui_helpers import open_checkout
 from test_update_coordination import CoordinatorFixture
 from test_ui_helpers import password_login_page
 
@@ -20,7 +21,7 @@ def run():
    page=b.new_page(viewport={'width':1440,'height':1050});page.on('pageerror',lambda e:errors.append(str(e)));page.on('dialog',lambda d:d.accept())
    origin=f'http://127.0.0.1:{f.port}';page.goto(origin+'/office');password_login_page(page).locator('#login [name=name]').fill('Admin');page.locator('#login [name=password]').fill('testpassword');page.locator('#login button').click();expect(page.locator('#officeHub')).to_be_visible()
    office_setting(page,'catalog').click();page.locator('#flowProductChoice').select_option(pid);expect(page.locator('[name=pickup_slip]')).to_be_checked();page.screenshot(path=str(out/'OFFICE-Pickup-Item.png'))
-   page.goto(origin+'/pos');page.locator('[data-pos-product="'+pid+'"]').click();page.locator('#posPayNow').click();page.locator('#checkoutTender').fill('140.00');page.locator('#checkoutComplete').click()
+   page.goto(origin+'/pos');page.locator('[data-pos-product="'+pid+'"]').click();open_checkout(page);page.locator('#checkoutTender').fill('140.00');page.locator('#checkoutComplete').click()
    expect(page.locator('#pickupYes')).to_be_visible();page.screenshot(path=str(out/'DESK-Paid-Pickup-Prompt.png'));page.locator('#pickupYes').click()
    d=page.locator('dialog[open]');d.locator('[name=customer]').fill('Sample Customer');d.locator('[name=contact]').fill('555-0100');d.locator('[name=location]').fill('Furniture bay A');d.locator('[name=due]').fill(today);d.locator('button.primary').click();expect(page.locator('#thriftPrintSlip')).to_be_enabled()
    page.evaluate("window.fulfillmentPrint=(title,html)=>{window.testPrinted=html;return true}");page.locator('#thriftPrintSlip').click();expect(page.locator('#pickupPrinted')).to_be_visible();assert 'SOLD' in page.evaluate('window.testPrinted');page.locator('#pickupPrinted').click();expect(page.locator('#pickupYes')).to_be_visible();page.locator('#pickupYes').click()

@@ -140,6 +140,7 @@ def computer_self(handler,c,u,d):
     computer_heartbeat(handler,app,d)
     row=c.execute('SELECT * FROM retail_computers WHERE id=?',(meta['id'],)).fetchone()
     terminal=c.execute('SELECT id,name,enabled FROM retail_terminals WHERE device=?',(device,)).fetchone() if app=='pos' else None
+    if terminal and devices_removed(c,terminal['id']):terminal=None
     result={'computer':{k:row[k] for k in ('id','name','hostname','role','registered','revision')},'terminal':stores_terminal_details(c,terminal)}
     return handler.send(computer_client_state(app,device,result))
 
@@ -150,6 +151,7 @@ def computer_link_terminal(c,ident,d,name,hostname):
     member=c.execute("SELECT 1 FROM retail_computer_apps WHERE computer=? AND app='pos' AND device=?",(ident,device)).fetchone()
     if not member:raise Problem('Refresh this computer before registering its checkout.',409)
     current=c.execute('SELECT * FROM retail_terminals WHERE device=?',(device,)).fetchone()
+    if current and devices_removed(c,current['id']):raise Problem('This checkout terminal was removed. Restore it under Removed terminals in OFFICE before registering it again.',409)
     if current:return
     target=d.get('terminal')
     if target:

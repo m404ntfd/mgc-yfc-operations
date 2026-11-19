@@ -1,26 +1,31 @@
-# CoastYouth Retail Round-Up Checkout — v0.60.0
+# CoastYouth Retail Terminal Management — v0.61.0
 
-When a cashier selects Pay now, DESK asks whether the customer would like to round up to the next dollar to support Youth for Christ. The cashier sees the exact donation and resulting total, with a prominent Yes, round up button on the left and No on the right. A coordinated customer-display overlay explains the ministry's mission on the Gulf Coast. Both screens follow the signed-in cashier's current theme, including glass palettes and dark themes.
+OFFICE can remove a terminal from active use without deleting any of its history. The voluntary Youth for Christ donation round-up prompt now defaults to on for settings that have not been configured.
 
-## Checkout behavior
+## Terminal removal and retained reporting
 
-- Uses the existing donation setting in OFFICE. Enable donation prompts there to use the new flow; saved settings are retained.
-- The donation is optional, added only after Yes, and recorded as a separate nontaxable receipt line. No leaves the sale unchanged and continues to payment. Closing the prompt returns to the sale.
-- Whole-dollar totals and sales that already contain a donation skip the round-up question. A declined question is not repeated for the unchanged sale.
-- Existing merchandise discounts, loyalty rewards and taxes are preserved. Retrying an interrupted save cannot duplicate the donation.
-- The customer overlay clears when the cashier answers, cancels, changes the sale or disconnects. Training notices remain visible.
-- Includes all previously published STORE OPS photo, checkout, credit/advance, printer, customer-display and update-policy improvements.
+- Open OFFICE → System → Checkout & printing → Terminals and select Remove beside the terminal. A confirmation explains what changes and which records are retained.
+- Removing a terminal disables its checkout and customer display and removes it from active terminal choices. Complete or cancel its open/saved sales and reconcile its open drawer first.
+- All sales, receipts, cash advances, drawer activity, audit logs and report totals remain available under their original recorded terminal names. Timecards, reservations, attachments, users, product prices and other operational records remain intact.
+- Authorized users can restore the terminal from Removed terminals with its previous store, layout, printer and device registration. Reconnecting or restarting the removed computer does not silently restore its checkout registration.
+- Permission checks, revision checks and safe request retries protect terminal changes. Removal and restoration are recorded in the audit log.
+
+## Donation round-up default
+
+- At Pay now, DESK offers voluntary rounding up to the next dollar for Youth for Christ. The cashier and customer-display prompt match the cashier's current theme.
+- Unconfigured donation settings default to on. An existing saved off preference remains off; it can be changed in OFFICE → Customers → Rewards & programs → Color tags, donations & loyalty → Donations.
+- A donation is added only after the customer agrees. No leaves the sale unchanged. Donations remain separate, nontaxable receipt lines. Cash-change rounding is a separate setting and is unchanged.
 
 ## Installation and data preservation
 
-Versions: Server / Computer Setup **0.60.0**, DESK **1.20.0**. OFFICE **1.16.2** and STORE OPS desktop **1.5.2** remain compatible and are included in Computer Setup without a separate feature-version change.
+Versions: Server / Computer Setup **0.61.0**, DESK **1.20.1**, OFFICE **1.17.0**. STORE OPS desktop **1.5.2** remains compatible and is included in Computer Setup.
 
-Verify a current server backup, let staff finish/save their work, and update the shared server first. The server supplies the new checkout and customer-display screens. Then update/reopen DESK. Install over the existing applications and retain their data folders, server addresses and terminal registrations.
+Verify a current server backup, let staff finish/save their work, and update the shared server first. The server supplies these screens and settings to the applications. Then update or reopen OFFICE and DESK. Install over the existing applications and retain their data folders and connection settings.
 
-This release adds only a separate table for short-lived customer-display prompts. Existing timecards, punches, breaks, reservations, sales, photos, users, prices, account balances and settings are not reset or rewritten. Publishing does not itself install or restart the live server; its configured update policy remains in effect. The web app remains available.
+The update adds a separate terminal-removal status table. It does not reset, delete or rewrite historical business data. Publishing does not itself install or restart the live server; its configured update policy remains in effect. The operations web app remains available.
 
 ## Verification
 
-Checks cover 20 rendered theme/mode combinations, touch targets at 1920 × 1080, customer-display pairing and terminal isolation, consent/cancellation, discounts and rewards, whole-dollar totals, receipt output and interrupted-save retries.
+Checks cover before/after reporting equality, preserved sales and original audit entries, open and held sale guards, open drawer guards, permissions, outdated requests, safe retries, terminal restoration, native registration status, and the default round-up prompt. Existing checkout workflows and 20 rendered theme/mode combinations are also checked.
 
-Publication requires the application suites, Windows installer checks, repeat-install preservation, and a populated **0.59.2** upgrade with backup and rollback verification. All checks use isolated sample records, never the live store database.
+Release checks include a populated upgrade from **0.60.0**, verified backup, repeated startup and rollback, with historical records, open punches and breaks, reservation attachments and original identifiers preserved. Windows installer checks cover install/reinstall behavior without changing existing data files.

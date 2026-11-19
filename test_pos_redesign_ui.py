@@ -2,6 +2,7 @@ from test_ui_helpers import password_login_page,select_saved_sale
 import os
 from pathlib import Path
 from playwright.sync_api import sync_playwright,expect
+from test_ui_helpers import open_checkout
 from test_update_coordination import CoordinatorFixture
 
 def run():
@@ -23,7 +24,7 @@ def run():
    expect(p.locator('#posCategories button')).to_have_count(7);select_saved_sale(p,cart['id']);expect(p.locator('#posCart')).to_contain_text('$29.93')
    p.locator('[data-category=Clothing]').click();expect(p.locator('#posCatalog button')).to_have_count(4)
    p.locator('#posSearch').fill('jeans');expect(p.locator('#posCatalog button')).to_have_count(1);p.locator('#posSearch').fill('');p.locator('[data-category=""]').click()
-   p.locator('#posPayNow').click();expect(p.locator('#checkoutTender')).to_be_focused()
+   open_checkout(p);expect(p.locator('#checkoutTender')).to_be_focused()
    p.locator('#checkoutTender').fill('40.00');expect(p.locator('#posCarts')).to_have_value(cart['id']);p.locator('#checkoutCancel').click();expect(p.locator('#posCarts')).to_have_value(cart['id'])
    expect(p.locator('#posManualShortcut')).to_be_hidden();expect(p.locator('#posNew')).to_be_hidden()
    p.evaluate("document.querySelector('.eyebrow').textContent='DESIGN PREVIEW · SAMPLE ITEMS';document.querySelector('#posStatus').textContent='Sale saved · Select an item to add it to the receipt.'")
@@ -36,7 +37,7 @@ def run():
      rect=p.locator(selector).bounding_box();assert rect and rect['y']+rect['height']<=height+1,(selector,rect,height)
    p.set_viewport_size({'width':1366,'height':768});p.screenshot(path=str(out/'POS-Redesign-Compact-Preview.png'))
    # Receipt printing must include the receipt and exclude register/catalog chrome.
-   p.locator('#posPayNow').click();p.locator('#checkoutTender').fill('40.00');p.locator('#checkoutComplete').click();expect(p.locator('#posReceipt')).to_contain_text('Change: $10.07')
+   open_checkout(p);p.locator('#checkoutTender').fill('40.00');p.locator('#checkoutComplete').click();expect(p.locator('#posReceipt')).to_contain_text('Change: $10.07')
    p.emulate_media(media='print');expect(p.locator('#posReceipt')).to_be_visible();expect(p.locator('#posCatalog')).to_be_hidden();p.emulate_media(media='screen')
    p.locator('#posCatalog button').first.click();expect(p.locator('#posReceipt')).to_be_hidden()
    p.locator('#posSalesShortcut').click();p.locator('[data-checkout-receipt]').first.click();expect(p.locator('#checkoutReceiptPreview')).to_contain_text('Change');p.locator('#checkoutReceiptClose').click();expect(p.locator('#posCart')).to_be_visible()

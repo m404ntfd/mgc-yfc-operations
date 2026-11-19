@@ -2,6 +2,7 @@
 import os,json,uuid
 from pathlib import Path
 from playwright.sync_api import sync_playwright,expect
+from test_ui_helpers import open_checkout
 from test_update_coordination import CoordinatorFixture
 import server
 from test_theme_contrast import AUDIT
@@ -39,7 +40,7 @@ try:
   warning=ctx.new_page();warning.add_init_script("sessionStorage.setItem('yfc-pos-selected:Admin',"+json.dumps(p.evaluate('posCurrent.id'))+");");warning.route('**/api/maintenance',lambda route:route.fulfill(json={'time':'2026-11-15T03:55:00-06:00'}));warning.goto(origin+'/pos?kiosk=1');expect(warning.locator('#serverMaintenanceBanner')).to_be_visible();expect(warning.locator('#posCart')).to_contain_text('Hardback book');warning.screenshot(path=str(out/'DESK-Overnight-Warning.png'));box=warning.locator('#posPayNow').bounding_box();assert box and box['y']+box['height']<=1080,box;warning.close()
   # Bottom-right payment button must remain reachable at 1080p with update notices.
   box=p.locator('#posPayNow').bounding_box();assert box and box['y']+box['height']<=1080,box
-  p.locator('#posPayNow').tap();p.locator('[data-tender=exact]').tap();p.locator('#checkoutComplete').tap();p.wait_for_function('()=>!receiptPrintBusy&&printCalls.length===1');assert p.evaluate('printCalls[0].automatic')
+  open_checkout(p,touch=True);p.locator('[data-tender=exact]').tap();p.locator('#checkoutComplete').tap();p.wait_for_function('()=>!receiptPrintBusy&&printCalls.length===1');assert p.evaluate('printCalls[0].automatic')
   with server.connect() as c:assert c.execute('SELECT count(*) FROM pos_sales').fetchone()[0]==0;assert c.execute('SELECT count(*) FROM retail_training_transactions').fetchone()[0]==1
   p.evaluate('posReceipt(posLastReceipt)');p.wait_for_timeout(200);assert p.evaluate('printCalls.length')==1
   p.locator('#deskCreditToggle').tap();expect(p.locator('#deskCreditChoices')).to_be_visible();p.locator('#posStatus').tap();expect(p.locator('#deskCreditChoices')).to_be_hidden()
@@ -50,7 +51,7 @@ try:
   with server.connect() as c:assert c.execute('SELECT count(*) FROM thrift_customers').fetchone()[0]==0
   guest.close()
   # A failed printer must retain the paid transaction and allow deliberate reprint.
-  p.evaluate('()=>{window.pywebview.api.receipt_print=async()=>({error:"Sample printer unavailable. Transaction saved."})}');product(0).tap();expect(p.locator('#posCart')).to_contain_text('Hardback book');settle();p.locator('#posPayNow').tap();p.locator('[data-tender=exact]').tap();p.locator('#checkoutComplete').tap();expect(p.locator('#posReceipt [role=alert]')).to_contain_text('Sample printer unavailable');p.wait_for_function('()=>!receiptPrintBusy')
+  p.evaluate('()=>{window.pywebview.api.receipt_print=async()=>({error:"Sample printer unavailable. Transaction saved."})}');product(0).tap();expect(p.locator('#posCart')).to_contain_text('Hardback book');settle();open_checkout(p,touch=True);p.locator('[data-tender=exact]').tap();p.locator('#checkoutComplete').tap();expect(p.locator('#posReceipt [role=alert]')).to_contain_text('Sample printer unavailable');p.wait_for_function('()=>!receiptPrintBusy')
   with server.connect() as c:assert c.execute('SELECT count(*) FROM pos_sales').fetchone()[0]==0;assert c.execute('SELECT count(*) FROM retail_training_transactions').fetchone()[0]==2
   p.evaluate('()=>{window.pywebview.api.receipt_print=async(p,s,a)=>{printCalls.push({printer:p,sale:s,automatic:a});return {ok:true}}}');p.locator('#posPrintLast').tap();p.wait_for_function('()=>!receiptPrintBusy&&printCalls.length===2');assert p.evaluate('printCalls[1].automatic') is False
 

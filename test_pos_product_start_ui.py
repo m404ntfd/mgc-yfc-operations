@@ -2,6 +2,7 @@
 import json, os, uuid
 from pathlib import Path
 from playwright.sync_api import sync_playwright, expect
+from test_ui_helpers import open_checkout
 from test_update_coordination import CoordinatorFixture
 from test_ui_helpers import password_login_page
 import server
@@ -78,7 +79,7 @@ try:
   e=fresh();e.evaluate('()=>posDo("new")');empty=current(e);before=len(carts())
   product(e,fixed).tap();expect(e.locator('#posCart')).to_contain_text('$6.41');assert current(e)==empty and len(carts())==before
   # The next product after payment starts a new sale, preserving the completed receipt.
-  p.locator('#posPayNow').tap();p.locator('#checkoutTender').fill('20.00');p.locator('#checkoutComplete').tap();expect(p.locator('#posReceipt')).to_contain_text('$12.82')
+  open_checkout(p,touch=True);p.locator('#checkoutTender').fill('20.00');p.locator('#checkoutComplete').tap();expect(p.locator('#posReceipt')).to_contain_text('$12.82')
   paid=rows('pos_sales');product(p,fixed).tap();expect(p.locator('#posCart')).to_be_visible();expect(p.locator('#posCart')).to_contain_text('$6.41');assert current(p)!=first and rows('pos_sales')==paid
   # A second event during automatic cart creation cannot create a second cart.
   r=fresh();held=[];r.route('**/api/pos/new',lambda route:held.append(route));before=len(carts())

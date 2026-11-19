@@ -2,6 +2,7 @@
 import os,json,uuid
 from pathlib import Path
 from playwright.sync_api import sync_playwright,expect
+from test_ui_helpers import open_checkout
 from test_update_coordination import CoordinatorFixture
 import server
 from test_theme_contrast import AUDIT
@@ -38,7 +39,7 @@ try:
   p.locator('#flowAdjust').tap();expect(p.locator('.checkoutAdjustmentSection')).to_have_count(2);p.screenshot(path=str(out/'DESK-Discounts-Surcharges.png'));p.locator('[data-checkout-preset=discounttransaction]').tap();expect(p.locator('#posCart')).to_contain_text('$13.97');settle()
   p.locator('#checkoutPayLater').tap();p.wait_for_function('()=>!posCurrent');p.locator('#posFindCart').tap();p.locator('[data-saved-sale]').first.tap();p.locator('#checkoutResume').tap();expect(p.locator('#posCart')).to_contain_text('Hardback book');settle()
   p.screenshot(path=str(out/'DESK-Register-1920.png'))
-  p.locator('#posPayNow').tap();expect(p.locator('#checkoutTender')).to_be_focused();assert p.locator('#checkoutDue').inner_text()=='$13.95'
+  open_checkout(p,touch=True);expect(p.locator('#checkoutTender')).to_be_focused();assert p.locator('#checkoutDue').inner_text()=='$13.95'
   for key in '2000':p.locator('[data-money-key="'+key+'"]').tap()
   expect(p.locator('#checkoutTender')).to_have_value('20.00');expect(p.locator('#checkoutChange')).to_have_text('$6.05');p.screenshot(path=str(out/'DESK-Payment-Cash.png'))
   for theme in ['harbor-blue','classic-gray','coastal-teal','midnight','coastyouth-red']+['glass-'+c for c in ['blue','teal','violet','rose','graphite']]:

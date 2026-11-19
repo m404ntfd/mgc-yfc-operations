@@ -4,6 +4,7 @@ from test_ui_helpers import password_login_page
 import os,uuid
 from pathlib import Path
 from playwright.sync_api import sync_playwright,expect
+from test_ui_helpers import open_checkout
 from test_update_coordination import CoordinatorFixture
 f=CoordinatorFixture()
 def post(path,**data):
@@ -26,7 +27,7 @@ try:
   d=ctx.new_page();d.on('pageerror',lambda e:errors.append(str(e)));d.goto(origin+'/pos');d.locator('#deskSettings summary').click();d.locator('#deskTerminalSettings').click();d.locator('dialog[open] [name=terminal]').select_option(label='Front counter 1');d.locator('dialog[open] button').filter(has_text='Register').click();expect(d.locator('#retailScreenBar')).to_contain_text('Front counter 1');expect(d.locator('#posCatalog button')).to_have_count(4)
   d.locator('#posCatalog button').filter(has_text='Adult shirt').click();expect(d.locator('#posCart')).to_contain_text('Adult shirt');wait_for_pos_save(d);d.locator('#retailNext').click();expect(d.locator('#posCatalog')).to_contain_text('Table lamp');d.locator('#posCatalog button').filter(has_text='Table lamp').click();expect(d.locator('#posCart')).to_contain_text('$20.31');assert d.locator('#posCatalog button').first.evaluate('(e)=>getComputedStyle(e).backgroundColor')=='rgb(40, 122, 135)';d.screenshot(path=str(out/'Retail-DESK-Configured-Preview.png'))
   p.locator('#officeBack').click();office_setting(p,'terminals').click();expect(p.locator('#retailEditor')).to_contain_text('Registered');p.screenshot(path=str(out/'Retail-OFFICE-Terminals-Preview.png'))
-  d.locator('#posPayNow').click();d.locator('#checkoutTender').fill('25.00');d.locator('#checkoutComplete').click();expect(d.locator('#posReceipt')).to_contain_text('Change: $4.69')
+  open_checkout(d);d.locator('#checkoutTender').fill('25.00');d.locator('#checkoutComplete').click();expect(d.locator('#posReceipt')).to_contain_text('Change: $4.69')
   p.locator('#officeBack').click();office_setting(p,'layouts').click();p.locator('#groupName').fill('Unsaved');p.locator('#officeBack').click();expect(p.locator('#layoutForm')).to_be_visible();p.locator('#layoutRevert').click();expect(p.locator('#groupName')).to_have_value('Clothing')
   for width in [1024,1366]:
    p.set_viewport_size({'width':width,'height':900});assert p.evaluate('document.documentElement.scrollWidth<=innerWidth')
