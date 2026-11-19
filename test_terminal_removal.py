@@ -98,6 +98,32 @@ class TerminalRemovalTests(unittest.TestCase):
   self.assertEqual(self.f.call('pos/retail-config')[1]['removed_terminals'],[])
   self.assertEqual(self.post('new',device=self.device)[0],200)
 
+ def test_admin_can_re_register_original_terminal_without_changing_history(self):
+  cart=self.add(self.cart(device=self.device),self.product(price=1237,taxable=False),device=self.device)
+  self.ok('cash',cart=cart['id'],revision=cart['revision'],tender=cart['total'],device=self.device)
+  before=self.terminal_row();self.assertEqual(self.remove()[0],200)
+  info=dict(app='pos',device=self.device,version='1.20.1',computer=dict(id='2'*32,hostname='RECOVERY-PC',macs=[],os='Windows test'))
+  state=self.f.call('computers/self',info)[1];removed=state['removed_terminal']
+  self.assertIsNone(state['terminal']);self.assertEqual(removed['id'],self.terminal);self.assertEqual(removed['store_id'],'thrift-mart')
+  with server.connect() as c:
+   tables=[r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'retail_computer%' AND name NOT IN ('audit','retail_terminals','retail_removed_terminals')")]
+   rows={name:[tuple(r) for r in c.execute('SELECT * FROM "'+name+'" ORDER BY rowid')] for name in tables}
+  reports={kind:self.report(kind) for kind in ['sales','transactions','products','cash','journal','tax-audit']}
+  args=dict(id='2'*32,revision=state['computer']['revision'],name='SAMPLE Front checkout',role='pos',app='pos',device=self.device,restore_terminal=removed['id'],terminal_revision=removed['revision'],confirm_restore=True)
+  staff=self.f.client('r');self.f.call('login',dict(name='Employee',password='testpassword'),staff)
+  self.assertEqual(self.f.call('computers/register',args,staff)[0],403)
+  for delta in [dict(confirm_restore=False),dict(terminal_revision=0),dict(restore_terminal='wrong'),dict(revision=99)]:
+   self.assertEqual(self.f.call('computers/register',dict(args,**delta))[0],409)
+  self.assertIsNone(self.f.call('computers/self',info)[1]['terminal']) # Heartbeats never reactivate it.
+  self.assertEqual(self.f.call('computers/register',args)[0],200)
+  self.assertEqual(self.terminal_row(),dict(before,revision=before['revision']+2,enabled=1))
+  restored=self.f.call('computers/self',info)[1];self.assertEqual(restored['terminal']['id'],self.terminal);self.assertIsNone(restored['removed_terminal'])
+  with server.connect() as c:
+   for name,expected in rows.items():self.assertEqual([tuple(r) for r in c.execute('SELECT * FROM "'+name+'" ORDER BY rowid')],expected,name)
+   self.assertEqual(c.execute('SELECT COUNT(*) FROM retail_terminals').fetchone()[0],1)
+   self.assertTrue(c.execute("SELECT 1 FROM audit WHERE action LIKE 'Re-registered removed terminal%' AND actor='Admin'").fetchone())
+  for kind,report in reports.items():self.assertEqual(self.report(kind),report,kind)
+
  def test_default_roundup_and_saved_off_setting_survive_repeated_startup(self):
   settings=self.f.call('pos/thrift-config')[1]['settings'];self.assertTrue(settings['donations']);self.assertEqual(settings['revision'],0)
   self.ok('thrift-settings',**dict(settings,donations=False))

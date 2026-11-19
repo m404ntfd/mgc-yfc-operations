@@ -707,6 +707,13 @@ dialog.catalogSetup{width:min(940px,calc(100vw - 48px));max-width:calc(100vw - 4
 .computerVersions{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
 .nativeTerminalSetup{width:min(580px,92vw);max-height:90vh;overflow:auto;box-sizing:border-box;padding:24px}
 .nativeTerminalSetup label{display:block;margin:14px 0}.nativeTerminalSetup input,.nativeTerminalSetup select{width:100%;box-sizing:border-box}
+.nativeTerminalSetup button,.nativeTerminalSetup input,.nativeTerminalSetup select{min-height:48px}
+:root body #nativeTerminalSetup button.primary{background:var(--glass-accent,var(--rt-accent,#245c8e))!important;color:#fff!important;border-color:var(--glass-accent,var(--rt-accent,#245c8e))!important}
+.nativeTerminalSetup .actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
+.nativeTerminalSetup .nativeRestoreConfirm{display:flex;align-items:center;gap:12px}
+.nativeTerminalSetup .nativeRestoreConfirm input{appearance:auto;width:24px;height:24px;min-height:24px;flex:none}
+.nativeRegistrationNotice{border:1px solid currentColor;border-radius:12px;padding:0 16px;margin:16px 0}
+#desktopConnectionSetup{margin-top:12px;min-height:48px}
 #nativeTerminalStatus{font-size:12px;white-space:normal;max-width:300px}
 #opsComputerUpdateBanner{background:#fff1c9;color:#3f310b;padding:14px;position:sticky;top:0;z-index:10000;border:2px solid #9c7320}
 }

@@ -78,6 +78,9 @@ class KioskBridge:
    raise ValueError(message) from e
  def terminal_info(self):
   info=self.kiosk_info();return {**info,'app':'pos'}
+ def desktop_reconnect(self,address,exit_code=''):
+  from desktop_connection import reconnect_desktop
+  with self._lock:return reconnect_desktop(self,'pos',address,exit_code)
  def focus_pin(self):
   """Give the foreground WebView keyboard focus after the sign-in page is ready."""
   try:

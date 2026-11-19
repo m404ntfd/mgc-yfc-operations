@@ -94,6 +94,20 @@ If a connection interrupts a payment, use Retry / check last action. Do not star
 second payment: the original request is retained to prevent duplicate deductions.
 New account tables are additive. No production records are bundled or modified.
 Unfinished sales remain saved carts, separate from customer/employee credit.
+
+DESK / OFFICE CONNECTION AND REGISTRATION RECOVERY
+If startup cannot reach the server, use Retry connection, Change server, or
+Register / configure PC. Registration opens after a successful connection;
+sign in with a server administrator account and confirm the computer name/role.
+Inside the application, Server address / reconnect is available from terminal
+setup and connection errors. Server connection / register PC is also available
+before sign-in. A verified address is saved for this application only. DESK
+still requires its existing admin exit passcode to change servers. Unsaved work
+blocks connection changes, and failed connection checks keep the previous address.
+If a checkout was removed, an administrator can explicitly re-register the
+original terminal from that PC. Its original store, settings, sales, receipts,
+reports and audit history are retained; no replacement terminal is created.
+These controls require the updated desktop client and server together.
 Credit-card processing remains reserved for future updates.
 
 SERVER SOFTWARE UPDATES

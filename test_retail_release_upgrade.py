@@ -36,6 +36,10 @@ with sqlite3.connect(database) as c:
     c.execute("INSERT INTO retail_terminals VALUES('fixture-terminal','Original checkout','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',NULL,1,7,'Original PC')")
     c.execute("INSERT INTO retail_computers VALUES('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb','Original PC','[]','Windows','Original registered name','pos',1,4,1000)")
     c.execute("INSERT INTO retail_computer_apps VALUES('pos','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb','1.12.1','Connected',1000,'192.0.2.1')")
+    if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='retail_removed_terminals'").fetchone():
+        c.execute("INSERT INTO retail_terminals VALUES('fixture-removed','Removed historical checkout','cccccccccccccccccccccccccccccccc',NULL,0,6,'Retired PC')")
+        c.execute("INSERT INTO retail_removed_terminals VALUES('fixture-removed','2026-11-01T10:00:00-06:00','Existing employee',1)")
+        c.execute("INSERT INTO audit VALUES('2026-11-01T10:00:00-06:00','Existing employee','Removed terminal Removed historical checkout','fixture-removed')")
 c.close()
 def snapshot(path):
     with sqlite3.connect(path) as c:

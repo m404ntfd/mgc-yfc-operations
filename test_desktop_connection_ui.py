@@ -34,7 +34,7 @@ def run_case(app, action):
         if action == 'close-pending':blocker.wait(5); return address
         if not stages:raise ValueError('The server did not respond. Check your internet or VPN connection, then retry.')
         return address
-    authorize = Mock(return_value=action != 'denied')
+    authorize = Mock(return_value=action != 'denied');register=Mock()
     def make_root():
         root = factory();root.withdraw()
         original_destroy = root.destroy
@@ -72,7 +72,7 @@ def run_case(app, action):
                         buttons['Close'].invoke();return
                     if action == 'retry':buttons['Retry connection'].invoke()
                     else:
-                        buttons['Change server'].invoke();entry.delete(0, 'end');entry.insert(0, new)
+                        buttons['Register / configure PC' if action=='register' else 'Change server'].invoke();entry.delete(0, 'end');entry.insert(0, new)
                         buttons['Retry connection'].invoke()
                 elif action == 'denied' and stages and 'not changed' in labels:
                     buttons['Close'].invoke();return
@@ -91,17 +91,18 @@ def run_case(app, action):
         before = settings.read_bytes();identity = store.data['device']
         save = Mock(side_effect=OSError('fixture settings are read-only') if action == 'save-failure' else lambda address: save_connection(settings, address))
         with patch.object(tk, 'Tk', side_effect=make_root), patch.object(connection, 'probe_server', side_effect=probe) as check:
-            result = connection.connect_before_open(app, old, save, authorize=authorize, configure=action == 'first')
+            result = connection.connect_before_open(app, old, save, authorize=authorize, configure=action == 'first',on_register=register)
             blocker.set()
         assert not errors, errors
         if action == 'retry':
             assert result == old and check.call_count == 2
             save.assert_not_called();authorize.assert_not_called()
-        elif action in ('change', 'first'):
+        elif action in ('change', 'first','register'):
             assert result == new
             assert json.loads(settings.read_text()) == {**json.loads(before), 'server': new}
             assert json.loads(settings.read_text())['device'] == identity
             assert authorize.call_count == save.call_count == 1
+            if action=='register':register.assert_called_once_with()
         else:
             assert result is None
             assert settings.read_bytes() == before
@@ -114,4 +115,5 @@ if __name__ == '__main__':
     for app in ('pos', 'office', 'ops'):
         run_case(app, 'retry');run_case(app, 'change');run_case(app, 'close');run_case(app, 'first')
     for action in ('denied', 'cancel-edit', 'save-failure', 'close-pending'):run_case('pos', action)
+    for app in ('pos','office'):run_case(app,'register')
     print('PASS connection dialogs: VPN retry, verified address change, canceled/denied/failed changes, close during check, and retained registration/settings')

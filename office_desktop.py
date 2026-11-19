@@ -9,7 +9,7 @@ def save_connection(settings,address):
  return url
 
 class OfficeBridge:
- def __init__(self,address=None):self._window=None;self._exiting=False;self._checking=False;self._address=address;self._kiosk=None;self._signed_in=False;self._sign_in_lock=threading.Lock()
+ def __init__(self,address=None):self._window=None;self._exiting=False;self._checking=False;self._address=address;self._kiosk=None;self._signed_in=False;self._sign_in_lock=threading.Lock();self._connection_lock=threading.Lock()
  def _trusted(self):
   from urllib.parse import urlsplit
   if not self._window:return False
@@ -43,13 +43,16 @@ class OfficeBridge:
   })();""")
  def terminal_info(self):
   info=self.office_update_info();return {**info,'app':'office'}
+ def desktop_reconnect(self,address,exit_code=''):
+  from desktop_connection import reconnect_desktop
+  with self._connection_lock:return reconnect_desktop(self,'office',address)
  def office_update_info(self):
   from pos_kiosk import KioskStore
   from pos_updater import PosUpdater
   if not self._trusted():return {'error':'Open the configured OFFICE server.'}
   if not hasattr(self,'_updates'):
    self._store=KioskStore(Path(os.environ.get('APPDATA',str(Path.home())))/'CoastYouthRetailOffice'/'settings.json')
-   self._updates=PosUpdater(self,app='office',current='1.17.0')
+   self._updates=PosUpdater(self,app='office',current='1.18.0')
   from computer_identity import computer_info
   return {'computer':computer_info(),'device':self._store.data['device'],'version':self._updates.version,'updater':True}
  def receipt_printers(self):
@@ -60,7 +63,7 @@ class OfficeBridge:
   return print_receipt(self,printer,sale,automatic)
  def desktop_update_status(self):
   from desktop_updates import bridge_update_status
-  return bridge_update_status(self,'office','1.17.0')
+  return bridge_update_status(self,'office','1.18.0')
  def office_update_status(self,ident=None):
   self.office_update_info();return self._updates.observe(ident)
  def office_install_update(self):
@@ -95,10 +98,10 @@ class OfficeBridge:
    self._checking=True;threading.Thread(target=self.office_close,daemon=True).start()
   return False
 
-def office_window(address,storage,hidden=False):
+def office_window(address,storage,hidden=False,setup=False):
  import webview
  bridge=OfficeBridge(server_url(address))
- window=webview.create_window('CoastYouth Retail OFFICE',server_url(address)+'/office',js_api=bridge,width=1366,height=900,min_size=(1000,700),hidden=hidden)
+ window=webview.create_window('CoastYouth Retail OFFICE',server_url(address)+'/office'+('?setup=1' if setup else ''),js_api=bridge,width=1366,height=900,min_size=(1000,700),hidden=hidden)
  bridge._window=window;window.events.closing+=bridge._closing
  window.events.loaded+=bridge._watch_sign_in
  return window
@@ -121,14 +124,15 @@ def main():
  from desktop_startup import startup_update,claim_instance
  if not claim_instance('office'):return
  directory=Path(os.environ.get('APPDATA',str(Path.home())))/'CoastYouthRetailOffice'
- if startup_update('office','1.17.0',directory/'settings.json'):return
+ if startup_update('office','1.18.0',directory/'settings.json'):return
  settings=directory/'settings.json';address='http://localhost:8080'
  if settings.exists():
   try:address=server_url(json.loads(settings.read_text(encoding='utf-8'))['server'])
   except Exception:pass
- address=connect_before_open('office',address,lambda candidate:save_connection(settings,candidate),configure=not settings.exists() or '--configure' in sys.argv)
+ registration=[not settings.exists() or '--configure' in sys.argv]
+ address=connect_before_open('office',address,lambda candidate:save_connection(settings,candidate),configure=registration[0],on_register=lambda:registration.__setitem__(0,True))
  if not address:return
- directory.mkdir(parents=True,exist_ok=True);office_window(address,directory)
+ directory.mkdir(parents=True,exist_ok=True);office_window(address,directory,setup=registration[0])
  webview.settings['OPEN_DEVTOOLS_IN_DEBUG']=False
  webview.start(gui='edgechromium',debug=False,private_mode=False,storage_path=str(directory/'webview'))
 

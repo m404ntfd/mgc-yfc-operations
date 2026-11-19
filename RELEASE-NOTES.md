@@ -1,31 +1,32 @@
-# CoastYouth Retail Terminal Management — v0.61.0
+# CoastYouth Retail Connection Recovery — v0.62.0
 
-OFFICE can remove a terminal from active use without deleting any of its history. The voluntary Youth for Christ donation round-up prompt now defaults to on for settings that have not been configured.
+OFFICE and DESK now give staff a way to recover when a server cannot be reached or a computer needs registration. Users can correct the server address, retry the connection, and sign in with an administrator account to register the PC.
 
-## Terminal removal and retained reporting
+## Connection and registration
 
-- Open OFFICE → System → Checkout & printing → Terminals and select Remove beside the terminal. A confirmation explains what changes and which records are retained.
-- Removing a terminal disables its checkout and customer display and removes it from active terminal choices. Complete or cancel its open/saved sales and reconcile its open drawer first.
-- All sales, receipts, cash advances, drawer activity, audit logs and report totals remain available under their original recorded terminal names. Timecards, reservations, attachments, users, product prices and other operational records remain intact.
-- Authorized users can restore the terminal from Removed terminals with its previous store, layout, printer and device registration. Reconnecting or restarting the removed computer does not silently restore its checkout registration.
-- Permission checks, revision checks and safe request retries protect terminal changes. Removal and restoration are recorded in the audit log.
+- The Windows startup connection screen offers Retry connection, Change server, and Register / configure PC.
+- Server connection / register PC is also available before sign-in. Terminal setup and registration-error screens include Server address / reconnect.
+- New addresses are verified before saving. Failed or canceled checks leave the previous connection in place. The app retains its computer identity, saved settings, and DESK exit protection.
+- Changing the DESK server still requires its existing admin exit passcode. Registration requires an administrator account on the connected server; regular staff cannot register a computer.
+- Unsaved work blocks connection changes. Passwords entered for administrator sign-in are sent through the existing sign-in process and are not stored in desktop connection settings.
 
-## Donation round-up default
+## Re-registering a removed checkout
 
-- At Pay now, DESK offers voluntary rounding up to the next dollar for Youth for Christ. The cashier and customer-display prompt match the cashier's current theme.
-- Unconfigured donation settings default to on. An existing saved off preference remains off; it can be changed in OFFICE → Customers → Rewards & programs → Color tags, donations & loyalty → Donations.
-- A donation is added only after the customer agrees. No leaves the sale unchanged. Donations remain separate, nontaxable receipt lines. Cash-change rounding is a separate setting and is unchanged.
+- An administrator can explicitly re-register the original terminal directly from its recovery screen.
+- The original terminal identifier, store, layout, printing settings and historical records are retained. A duplicate terminal is not created.
+- Re-registration is recorded in the audit log. Simply restarting or reconnecting a removed checkout does not reactivate it.
+- Sales, receipts, reports, timecards, reservations, attachments, customers, users, products and other business data remain intact.
 
-## Installation and data preservation
+## Installation
 
-Versions: Server / Computer Setup **0.61.0**, DESK **1.20.1**, OFFICE **1.17.0**. STORE OPS desktop **1.5.2** remains compatible and is included in Computer Setup.
+Versions: Server / Computer Setup **0.62.0**, DESK **1.21.0**, OFFICE **1.18.0**. The compatible STORE OPS desktop **1.5.2** is included in Computer Setup.
 
-Verify a current server backup, let staff finish/save their work, and update the shared server first. The server supplies these screens and settings to the applications. Then update or reopen OFFICE and DESK. Install over the existing applications and retain their data folders and connection settings.
+Verify a current server backup and let staff finish/save their work. **Update the shared server first, then update OFFICE and DESK.** The new recovery screens and native connection controls require the matching server and desktop updates together. Install over the existing applications and keep their data folders and connection settings.
 
-The update adds a separate terminal-removal status table. It does not reset, delete or rewrite historical business data. Publishing does not itself install or restart the live server; its configured update policy remains in effect. The operations web app remains available.
+Publishing does not itself install or restart the live server; its configured update policy remains in effect. The operations web app remains available.
 
 ## Verification
 
-Checks cover before/after reporting equality, preserved sales and original audit entries, open and held sale guards, open drawer guards, permissions, outdated requests, safe retries, terminal restoration, native registration status, and the default round-up prompt. Existing checkout workflows and 20 rendered theme/mode combinations are also checked.
+Release checks cover administrator permissions, failed and canceled connections, saved-address preservation, exit-passcode protection, unsaved work, re-registration without duplicate terminals, retained sales/report totals, and existing registration workflows in all three desktop applications.
 
-Release checks include a populated upgrade from **0.60.0**, verified backup, repeated startup and rollback, with historical records, open punches and breaks, reservation attachments and original identifiers preserved. Windows installer checks cover install/reinstall behavior without changing existing data files.
+The populated **0.61.0 → 0.62.0** upgrade check verifies backup, repeated startup and rollback. It checks original records and identifiers, historical and open timecards/breaks, reservation attachments, registered computers, and retained terminal-removal history. Windows installer checks verify installation and reinstallation without changing existing data and settings files.

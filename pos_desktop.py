@@ -7,12 +7,12 @@ from tkinter import messagebox
 from pos_updater import VERSION
 from desktop_connection import server_url, connect_before_open
 
-def open_pos(address,store):
+def open_pos(address,store,setup=False):
  import webview
  from pos_kiosk import KioskBridge
  address=server_url(address)
  bridge=KioskBridge(store,address)
- window=webview.create_window('CoastYouth Retail DESK',address+'/pos?kiosk=1',js_api=bridge,fullscreen=True,frameless=True,easy_drag=False,resizable=False,confirm_close=False)
+ window=webview.create_window('CoastYouth Retail DESK',address+'/pos?kiosk=1'+('&setup=1' if setup else ''),js_api=bridge,fullscreen=True,frameless=True,easy_drag=False,resizable=False,confirm_close=False)
  bridge._window=window
  window.events.closing+=bridge._closing
  window.events.loaded+=bridge._focus_pin_ready
@@ -76,9 +76,10 @@ def main():
   previous=dict(store.data);store.data['server']=candidate
   try:store.save()
   except Exception:store.data=previous;raise
- address=connect_before_open('pos',address,save,configure=not store.data.get('server') or '--configure' in sys.argv,authorize=authorize)
+ registration=[not store.data.get('server') or '--configure' in sys.argv]
+ address=connect_before_open('pos',address,save,configure=registration[0],authorize=authorize,on_register=lambda:registration.__setitem__(0,True))
  if not address:return
- try:open_pos(address,store)
+ try:open_pos(address,store,setup=registration[0])
  except Exception as e:
   root=tk.Tk();root.withdraw();messagebox.showerror('Unable to open DESK',str(e),parent=root);root.destroy()
 

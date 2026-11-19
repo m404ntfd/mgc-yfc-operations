@@ -81,7 +81,7 @@ def computer_post(handler,c,u,path,d):
         if d.get('revision')!=row['revision']:raise Problem('Computer registration changed. Refresh and try again.',409)
         name=str(d.get('name','')).strip();role=d.get('role','office')
         if not 1<=len(name)<=80 or role not in ('pos','office','server','other'):raise Problem('Enter a computer name and valid role.')
-        computer_link_terminal(c,ident,d,name,row['hostname'])
+        computer_link_terminal(c,ident,d,name,row['hostname'],u['name'])
         c.execute('UPDATE retail_computers SET name=?,role=?,registered=1,revision=revision+1 WHERE id=?',(name,role,ident))
         c.execute('INSERT INTO audit VALUES(?,?,?,?)',(dt.datetime.now().isoformat(timespec='seconds'),u['name'],'Registered or renamed computer',json.dumps({'id':ident,'name':name,'role':role})))
     elif path=='check':computer_check(True)
@@ -140,18 +140,26 @@ def computer_self(handler,c,u,d):
     computer_heartbeat(handler,app,d)
     row=c.execute('SELECT * FROM retail_computers WHERE id=?',(meta['id'],)).fetchone()
     terminal=c.execute('SELECT id,name,enabled FROM retail_terminals WHERE device=?',(device,)).fetchone() if app=='pos' else None
-    if terminal and devices_removed(c,terminal['id']):terminal=None
-    result={'computer':{k:row[k] for k in ('id','name','hostname','role','registered','revision')},'terminal':stores_terminal_details(c,terminal)}
+    removed=None
+    if terminal and devices_removed(c,terminal['id']):
+        removed=stores_terminal_details(c,c.execute('SELECT id,name,revision FROM retail_terminals WHERE id=?',(terminal['id'],)).fetchone());terminal=None
+    result={'computer':{k:row[k] for k in ('id','name','hostname','role','registered','revision')},'terminal':stores_terminal_details(c,terminal),'removed_terminal':removed}
     return handler.send(computer_client_state(app,device,result))
 
-def computer_link_terminal(c,ident,d,name,hostname):
+def computer_link_terminal(c,ident,d,name,hostname,actor):
     # First-time DESK enrollment may link an available terminal, never replace an existing binding.
     device=d.get('device')
     if d.get('app')!='pos' or not device:return
     member=c.execute("SELECT 1 FROM retail_computer_apps WHERE computer=? AND app='pos' AND device=?",(ident,device)).fetchone()
     if not member:raise Problem('Refresh this computer before registering its checkout.',409)
     current=c.execute('SELECT * FROM retail_terminals WHERE device=?',(device,)).fetchone()
-    if current and devices_removed(c,current['id']):raise Problem('This checkout terminal was removed. Restore it under Removed terminals in OFFICE before registering it again.',409)
+    if current and devices_removed(c,current['id']):
+        if d.get('restore_terminal')!=current['id'] or d.get('terminal_revision')!=current['revision'] or d.get('confirm_restore') is not True:raise Problem('This checkout terminal was removed. Sign in as an administrator and confirm re-registration of this terminal.',409)
+        # Reuse the original record and store assignment; historical reports keep
+        # their saved names, identifiers, prices and receipts.
+        c.execute('UPDATE retail_terminals SET enabled=1,revision=revision+1 WHERE id=?',(current['id'],))
+        c.execute('DELETE FROM retail_removed_terminals WHERE terminal=?',(current['id'],))
+        c.execute('INSERT INTO audit VALUES(?,?,?,?)',(dt.datetime.now().astimezone().isoformat(timespec='seconds'),actor,'Re-registered removed terminal '+current['name'],current['id']))
     if current:return
     target=d.get('terminal')
     if target:
