@@ -1,32 +1,22 @@
-# CoastYouth Retail Connection Recovery — v0.62.0
+# CoastYouth Retail Cash Entry — v0.62.1
 
-OFFICE and DESK now give staff a way to recover when a server cannot be reached or a computer needs registration. Users can correct the server address, retry the connection, and sign in with an administrator account to register the PC.
+After either **Yes, round up** or **No**, DESK puts the cursor in **Amount tendered** for cash payment. Cashiers can immediately type the amount received without clicking the field. Entering `2000` produces `$20.00`.
 
-## Connection and registration
-
-- The Windows startup connection screen offers Retry connection, Change server, and Register / configure PC.
-- Server connection / register PC is also available before sign-in. Terminal setup and registration-error screens include Server address / reconnect.
-- New addresses are verified before saving. Failed or canceled checks leave the previous connection in place. The app retains its computer identity, saved settings, and DESK exit protection.
-- Changing the DESK server still requires its existing admin exit passcode. Registration requires an administrator account on the connected server; regular staff cannot register a computer.
-- Unsaved work blocks connection changes. Passwords entered for administrator sign-in are sent through the existing sign-in process and are not stored in desktop connection settings.
-
-## Re-registering a removed checkout
-
-- An administrator can explicitly re-register the original terminal directly from its recovery screen.
-- The original terminal identifier, store, layout, printing settings and historical records are retained. A duplicate terminal is not created.
-- Re-registration is recorded in the audit log. Simply restarting or reconnecting a removed checkout does not reactivate it.
-- Sales, receipts, reports, timecards, reservations, attachments, customers, users, products and other business data remain intact.
+- The on-screen keypad returns focus to Amount tendered, so cashiers can alternate between touch and a physical keyboard.
+- Quick-tender buttons and switching back to Cash leave the amount selected for replacement by the next typed amount.
+- Tab navigation and selecting a store-credit account retain normal focus. Opening the payment window does not interrupt a cashier who has already started navigating or typing.
+- Donation choices, cash rounding, payment totals, store-credit calculations and receipt contents retain their existing behavior.
 
 ## Installation
 
-Versions: Server / Computer Setup **0.62.0**, DESK **1.21.0**, OFFICE **1.18.0**. The compatible STORE OPS desktop **1.5.2** is included in Computer Setup.
+Versions: Server / Computer Setup **0.62.1**, DESK **1.21.1**. The compatible OFFICE **1.18.0** and STORE OPS desktop **1.5.2** remain included without a version change.
 
-Verify a current server backup and let staff finish/save their work. **Update the shared server first, then update OFFICE and DESK.** The new recovery screens and native connection controls require the matching server and desktop updates together. Install over the existing applications and keep their data folders and connection settings.
+Verify a current server backup and let staff finish/save their work. **Update the shared server first, then restart DESK.** The shared server supplies the checkout screen; updating only the DESK launcher will not apply this screen change. The DESK installer is also provided for installations and reinstalls.
 
-Publishing does not itself install or restart the live server; its configured update policy remains in effect. The operations web app remains available.
+Install over the existing applications and retain their data folders and connection settings. This update changes no database schema or operational records. Sales, reports, timecards, reservations, users, settings and attachments remain in the existing shared data source. Publishing does not itself install or restart the live server; its configured update policy remains in effect.
 
 ## Verification
 
-Release checks cover administrator permissions, failed and canceled connections, saved-address preservation, exit-passcode protection, unsaved work, re-registration without duplicate terminals, retained sales/report totals, and existing registration workflows in all three desktop applications.
+Release checks cover immediate physical-keyboard entry after both round-up choices on mouse and touch displays, mixed keypad/keyboard entry, method switching, Tab navigation, completed cash payments and receipt totals. Existing checkout checks cover partial store credit, interrupted-payment recovery, receipts and exit behavior.
 
-The populated **0.61.0 → 0.62.0** upgrade check verifies backup, repeated startup and rollback. It checks original records and identifiers, historical and open timecards/breaks, reservation attachments, registered computers, and retained terminal-removal history. Windows installer checks verify installation and reinstallation without changing existing data and settings files.
+The populated **0.62.0 → 0.62.1** upgrade check verifies backup, repeated startup and rollback while retaining original records, identifiers, historical and open timecards/breaks, reservations and attachments. Windows installer checks verify installation and reinstallation without replacing existing data or settings.

@@ -1445,7 +1445,7 @@ async function givingOpen(){
 // BEGIN OFFICE STATUS BAR
 // Compact OFFICE application information; no extra server requests.
 if (officeMode) (() => {
- const webVersion = '0.62.0'; // replaced by prepare_web_assets.py
+ const webVersion = '0.62.1'; // replaced by prepare_web_assets.py
  const style = document.createElement('style');
  style.textContent = `
  .retailOffice{--office-status-height:26px}
@@ -1889,6 +1889,11 @@ async function checkoutPaymentForm(){
  const d=checkoutModal('Apply payment to transaction',`<div class="checkoutSplit"><section class="checkoutPaper">${checkoutPaper(cart)}</section><section class="checkoutControls"><form id="checkoutPaymentForm"><div class="checkoutAmounts"><label>Amount due<output id="checkoutDue"></output></label><label>Amount tendered<input id="checkoutTender" name="tender" type="text" inputmode="numeric" autocomplete="off" aria-label="Amount tendered"></label><label>Change<output id="checkoutChange"></output></label></div><p id="checkoutRounding"></p><div class="checkoutMethods"><button type="button" data-method="cash" aria-pressed="true">Cash</button><button type="button" data-method="card" disabled title="Credit cards will be added in future updates.">Credit Card<small>Coming in a future update</small></button><button type="button" data-method="credit" ${can('use_store_credit')?'':'disabled'} aria-pressed="false">Store credit</button></div><div id="checkoutCredit" hidden><label>Store-credit account<select id="checkoutAccount" name="account"><option value="">Choose an account</option></select></label><label>Store credit to use ($)<input id="checkoutCreditAmount" name="credit" type="number" step="0.01" min="0.01"></label><p id="checkoutCreditBalance"></p></div><div class="checkoutKeys"><div class="checkoutQuick"><strong>Quick tender</strong><button type="button" data-tender="exact">Exact amount</button>${[500,1000,2000,5000,10000].map(n=>`<button type="button" data-tender="${n}">${posMoney(n)}</button>`).join('')}</div><div class="checkoutNumberPad">${['1','2','3','4','5','6','7','8','9','clear','0','back'].map(k=>`<button type="button" data-money-key="${k}">${k==='clear'?'Clear':k==='back'?'⌫':k}</button>`).join('')}</div></div><p>Enter digits as cents: 1000 = $10.00.</p><div class="checkoutFooter"><button class="primary" id="checkoutComplete" type="submit">Okay · Complete payment</button><button type="button" id="checkoutCancel">Cancel</button></div></form></section></div>`);
  const form=d.querySelector('form'),tender=d.querySelector('#checkoutTender'),credit=d.querySelector('#checkoutCreditAmount'),account=d.querySelector('#checkoutAccount');
  let tenderDigits='';
+ function focusTender(select=false){
+  if(!d.isConnected||!d.open||busy||method==='card'||tender.disabled)return;
+  tender.focus({preventScroll:true});
+  if(select)tender.select();else tender.setSelectionRange(tender.value.length,tender.value.length);
+ }
  const creditCents=()=>method==='credit'&&credit.value?posCents(credit.value):0;
  const due=()=>checkoutCashDue(Math.max(0,cart.total-creditCents()),cart.settings);
  const touch=()=>changedForms.set(form,snapshot(form));
@@ -1908,10 +1913,10 @@ async function checkoutPaymentForm(){
  tender.onkeydown=e=>{if(e.ctrlKey||e.metaKey||e.key==='Tab'||e.key==='Enter')return;if(/^\d$/.test(e.key)||['Backspace','Delete','.'].includes(e.key)){e.preventDefault();if(tender.selectionStart===0&&tender.selectionEnd===tender.value.length)tenderDigits='';if(e.key!=='.')editDigit(e.key==='Backspace'?'back':e.key==='Delete'?'clear':e.key);}};
  tender.oninput=()=>{tenderDigits=tender.value.replace(/\D/g,'').slice(0,9);touch();render();};
  tender.onpaste=e=>{e.preventDefault();const v=e.clipboardData.getData('text').trim();if(/^\$?\d+(\.\d{1,2})?$/.test(v)){tenderDigits=String(v.includes('.')?Math.round(Number(v.replace('$',''))*100):Number(v.replace('$','')));touch();render();}};
- d.querySelectorAll('[data-money-key]').forEach(b=>b.onclick=()=>editDigit(b.dataset.moneyKey));
- d.querySelectorAll('[data-tender]').forEach(b=>b.onclick=()=>{tenderDigits=String(b.dataset.tender==='exact'?due():Number(b.dataset.tender));touch();render();});
+ d.querySelectorAll('[data-money-key]').forEach(b=>b.onclick=()=>{editDigit(b.dataset.moneyKey);focusTender();});
+ d.querySelectorAll('[data-tender]').forEach(b=>b.onclick=()=>{tenderDigits=String(b.dataset.tender==='exact'?due():Number(b.dataset.tender));touch();render();focusTender(true);});
  account.onchange=()=>{const a=accounts.find(x=>String(x.id)===account.value);credit.value=a?(Math.min(a.balance,cart.total)/100).toFixed(2):'';tenderDigits='';touch();render();};credit.oninput=()=>{touch();render();};
- d.querySelectorAll('[data-method]').forEach(b=>b.onclick=async()=>{if(b.dataset.method==='card'||busy)return;try{if(b.dataset.method==='credit'&&!accounts.length){accounts=(await api('pos/accounts')).accounts.filter(a=>a.active&&a.balance>0);account.innerHTML='<option value="">Choose an account</option>'+accounts.map(a=>`<option value="${a.id}">${esc(a.name)} · ${esc(a.code)} · ${posMoney(a.balance)}</option>`).join('');}method=b.dataset.method;touch();render();if(method==='cash')tender.focus();else account.focus();}catch(e){checkoutError(d,e);}});
+ d.querySelectorAll('[data-method]').forEach(b=>b.onclick=async()=>{if(b.dataset.method==='card'||busy)return;try{if(b.dataset.method==='credit'&&!accounts.length){accounts=(await api('pos/accounts')).accounts.filter(a=>a.active&&a.balance>0);account.innerHTML='<option value="">Choose an account</option>'+accounts.map(a=>`<option value="${a.id}">${esc(a.name)} · ${esc(a.code)} · ${posMoney(a.balance)}</option>`).join('');}method=b.dataset.method;touch();render();if(method==='cash')focusTender(true);else account.focus();}catch(e){checkoutError(d,e);}});
  const pending=()=>sessionStorage.getItem('retail-save:'+user.name+':'+(method==='credit'?'credit':'cash'));
  d.beforeDismiss=()=>{if(busy||pending()){checkoutError(d,Error('Payment status is unconfirmed. Retry this same payment to check it before closing.'));return false;}return true;};
  d.querySelector('#checkoutCancel').onclick=()=>d.querySelector('.flowClose').click();
@@ -1926,7 +1931,16 @@ async function checkoutPaymentForm(){
   completed=true;changedForms.delete(form);checkoutClose(d);posCurrent=null;sessionStorage.removeItem('yfc-pos-selected:'+user.name);$('posCash').reset();changedForms.delete($('posCash'));
   await posLoad();posReceipt(result.sale,true);posMessage('Payment recorded. Receipt #'+result.sale.id);await pickupAfterPayment(result.sale);
  }catch(error){checkoutError(d,error);}finally{busy=false;if(d.isConnected){render();const locked=!!pending();for(const el of form.querySelectorAll('input,select,button:not(#checkoutComplete)'))el.disabled=locked||el.dataset.method==='card'||(el.dataset.method==='credit'&&!can('use_store_credit'));if(locked)d.querySelector('#checkoutComplete').textContent='Retry / check this payment';}}};
- render();tender.focus();tender.select();
+ render();focusTender(true);
+ // Both round-up answers arrive here. Reassert focus after the dialog handoff,
+ // but never interrupt a cashier who has started typing, tabbing or choosing a method.
+ let opening=true;
+ const interacted=()=>opening=false;
+ d.addEventListener('pointerdown',interacted,{capture:true,once:true});
+ d.addEventListener('keydown',interacted,{capture:true,once:true});
+ requestAnimationFrame(()=>{
+  if(opening&&method==='cash'&&(document.activeElement===document.body||d.contains(document.activeElement)))focusTender(!tenderDigits);
+ });
 }
 
 async function checkoutFind(){

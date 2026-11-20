@@ -70,6 +70,7 @@ jobs:
       - run: python test_desk_focus_menu_ui.py
       - run: python test_checkout_ui.py
       - run: python test_checkout_roundup_ui.py
+      - run: python test_checkout_focus_ui.py
       - run: python test_terminal_removal_ui.py
       - run: python -m unittest test_checkout
       - run: python test_pos_kiosk_ui.py
@@ -158,7 +159,7 @@ jobs:
         shell: pwsh
         run: |
           $baseline = Join-Path $env:RUNNER_TEMP 'retail-upgrade-baseline'
-          git clone --depth 1 --branch v0.61.0 https://github.com/m404ntfd/mgc-yfc-operations.git $baseline
+          git clone --depth 1 --branch v0.62.0 https://github.com/m404ntfd/mgc-yfc-operations.git $baseline
           if ($LASTEXITCODE -ne 0) { throw 'Baseline checkout failed' }
           $env:RETAIL_BASE_SOURCE = $baseline
           python test_retail_release_upgrade.py
@@ -185,7 +186,7 @@ jobs:
           $p = Start-Process -WindowStyle Hidden -FilePath (Join-Path $officeInstall 'CoastYouth Retail OFFICE.exe') -ArgumentList '--smoke-test' -PassThru -Wait
           if ($p.ExitCode -ne 0) { throw 'Installed OFFICE failed' }
           $posInstall = Join-Path $env:RUNNER_TEMP 'PosInstallTest'
-          $p = Start-Process -WindowStyle Hidden -FilePath 'dist/MGC-YFC-POS-Setup-v1.21.0.exe' -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$posInstall") -PassThru -Wait
+          $p = Start-Process -WindowStyle Hidden -FilePath 'dist/MGC-YFC-POS-Setup-v1.21.1.exe' -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$posInstall") -PassThru -Wait
           if ($p.ExitCode -ne 0) { throw 'POS install failed' }
           $p = Start-Process -WindowStyle Hidden -FilePath (Join-Path $posInstall 'MGC YFC Point of Sale.exe') -ArgumentList '--smoke-test' -PassThru -Wait
           if ($p.ExitCode -ne 0) { throw 'Installed POS failed' }
@@ -248,4 +249,4 @@ jobs:
             echo "Release already exists; leaving published assets unchanged."
             exit 0
           fi
-          gh release create "$tag" dist/*.exe dist/Store-Dispatch-Update.zip --target "$GITHUB_SHA" --title "CoastYouth Retail Connection Recovery $tag" --notes-file RELEASE-NOTES.md
+          gh release create "$tag" dist/*.exe dist/Store-Dispatch-Update.zip --target "$GITHUB_SHA" --title "CoastYouth Retail Cash Entry $tag" --notes-file RELEASE-NOTES.md
