@@ -107,7 +107,7 @@ class KioskBridge:
   try:result=json.loads((self._store.path.parent/'pos-update-result.json').read_text(encoding='utf-8'))
   except (OSError,ValueError):pass
   from computer_identity import computer_info
-  return {'computer':computer_info(),'device':self._store.data['device'],'nonce':self._nonce,'configured':self._store.configured,'version':VERSION,'updater':True,'update_result':result}
+  return {'computer':computer_info(self._address),'device':self._store.data['device'],'nonce':self._nonce,'configured':self._store.configured,'version':VERSION,'updater':True,'update_result':result}
  def receipt_printers(self):
   from receipt_printer import printers
   return printers(self)

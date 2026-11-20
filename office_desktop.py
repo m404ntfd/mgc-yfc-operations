@@ -2,6 +2,7 @@
 import json,os,sys,threading
 from pathlib import Path
 from desktop_connection import server_url, connect_before_open
+VERSION='1.19.0'
 
 def save_connection(settings,address):
  from pos_kiosk import KioskStore
@@ -52,9 +53,9 @@ class OfficeBridge:
   if not self._trusted():return {'error':'Open the configured OFFICE server.'}
   if not hasattr(self,'_updates'):
    self._store=KioskStore(Path(os.environ.get('APPDATA',str(Path.home())))/'CoastYouthRetailOffice'/'settings.json')
-   self._updates=PosUpdater(self,app='office',current='1.18.0')
+   self._updates=PosUpdater(self,app='office',current=VERSION)
   from computer_identity import computer_info
-  return {'computer':computer_info(),'device':self._store.data['device'],'version':self._updates.version,'updater':True}
+  return {'computer':computer_info(self._address),'device':self._store.data['device'],'version':self._updates.version,'updater':True}
  def receipt_printers(self):
   from receipt_printer import printers
   return printers(self)
@@ -63,7 +64,7 @@ class OfficeBridge:
   return print_receipt(self,printer,sale,automatic)
  def desktop_update_status(self):
   from desktop_updates import bridge_update_status
-  return bridge_update_status(self,'office','1.18.0')
+  return bridge_update_status(self,'office',VERSION)
  def office_update_status(self,ident=None):
   self.office_update_info();return self._updates.observe(ident)
  def office_install_update(self):
@@ -124,7 +125,7 @@ def main():
  from desktop_startup import startup_update,claim_instance
  if not claim_instance('office'):return
  directory=Path(os.environ.get('APPDATA',str(Path.home())))/'CoastYouthRetailOffice'
- if startup_update('office','1.18.0',directory/'settings.json'):return
+ if startup_update('office',VERSION,directory/'settings.json'):return
  settings=directory/'settings.json';address='http://localhost:8080'
  if settings.exists():
   try:address=server_url(json.loads(settings.read_text(encoding='utf-8'))['server'])

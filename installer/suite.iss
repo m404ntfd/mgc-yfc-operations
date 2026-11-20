@@ -27,17 +27,21 @@ Name: "pos"; Description: "CoastYouth Retail DESK"; Types: pos
 Name: "ops"; Description: "CoastYouth Retail STORE OPS (all web operations)"; Types: office
 [Files]
 Source: "..\dist\MGC-YFC-Operations-Setup-v{#AppVersion}.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
-Source: "..\dist\CoastYouth-Retail-OFFICE-Setup-v1.18.0.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
-Source: "..\dist\MGC-YFC-POS-Setup-v1.21.1.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
-Source: "..\dist\CoastYouth-Retail-STORE-OPS-Setup-v1.5.2.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
+Source: "..\dist\CoastYouth-Retail-OFFICE-Setup-v1.19.0.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
+Source: "..\dist\MGC-YFC-POS-Setup-v1.22.0.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
+Source: "..\dist\CoastYouth-Retail-STORE-OPS-Setup-v1.6.0.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
+Source: "..\dist\CoastYouth Retail Computer Registration.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 [Code]
 var NamePage: TInputQueryWizardPage;
-    DiagnosticsDir, CompletedComponents: String;
+    DiagnosticsDir, CompletedComponents, CurrentComputerName, RegistrationName: String;
     SuiteExitCode: Integer;
 procedure InitializeWizard;
 begin
- NamePage := CreateInputQueryPage(wpSelectComponents, 'Computer identity', 'Optional Windows computer name', 'Leave blank to keep the current name. Renaming requires Windows administrator approval and takes effect after a later restart. Terminal registration is completed in DESK and managed in OFFICE. Renaming a server may require updating its address on client computers. Existing data is kept.');
- NamePage.Add('New computer name (letters, numbers, hyphens; maximum 15):', False);
+ CurrentComputerName := GetComputerNameString;
+ RegistrationName := CurrentComputerName;
+ NamePage := CreateInputQueryPage(wpSelectComponents, 'Computer identity', 'Current Windows computer: ' + CurrentComputerName, 'Keep the name below or enter a new one. After installing, setup will verify your Operations server connection and ask an administrator to register this PC in OFFICE. Renaming requires Windows approval and takes effect after a restart. Existing data is kept.');
+ NamePage.Add('Computer name (leave unchanged to keep it):', False);
+ NamePage.Values[0] := CurrentComputerName;
 end;
 function NextButtonClick(CurPageID: Integer): Boolean;
 var S: String; I: Integer; HasLetter: Boolean;
@@ -45,7 +49,8 @@ begin
  Result := True;
  if CurPageID <> NamePage.ID then Exit;
  S := Uppercase(Trim(NamePage.Values[0])); NamePage.Values[0] := S;
- if S = '' then Exit;
+ if S = '' then begin NamePage.Values[0] := CurrentComputerName; Exit; end;
+ if CompareText(S, CurrentComputerName) = 0 then Exit;
  HasLetter := False;
  Result := (Length(S) <= 15) and (S[1] <> '-') and (S[Length(S)] <> '-');
  for I := 1 to Length(S) do begin
@@ -133,19 +138,44 @@ begin
  SuiteExitCode := 0;
 end;
 procedure CurStepChanged(CurStep: TSetupStep);
-var Code: Integer; Params: String;
+var Code: Integer; Params, Apps, Role, DefaultServer: String;
 begin
  if CurStep <> ssPostInstall then Exit;
  if WizardIsComponentSelected('server') then RunInstaller('Operations server and controller', 'MGC-YFC-Operations-Setup-v{#AppVersion}.exe', '/NORESTART /TYPE=both', 'SERVERDIR');
- if WizardIsComponentSelected('office') then RunInstaller('CoastYouth Retail OFFICE', 'CoastYouth-Retail-OFFICE-Setup-v1.18.0.exe', '/NORESTART', 'OFFICEDIR');
- if WizardIsComponentSelected('pos') then RunInstaller('CoastYouth Retail DESK', 'MGC-YFC-POS-Setup-v1.21.1.exe', '/NORESTART', 'POSDIR');
- if WizardIsComponentSelected('ops') then RunInstaller('CoastYouth Retail STORE OPS', 'CoastYouth-Retail-STORE-OPS-Setup-v1.5.2.exe', '/NORESTART', 'OPSDIR');
- if NamePage.Values[0] <> '' then begin
+ if WizardIsComponentSelected('office') then RunInstaller('CoastYouth Retail OFFICE', 'CoastYouth-Retail-OFFICE-Setup-v1.19.0.exe', '/NORESTART /FROMCOMPUTERSETUP=1', 'OFFICEDIR');
+ if WizardIsComponentSelected('pos') then RunInstaller('CoastYouth Retail DESK', 'MGC-YFC-POS-Setup-v1.22.0.exe', '/NORESTART /FROMCOMPUTERSETUP=1', 'POSDIR');
+ if WizardIsComponentSelected('ops') then RunInstaller('CoastYouth Retail STORE OPS', 'CoastYouth-Retail-STORE-OPS-Setup-v1.6.0.exe', '/NORESTART /FROMCOMPUTERSETUP=1', 'OPSDIR');
+ if (NamePage.Values[0] <> '') and (CompareText(NamePage.Values[0], CurrentComputerName) <> 0) then begin
   Params := '-NoProfile -Command "try { Rename-Computer -NewName ''' + NamePage.Values[0] + ''' -Force -ErrorAction Stop; exit 0 } catch { exit 1 }"';
   if not ShellExec('runas', ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'), Params, '', SW_HIDE, ewWaitUntilTerminated, Code) then
    MsgBox('Computer rename was not approved. Applications remain installed using the existing computer name.', mbInformation, MB_OK)
   else if Code <> 0 then MsgBox('Windows could not rename this computer. Ask your Windows administrator. Applications remain installed.', mbError, MB_OK)
-  else MsgBox('Computer name changed. Restart Windows after finishing all work. Setup will not restart it automatically.', mbInformation, MB_OK);
+  else begin
+   RegistrationName := NamePage.Values[0];
+   MsgBox('Computer name change accepted. Setup will register this PC using the new name. Restart Windows after finishing all work; its stable computer identity and existing history are kept.', mbInformation, MB_OK);
+  end;
  end;
- if not WizardSilent then MsgBox('Connect DESK and OFFICE to the existing Operations server address. On each checkout, sign in as an administrator and choose Terminal setup. Use OFFICE > Terminals to assign its layout. Keep the existing server data folder and settings.', mbInformation, MB_OK);
+ // Unattended updates retain their saved connections and do not interrupt staff with a login.
+ // Interactive installs always enroll, whether the Windows name changed or stayed the same.
+ if not WizardSilent then begin
+  Apps := ''; Role := 'office'; DefaultServer := '';
+  if WizardIsComponentSelected('office') then Apps := 'office';
+  if WizardIsComponentSelected('pos') then begin
+   if Apps <> '' then Apps := Apps + ',';
+   Apps := Apps + 'pos'; Role := 'pos';
+  end;
+  if WizardIsComponentSelected('ops') then begin
+   if Apps <> '' then Apps := Apps + ',';
+   Apps := Apps + 'ops';
+  end;
+  if WizardIsComponentSelected('server') then begin Role := 'server'; DefaultServer := 'http://127.0.0.1:8080'; end;
+  Params := '--apps "' + Apps + '" --role ' + Role + ' --name "' + RegistrationName + '" --server "' + DefaultServer + '"';
+  SuiteExitCode := 1;
+  WizardForm.StatusLabel.Caption := 'Connect to Operations and register this computer...';
+  if not Exec(ExpandConstant('{tmp}\CoastYouth Retail Computer Registration.exe'), Params, '', SW_SHOW, ewWaitUntilTerminated, Code) then
+   RaiseException('Applications were installed, but computer registration could not start. Run Computer Setup again to finish. Existing data and settings are kept.');
+  if Code <> 0 then RaiseException('Applications were installed, but server connection and computer registration were not completed. Run Computer Setup again to finish. Existing data and settings are kept.');
+  SuiteExitCode := 0;
+  RecordComponent('Computer registration completed successfully.');
+ end;
 end;

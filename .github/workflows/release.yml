@@ -29,6 +29,7 @@ jobs:
       - run: python -m unittest test_checkout_roundup.RoundupTests
       - run: python -m unittest test_terminal_removal.TerminalRemovalTests
       - run: python -m unittest test_desktop_reconnect.ReconnectTests
+      - run: python -m unittest test_installer_registration
       - run: python -m unittest test_cash_advances test_thrift_retail.ThriftTests test_retail_stores.StoreTests test_pickup_followup.PickupTests test_hr_catalog test_catalog_hierarchy test_hr_browser test_hr_completion test_hr_formats test_hr_sources
       - run: python -m unittest test_schedule_redesign test_data_integrity test_update_connections test_update_coordination test_activity_controller test_pos test_pos_quantity.QuantityTests test_pos_credit test_pos_kiosk test_pos_updates
   mobile-browser:
@@ -124,6 +125,7 @@ jobs:
       - run: python prepare_web_assets.py
       - run: python test_startup_updates_ui.py
       - run: python test_desktop_connection_ui.py
+      - run: python test_computer_setup_ui.py
       - run: python test_pos_native.py
       - run: python test_retail_office_native.py
       - run: python test_store_ops_native.py
@@ -143,6 +145,12 @@ jobs:
       - run: python -m PyInstaller --noconfirm --clean --onefile --windowed --icon assets/desk.ico --name "MGC YFC Point of Sale" pos_desktop.py
       - run: python -m PyInstaller --noconfirm --clean --onefile --windowed --icon assets/office.ico --name "CoastYouth Retail OFFICE" office_desktop.py
       - run: python -m PyInstaller --noconfirm --clean --onefile --windowed --icon assets/store-ops.ico --name "CoastYouth Retail STORE OPS" store_ops_desktop.py
+      - run: python -m PyInstaller --noconfirm --clean --onefile --windowed --icon assets/remote.ico --name "CoastYouth Retail Computer Registration" computer_setup.py
+      - name: Verify computer registration wizard
+        shell: pwsh
+        run: |
+          $p = Start-Process -WindowStyle Hidden -FilePath 'dist/CoastYouth Retail Computer Registration.exe' -ArgumentList '--smoke-test' -PassThru -Wait
+          if ($p.ExitCode -ne 0) { throw 'Computer registration wizard startup failed' }
       - name: Verify OFFICE launcher
         shell: pwsh
         run: |
@@ -159,7 +167,7 @@ jobs:
         shell: pwsh
         run: |
           $baseline = Join-Path $env:RUNNER_TEMP 'retail-upgrade-baseline'
-          git clone --depth 1 --branch v0.62.0 https://github.com/m404ntfd/mgc-yfc-operations.git $baseline
+          git clone --depth 1 --branch v0.62.1 https://github.com/m404ntfd/mgc-yfc-operations.git $baseline
           if ($LASTEXITCODE -ne 0) { throw 'Baseline checkout failed' }
           $env:RETAIL_BASE_SOURCE = $baseline
           python test_retail_release_upgrade.py
@@ -181,12 +189,12 @@ jobs:
           & $compiler "/DAppVersion=$version" installer/suite.iss
           if ($LASTEXITCODE -ne 0) { throw "Computer setup installer build failed" }
           $officeInstall = Join-Path $env:RUNNER_TEMP 'OfficeInstallTest'
-          $p = Start-Process -WindowStyle Hidden -FilePath 'dist/CoastYouth-Retail-OFFICE-Setup-v1.18.0.exe' -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$officeInstall") -PassThru -Wait
+          $p = Start-Process -WindowStyle Hidden -FilePath 'dist/CoastYouth-Retail-OFFICE-Setup-v1.19.0.exe' -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$officeInstall") -PassThru -Wait
           if ($p.ExitCode -ne 0) { throw 'OFFICE install failed' }
           $p = Start-Process -WindowStyle Hidden -FilePath (Join-Path $officeInstall 'CoastYouth Retail OFFICE.exe') -ArgumentList '--smoke-test' -PassThru -Wait
           if ($p.ExitCode -ne 0) { throw 'Installed OFFICE failed' }
           $posInstall = Join-Path $env:RUNNER_TEMP 'PosInstallTest'
-          $p = Start-Process -WindowStyle Hidden -FilePath 'dist/MGC-YFC-POS-Setup-v1.21.1.exe' -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$posInstall") -PassThru -Wait
+          $p = Start-Process -WindowStyle Hidden -FilePath 'dist/MGC-YFC-POS-Setup-v1.22.0.exe' -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$posInstall") -PassThru -Wait
           if ($p.ExitCode -ne 0) { throw 'POS install failed' }
           $p = Start-Process -WindowStyle Hidden -FilePath (Join-Path $posInstall 'MGC YFC Point of Sale.exe') -ArgumentList '--smoke-test' -PassThru -Wait
           if ($p.ExitCode -ne 0) { throw 'Installed POS failed' }
@@ -249,4 +257,4 @@ jobs:
             echo "Release already exists; leaving published assets unchanged."
             exit 0
           fi
-          gh release create "$tag" dist/*.exe dist/Store-Dispatch-Update.zip --target "$GITHUB_SHA" --title "CoastYouth Retail Cash Entry $tag" --notes-file RELEASE-NOTES.md
+          gh release create "$tag" dist/*.exe dist/Store-Dispatch-Update.zip --target "$GITHUB_SHA" --title "CoastYouth Retail Computer Setup $tag" --notes-file RELEASE-NOTES.md

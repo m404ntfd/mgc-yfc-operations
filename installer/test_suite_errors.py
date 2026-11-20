@@ -20,8 +20,8 @@ def run():
     source = (root/'installer/suite.iss').read_text(encoding='utf-8')
     files = re.findall(r'Source: "\.\.\\dist\\([^"]+)"', source)
     files = [name.replace('{#AppVersion}', version) for name in files]
-    assert len(files) == 4
-    roles = ['server', 'office', 'desk', 'ops']
+    assert len(files) == 5
+    roles = ['server', 'office', 'desk', 'ops', 'registration']
     flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
 
     def compile_file(script):

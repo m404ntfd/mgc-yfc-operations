@@ -811,7 +811,7 @@ officeAction=async function(action){
  dialog.classList.add('computerDialog');let busy=false;
  function render(data){
   dialog.querySelector('#computerStatus').textContent=`${data.computers.filter(p=>p.registered).length} registered computers · Server ${data.server_version}`;
-  dialog.querySelector('#computerRows').innerHTML=data.computers.map(pc=>`<article class="computerCard"><h3>${esc(pc.name||pc.hostname)}</h3><p>${esc(pc.hostname)} · ${esc(pc.role)} · ${pc.registered?'Registered':'Awaiting registration'}</p>${registration?`<form data-register-computer="${pc.id}" data-revision="${pc.revision}"><label>Name<input name="name" maxlength="80" required value="${esc(pc.name||pc.hostname)}"></label><label>Role<select name="role">${[['pos','POS checkout'],['office','Office computer'],['server','Server computer'],['other','Other']].map(([v,t])=>`<option value="${v}" ${pc.role===v?'selected':''}>${t}</option>`).join('')}</select></label><button>Save registration</button></form>`:''}<div class="computerApps">${pc.apps.map(a=>`<div><strong>${a.app==='pos'?'DESK':a.app==='ops'?'STORE OPS desktop':'OFFICE'} · ${esc(a.version)}</strong><span>${a.online?'Connected':'Offline / closed'}</span><small>Last seen ${esc(new Date(a.seen*1000).toLocaleString())} · ${esc(a.ip)}</small></div>`).join('')}</div></article>`).join('')||'<p>No computers registered yet.</p>';
+  dialog.querySelector('#computerRows').innerHTML=data.computers.map(pc=>`<article class="computerCard"><h3>${esc(pc.name||pc.hostname)}</h3><p>${esc(pc.hostname)} · ${esc(pc.role)} · ${pc.registered?'Registered':'Awaiting registration'}</p>${pc.network?`<p>Server connection adapter: ${esc(pc.network.adapter)} · MAC ${esc(pc.network.mac)} · ${esc(pc.network.address)}</p>`:''}${registration?`<form data-register-computer="${pc.id}" data-revision="${pc.revision}"><label>Name<input name="name" maxlength="80" required value="${esc(pc.name||pc.hostname)}"></label><label>Role<select name="role">${[['pos','POS checkout'],['office','Office computer'],['server','Server computer'],['other','Other']].map(([v,t])=>`<option value="${v}" ${pc.role===v?'selected':''}>${t}</option>`).join('')}</select></label><button>Save registration</button></form>`:''}<div class="computerApps">${pc.apps.map(a=>`<div><strong>${a.app==='pos'?'DESK':a.app==='ops'?'STORE OPS desktop':'OFFICE'} · ${esc(a.version)}</strong><span>${a.online?'Connected':'Offline / closed'}</span><small>Last seen ${esc(new Date(a.seen*1000).toLocaleString())} · ${esc(a.ip)}</small></div>`).join('')}</div></article>`).join('')||'<p>No computers registered yet.</p>';
  }
  async function refresh(){if(busy||!dialog.open||[...changedForms.keys()].some(f=>dialog.contains(f)))return;busy=true;try{render(await api('computers/state'));}catch(e){dialog.querySelector('#computerStatus').textContent=e.message;}finally{busy=false;}}
  dialog.querySelector('#computerRefresh').onclick=refresh;
@@ -1445,7 +1445,7 @@ async function givingOpen(){
 // BEGIN OFFICE STATUS BAR
 // Compact OFFICE application information; no extra server requests.
 if (officeMode) (() => {
- const webVersion = '0.62.1'; // replaced by prepare_web_assets.py
+ const webVersion = '0.63.0'; // replaced by prepare_web_assets.py
  const style = document.createElement('style');
  style.textContent = `
  .retailOffice{--office-status-height:26px}

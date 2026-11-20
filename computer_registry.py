@@ -4,6 +4,9 @@ def init_computers(c):
     CREATE TABLE IF NOT EXISTS retail_computers(id TEXT PRIMARY KEY,hostname TEXT NOT NULL,macs TEXT NOT NULL,os TEXT NOT NULL,name TEXT NOT NULL DEFAULT '',role TEXT NOT NULL DEFAULT 'office',registered INTEGER NOT NULL DEFAULT 0,revision INTEGER NOT NULL DEFAULT 0,seen REAL NOT NULL);
     CREATE TABLE IF NOT EXISTS retail_computer_apps(app TEXT NOT NULL,device TEXT NOT NULL,computer TEXT NOT NULL REFERENCES retail_computers(id),version TEXT NOT NULL,status TEXT NOT NULL,seen REAL NOT NULL,ip TEXT NOT NULL,PRIMARY KEY(app,device));
     CREATE TABLE IF NOT EXISTS retail_computer_updates(app TEXT PRIMARY KEY,body TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS retail_computer_setup_requests(id TEXT PRIMARY KEY,actor TEXT NOT NULL,payload TEXT NOT NULL,result TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS retail_computer_identity_aliases(identity TEXT PRIMARY KEY,computer TEXT NOT NULL REFERENCES retail_computers(id));
+    CREATE TABLE IF NOT EXISTS retail_computer_network(computer TEXT PRIMARY KEY REFERENCES retail_computers(id),mac TEXT NOT NULL,adapter TEXT NOT NULL,address TEXT NOT NULL,seen REAL NOT NULL);
     ''')
 
 def computer_heartbeat(handler,app,d):
@@ -14,10 +17,12 @@ def computer_heartbeat(handler,app,d):
     if not isinstance(macs,list):raise Problem('Invalid computer information.')
     macs=sorted({str(m).upper() for m in macs[:16] if re.fullmatch(r'(?:[0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}',str(m))})
     with connect() as c:
+        ident=computer_canonical(c,ident)
         previous=c.execute('SELECT computer FROM retail_computer_apps WHERE app=? AND device=?',(app,d['device'])).fetchone()
         if previous and previous['computer']!=ident:raise Problem('This installation belongs to a different computer. Ask an administrator to review its registration.',409)
         c.execute('INSERT INTO retail_computers(id,hostname,macs,os,seen) VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET hostname=excluded.hostname,macs=excluded.macs,os=excluded.os,seen=excluded.seen',(ident,hostname,json.dumps(macs),system,time.time()))
         c.execute('INSERT INTO retail_computer_apps VALUES(?,?,?,?,?,?,?) ON CONFLICT(app,device) DO UPDATE SET version=excluded.version,status=excluded.status,seen=excluded.seen,ip=excluded.ip',(app,d['device'],ident,d['version'],str(d.get('status','Connected'))[:200],time.time(),handler.client_address[0]))
+        computer_save_network(c,ident,meta)
 
 def computer_campaign(c,app):
     return None  # Pending legacy rollouts are retained but no longer dispatched.
@@ -61,6 +66,8 @@ def computer_state(c,u,check=True):
     releases={'pos':POS_UPDATE_RELEASE,'office':OFFICE_UPDATE_RELEASE,'ops':OPS_UPDATE_RELEASE};computers=[]
     for row in c.execute('SELECT * FROM retail_computers ORDER BY registered DESC,name,hostname'):
         pc=dict(row);pc['macs']=json.loads(pc['macs']);pc['apps']=[]
+        network=c.execute('SELECT mac,adapter,address,seen FROM retail_computer_network WHERE computer=?',(pc['id'],)).fetchone()
+        pc['network']=dict(network) if network else None
         for record in c.execute('SELECT * FROM retail_computer_apps WHERE computer=? ORDER BY app,device',(pc['id'],)):
             item=dict(record);item['online']=time.time()-item['seen']<60;job=jobs.get(item['app']);latest=releases[item['app']].get('version')
             item['available']=bool(latest and updater.version(latest)>updater.version(item['version']))
@@ -74,6 +81,10 @@ def computer_state(c,u,check=True):
 def computer_post(handler,c,u,path,d):
     if path=='self':return computer_self(handler,c,u,d)
     computer_require_admin(u)
+    if path in ('setup-preview','setup-register'):
+        result=computer_setup(c,u,d,save=path=='setup-register',ip=handler.client_address[0])
+        c.commit()
+        return handler.send(result)
     if path in ('check','start','cancel'):raise Problem('Remote application updates have been retired. Restart each application to update.',409)
     if path=='register':
         ident=d.get('id');row=c.execute('SELECT * FROM retail_computers WHERE id=?',(ident,)).fetchone()
@@ -138,7 +149,7 @@ def computer_self(handler,c,u,d):
     meta=d.get('computer')
     if not isinstance(meta,dict) or not re.fullmatch('[a-f0-9]{32}',str(meta.get('id',''))):raise Problem('Windows computer identity is unavailable. Contact your administrator.')
     computer_heartbeat(handler,app,d)
-    row=c.execute('SELECT * FROM retail_computers WHERE id=?',(meta['id'],)).fetchone()
+    row=c.execute('SELECT * FROM retail_computers WHERE id=?',(computer_canonical(c,meta['id']),)).fetchone()
     terminal=c.execute('SELECT id,name,enabled FROM retail_terminals WHERE device=?',(device,)).fetchone() if app=='pos' else None
     removed=None
     if terminal and devices_removed(c,terminal['id']):
@@ -171,3 +182,82 @@ def computer_link_terminal(c,ident,d,name,hostname,actor):
         store=stores_profile(c,d.get('store_id') or 'thrift-mart')['id'];terminal_id=secrets.token_hex(16)
         c.execute('INSERT INTO retail_terminals VALUES(?,?,?,?,?,?,?)',(terminal_id,name,device,None,1,1,hostname))
         c.execute('INSERT INTO retail_terminal_stores VALUES(?,?)',(terminal_id,store))
+
+
+def computer_canonical(c,ident):
+    row=c.execute('SELECT computer FROM retail_computer_identity_aliases WHERE identity=?',(ident,)).fetchone()
+    return row['computer'] if row else ident
+
+
+def computer_active_mac(meta):
+    mac=str(meta.get('active_mac','')).upper()
+    return mac if re.fullmatch(r'(?:[0-9A-F]{2}:){5}[0-9A-F]{2}',mac) and mac!='00:00:00:00:00:00' and not int(mac[:2],16)&1 else ''
+
+
+def computer_save_network(c,ident,meta):
+    mac=computer_active_mac(meta)
+    if mac:c.execute('INSERT INTO retail_computer_network VALUES(?,?,?,?,?) ON CONFLICT(computer) DO UPDATE SET mac=excluded.mac,adapter=excluded.adapter,address=excluded.address,seen=excluded.seen',(ident,mac,str(meta.get('active_adapter',''))[:120],str(meta.get('local_address',''))[:80],time.time()))
+
+
+def computer_setup(c,u,d,save=False,ip=''):
+    """Atomic installer enrollment. Preview is read-only; retries reuse the same receipt."""
+    computer_require_admin(u)
+    meta=d.get('computer');apps=d.get('apps')
+    if not isinstance(meta,dict) or not re.fullmatch('[a-f0-9]{32}',str(meta.get('id',''))):raise Problem('Windows computer identity is unavailable.')
+    identity=meta['id'];ident=computer_canonical(c,identity);hostname=str(meta.get('hostname','')).strip()[:120]
+    if not hostname:raise Problem('The current Windows computer name is unavailable.')
+    macs=meta.get('macs',[])
+    if not isinstance(macs,list):raise Problem('Invalid computer information.')
+    macs=sorted({str(m).upper() for m in macs[:16] if re.fullmatch(r'(?:[0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}',str(m))})
+    if not isinstance(apps,list) or len(apps)>3:raise Problem('Choose the applications installed on this computer.')
+    kinds=set()
+    for app in apps:
+        if not isinstance(app,dict) or app.get('app') not in ('pos','office','ops') or app['app'] in kinds:raise Problem('Invalid application selection.')
+        kinds.add(app['app'])
+        if not re.fullmatch('[a-f0-9]{32}',str(app.get('device',''))) or not re.fullmatch(r'\d+\.\d+\.\d+',str(app.get('version',''))):raise Problem('Invalid desktop identity.')
+    row=c.execute('SELECT * FROM retail_computers WHERE id=?',(ident,)).fetchone()
+    matched=False;active_mac=computer_active_mac(meta)
+    if not row and active_mac:
+        candidates=[r for r in c.execute('SELECT pc.*,n.mac AS active_mac FROM retail_computers pc LEFT JOIN retail_computer_network n ON n.computer=pc.id') if active_mac==r['active_mac'] or active_mac in json.loads(r['macs'])]
+        if len(candidates)>1:raise Problem('This adapter matches more than one computer. Review those registrations in OFFICE before continuing; no duplicate has been created.',409)
+        if candidates:row=candidates[0];ident=row['id'];matched=True
+    for app in apps:
+        old=c.execute('SELECT computer FROM retail_computer_apps WHERE app=? AND device=?',(app['app'],app['device'])).fetchone()
+        if old and old['computer']!=ident:raise Problem('An installed application belongs to a different computer. Review its registration in OFFICE.',409)
+    pos=next((a for a in apps if a['app']=='pos'),None)
+    terminal=c.execute('SELECT * FROM retail_terminals WHERE device=?',(pos['device'],)).fetchone() if pos else None
+    def state():
+        pc=c.execute('SELECT * FROM retail_computers WHERE id=?',(ident,)).fetchone()
+        current=c.execute('SELECT * FROM retail_terminals WHERE device=?',(pos['device'],)).fetchone() if pos else None
+        removed=bool(current and devices_removed(c,current['id']))
+        return {'computer':{k:pc[k] for k in ('id','name','hostname','role','registered','revision')} if pc else {'id':ident,'name':'','hostname':hostname,'role':'','registered':0,'revision':0},
+                'terminal':stores_terminal_details(c,current),'removed_terminal':removed,
+                'stores':[{'id':s['id'],'name':s['name']} for s in stores_list(c)],
+                'available_terminals':[dict(t) for t in c.execute('SELECT id,name FROM retail_terminals WHERE device IS NULL AND enabled=1 ORDER BY name') if not devices_removed(c,t['id'])],
+                'installed_apps':[dict(a) for a in c.execute('SELECT app,device,version FROM retail_computer_apps WHERE computer=?',(ident,))],
+                'matched_by_mac':matched,'active_mac':active_mac,'active_adapter':str(meta.get('active_adapter',''))[:120],
+                'server_version':updater.current()}
+    if not save:return state()
+    request=d.get('request')
+    if not re.fullmatch('[a-f0-9]{32}',str(request)):raise Problem('A setup request identifier is required.')
+    payload=hashlib.sha256(json.dumps(d,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+    receipt=c.execute('SELECT * FROM retail_computer_setup_requests WHERE id=?',(request,)).fetchone()
+    if receipt:
+        if receipt['actor']!=u['name'] or receipt['payload']!=payload:raise Problem('This setup request has already been used for different choices.',409)
+        return json.loads(receipt['result'])
+    if type(d.get('revision')) is not int or d['revision']!=(row['revision'] if row else 0):raise Problem('Computer registration changed. Check the connection again before saving.',409)
+    if matched and (d.get('reuse_computer')!=ident or d.get('confirm_reuse') is not True):raise Problem('Confirm that the matching MAC address belongs to this existing computer before updating its registration.',409)
+    name=str(d.get('name','')).strip();role=d.get('role')
+    if not 1<=len(name)<=60 or role not in ('pos','office','server','other') or (not apps and role!='server'):raise Problem('Enter a registered computer name and valid role.')
+    # All work below participates in the caller's transaction, including checkout linking.
+    c.execute('INSERT INTO retail_computers(id,hostname,macs,os,seen) VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET hostname=excluded.hostname,macs=excluded.macs,os=excluded.os,seen=excluded.seen',(ident,hostname,json.dumps(macs),str(meta.get('os',''))[:160],time.time()))
+    if matched:c.execute('INSERT INTO retail_computer_identity_aliases VALUES(?,?)',(identity,ident))
+    computer_save_network(c,ident,meta)
+    for app in apps:
+        c.execute('INSERT INTO retail_computer_apps VALUES(?,?,?,?,?,?,?) ON CONFLICT(app,device) DO UPDATE SET version=excluded.version,status=excluded.status,seen=excluded.seen,ip=excluded.ip',(app['app'],app['device'],ident,app['version'],'Registered by setup',time.time(),ip))
+    if pos:computer_link_terminal(c,ident,{**d,'app':'pos','device':pos['device']},name,hostname,u['name'])
+    c.execute('UPDATE retail_computers SET name=?,role=?,registered=1,revision=revision+1 WHERE id=?',(name,role,ident))
+    c.execute('INSERT INTO audit VALUES(?,?,?,?)',(dt.datetime.now().astimezone().isoformat(timespec='seconds'),u['name'],'Registered computer from setup',json.dumps({'id':ident,'name':name,'role':role,'apps':sorted(kinds)})))
+    result=state();result['ok']=True
+    c.execute('INSERT INTO retail_computer_setup_requests VALUES(?,?,?,?)',(request,u['name'],payload,json.dumps(result)))
+    return result
