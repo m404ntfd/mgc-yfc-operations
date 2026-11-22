@@ -141,3 +141,27 @@ dialog.catalogSetup{width:min(940px,calc(100vw - 48px));max-width:calc(100vw - 4
 #cashAdvanceDialog{max-width:620px;width:calc(100% - 36px)}#cashAdvanceForm{display:grid;gap:14px}#cashAdvanceForm label{display:grid;gap:7px}#cashAdvanceForm :is(input,select,textarea){width:100%;box-sizing:border-box}.advanceContext{display:flex;flex-wrap:wrap;gap:8px 20px;padding:14px 0;border-bottom:1px solid var(--rt-border,#7897af)}.advanceReceipt .advanceAmount{display:block;font-size:32px;margin:18px 0}.advanceReceipt dl{display:grid;grid-template-columns:minmax(130px,1fr) 2fr;gap:12px}.advanceReceipt dd{margin:0;overflow-wrap:anywhere}.advanceReceipt dt{font-weight:600}
 
 :root .registerRail #cashAdvanceOpen{background:#24605e!important;color:#fff!important}#cashAdvanceForm textarea{font:inherit;padding:10px 12px;border:1px solid var(--rt-border,#7897af);border-radius:8px;background:var(--rt-surface,#fff);color:var(--rt-text,#19334a);resize:vertical}
+
+/* Request and appointment employee choices own a matching color pair. */
+@media screen {
+#employeeDropdown {
+ --employee-bg:#fff;--employee-text:#282b36;--employee-border:#ccd8d0;--employee-selected:#e8eff6;
+ background:var(--employee-bg);color:var(--employee-text);border-color:var(--employee-border);
+}
+#employeeDropdown :is(summary,label){color:inherit}
+#employeeDropdown summary:focus-visible{outline:3px solid currentColor;outline-offset:-4px;border-radius:7px}
+#employeeOptions label{border-radius:4px}
+#employeeOptions label:has(input:checked){background:var(--employee-selected)}
+:root[data-theme=dark] #employeeDropdown {
+ --employee-bg:#263547;--employee-text:#e6edf5;--employee-border:#52657c;--employee-selected:#34485f;
+}
+:root body[data-retail-theme^="glass-"] #employeeDropdown {
+ --employee-bg:#f8fbfd;--employee-text:#19334a;--employee-border:#7897af;--employee-selected:#d7e6f2;
+}
+#legacyAddress{color:inherit}
+:root[data-theme=dark] .totalNumbers strong{color:#ffadb5}
+:root[data-theme=dark] .totalNumbers span+span strong{color:#9ccaff}
+:root body[data-retail-theme^="glass-"] .totalNumbers strong{color:#19334a!important}
+:root body[data-retail-theme^="glass-"] #pendingOverview{background:#fffaf0;color:#624709;border-color:#b29a60}
+:root body[data-retail-theme^="glass-"] #pendingOverview :is(p,strong){color:inherit!important}
+}

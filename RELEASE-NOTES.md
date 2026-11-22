@@ -1,26 +1,19 @@
-# CoastYouth Retail Computer Setup — v0.63.0
+# CoastYouth Retail Readability — v0.63.1
 
-Computer Setup now verifies the Operations server connection and asks an administrator to register the computer in OFFICE after an interactive installation. It displays the current Windows computer name and keeps renaming optional. Registration runs whether the name changes or stays the same.
+The Assigned employees selector in request reviews and appointment editing now uses matching text and background colors in light, dark and glass themes. Dark mode no longer shows pale employee names on a white background.
 
-- Setup checks the administrator account and server compatibility before saving a connection. An unreachable server can be corrected and retried.
-- The network adapter actually used to reach the server supplies its MAC address. A persistent Windows computer identity also keeps the same registration when the PC name, IP address or adapter changes.
-- A matching MAC address with a different computer identity requires administrator confirmation before reusing the original registration. Ambiguous matches stop for review.
-- Reinstalling reuses existing computer and checkout records. A unique previous application identity can be recovered when local settings are absent. Existing local identities are retained.
-- Existing checkout store assignments and historical records stay in place. New checkouts can select a store or an available terminal. Removed checkouts require explicit confirmation to register again.
-- Interrupted registration and local connection saves can be retried without creating another registration. DESK exit protection and other saved settings are retained.
-- OFFICE shows the last reported server-connection adapter and MAC address. DESK, OFFICE and STORE OPS report this information when connected.
-- Silent application updates retain their saved connections without interrupting staff with an installer sign-in.
+- Selected employees have a clear row highlight, and keyboard focus on the selector remains visible.
+- Nearby request-screen totals, the older-address notice and the pending-request summary retain readable contrast in dark and glass themes.
+- Employee selections, saved assignments, permissions and request approval behavior are unchanged.
 
 ## Installation
 
-Versions: Server / Computer Setup **0.63.0**, DESK **1.22.0**, OFFICE **1.19.0**, STORE OPS desktop **1.6.0**.
+Server / Computer Setup **0.63.1** includes the compatible DESK **1.22.0**, OFFICE **1.19.0** and STORE OPS desktop **1.6.0** installers. Those desktop versions remain unchanged because the shared server supplies the updated screens.
 
-Verify a current server backup and let staff finish or save their work. **Update the shared Operations server first**, then use Computer Setup on the other computers. The new registration step requires the updated server. For a brand-new server, start it and create its administrator account before completing registration.
+Verify a current backup and let staff finish or save their work. **Update the Operations server first**, using the existing installation and data folders. Then refresh the web page or close and reopen the desktop application. Computer Setup retains the verified server connection and administrator registration workflow introduced in 0.63.0.
 
-Install over the existing applications and retain all data folders. This release adds registration bookkeeping tables; it does not reset or replace sales, timecards, reservations, reports, users, store settings or attachments. Publishing does not itself install or restart the live server; its configured update policy remains in effect.
+This release changes screen styling and release metadata; it makes no database schema or operational-record changes. Sales, timecards, reservations, reports, users, settings, attachments and computer registrations remain in the existing shared data source. Publishing does not itself install or restart the live server; its configured update policy remains in effect.
 
 ## Verification
 
-Checks cover administrator access, connection failures, repeated installs, PC and adapter changes, confirmed and ambiguous MAC matches, original checkout identity and store assignment, retry after a lost response or failed local save, and native wizard startup.
-
-The populated **0.62.1 → 0.63.0** upgrade check verifies backups, repeated startup and rollback while retaining original rows, historical and open timecards and breaks, sales, accounts, reservations and attachments. Windows installer checks verify installation and reinstallation without replacing server data or saved client settings.
+The rendered contrast check covers **268 theme/layout combinations**, including request review with a selected employee on desktop and mobile. The populated **0.63.0 → 0.63.1** release check verifies upgrade, backup, repeated startup and rollback while retaining original rows, open and historical timecards and breaks, sales, accounts, registrations, reservations and attachments. Windows installer checks verify repeated installation without replacing existing data or client settings.

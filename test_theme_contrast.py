@@ -22,6 +22,10 @@ def run():
  f=CoordinatorFixture();out=Path('output/preview/theme-audit');out.mkdir(parents=True,exist_ok=True);results=[]
  code,result=f.call('pos/catalog-options-save',dict(request='d'*32,revision=0,categories=['Clothing'],printing=[],taxes=[]));assert code==200,result
  code,result=f.call('pos/product',dict(request='e'*32,name='Sample shirt',price=599,category='Clothing',taxable=True));assert code==200,result
+ assert f.call('vehicle',{'name':'Sample truck'})[0]==200
+ assert f.call('admin/permissions',{'name':'Employee','can_create':False,'see_requests':True})[0]==200
+ employee=f.client('e');assert f.call('login',{'name':'Employee','password':'testpassword'},employee)[0]==200
+ assert f.call('save',{'customer':'Sample pickup request','type':'Pickup','status':'Requested'},employee)[0]==200
  themes=['harbor-blue','classic-gray','coastal-teal','midnight','coastyouth-red']+['glass-'+c for c in ['blue','teal','violet','rose','graphite']]
  try:
   with sync_playwright() as pw:
@@ -36,12 +40,16 @@ def run():
     else:p.locator('#posPanel').wait_for()
     states = [('home','')]
     if app=='ops':states += [('views',"document.querySelector('.headerMenu').open=false;document.querySelector('#storeMenuButton').click()"),('settings',"document.querySelector('#storeMenu').hidden=true;tab('settings')"),('time',"workOpen(false,'clock');document.querySelectorAll('.workDropdown').forEach(e=>e.open=true)"),('communications',"commOpen()")]
+    if app=='ops':states += [('request-review',"storeSection('dispatch');openJob(state.requests[0].id);document.querySelector('#employeeDropdown').open=true")]
     if app=='office':states += [('catalog',"officeAction('catalog')"),('users',"officeAction('users')")]
     if app=='pos':states += [('manual',"document.querySelectorAll('details').forEach(e=>{if(e.textContent.includes('Manual item'))e.open=true})")]
     for state,script in states:
      if script:
       p.evaluate("document.querySelectorAll('dialog[open]').forEach(d=>d.close())")
       p.evaluate(script);p.wait_for_timeout(400)
+     if state=='request-review':
+      p.locator('#employeeOptions input[value=Employee]').check()
+      assert p.locator('#employeeSummary').inner_text()=='Employee'
      for theme in (['default']+themes[5:] if app=='ops' else themes):
       for mode in ['light','dark']:
        p.evaluate('([theme,mode])=>{document.body.dataset.retailTheme=theme;document.documentElement.dataset.theme=mode}',[theme,mode]);p.wait_for_timeout(80)
@@ -52,6 +60,7 @@ def run():
         results.append(dict(app=app,width=width,state='menu-hover-focus',theme=theme,mode=mode,issues=p.evaluate(AUDIT)))
         target.evaluate('(e)=>e.blur()');p.mouse.move(0,0)
        if theme=='glass-graphite' and mode=='dark':p.screenshot(path=str(out/(app+'-'+str(width)+'-'+state+'-glass-dark.png')))
+       if state=='request-review' and theme=='default' and mode=='dark':p.locator('.employeeField').screenshot(path=str(out/(app+'-'+str(width)+'-employee-selector-dark.png')))
     context.close()
    browser.close()
  finally:f.close()
