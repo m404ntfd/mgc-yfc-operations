@@ -44,7 +44,29 @@ async function loadTerminalDevices(){
  if(officeMode||!user)return;
  try{receiptTerminalOptions=await api('pos/terminal-options?device='+encodeURIComponent(await retailDevice()));customerPairToken=receiptTerminalOptions.display_path.split('#')[1]||null;}catch{receiptTerminalOptions=null;customerPairToken=null;}
 }
-let receiptPrintBusy=false,receiptPrintQueue=Promise.resolve();
+let receiptPrintBusy=false,receiptPrintQueue=Promise.resolve(),receiptResetTimer=null,receiptAutoGeneration=0,receiptFollowupBusy=0;
+function receiptNoPrinter(sale){
+ return new Promise(resolve=>{
+  const d=checkoutModal('No receipt printer configured',`<p id="receiptNoPrinterMessage">Receipt #${esc(sale.id)} is saved. No receipt printer is configured for this register. Select Okay to continue to the next sale without a paper receipt.</p><p>A manager can assign a printer in OFFICE under Terminals → Printer &amp; customer display. This receipt remains available in Print receipts.</p><button type="button" class="primary" id="receiptNoPrinterOkay">Okay</button>`);
+  d.querySelector('.flowClose').hidden=true;d.beforeDismiss=()=>false;
+  d.querySelector('#receiptNoPrinterOkay').onclick=()=>{checkoutClose(d);resolve({status:'skipped'});};
+ });
+}
+async function startReceiptReset(sale,generation){
+ let seconds=5;
+ try{const {settings}=await checkoutQuery('checkout-settings');seconds=settings.receipt_reset_seconds??5;}catch{posMessage('Receipt saved. Using the default 5-second display time because receipt settings could not be loaded.');}
+ if(generation!==receiptAutoGeneration||posLastReceipt?.id!==sale.id||$('posReceipt').hidden||posCurrent)return;
+ const owner=user?.name,content=$('posReceipt').firstElementChild,notice=document.createElement('p');notice.id='receiptResetNotice';notice.setAttribute('role','status');$('posReceipt').append(notice);
+ let remaining=Math.max(1,Math.min(300,seconds))*1000,last=performance.now();
+ const update=()=>{
+  const now=performance.now(),elapsed=now-last;last=now;
+  if(generation!==receiptAutoGeneration||user?.name!==owner||$('posRoot').hidden||posCurrent||$('posReceipt').hidden||$('posReceipt').firstElementChild!==content){clearInterval(receiptResetTimer);notice.remove();return;}
+  if(document.hidden||document.querySelector('dialog[open]')||unfinished()||receiptPrintBusy||receiptFollowupBusy){notice.textContent='Next sale countdown paused while you finish the open task.';return;}
+  remaining-=elapsed;notice.textContent='Ready for the next sale in '+Math.max(0,Math.ceil(remaining/1000))+' seconds.';
+  if(remaining<=0){clearInterval(receiptResetTimer);$('posReceipt').hidden=true;$('posReceipt').replaceChildren();$('posPrint').hidden=true;$('posCart').hidden=false;posRender();customerDisplaySync();posMessage('Ready for the next sale. Select a product.');}
+ };
+ notice.textContent='Ready for the next sale in '+seconds+' seconds.';receiptResetTimer=setInterval(update,250);
+}
 function deskPrintReceipt(sale,automatic=false){
  if(!sale)return Promise.resolve();
  const work=()=>performReceiptPrint(sale,automatic),result=receiptPrintQueue.then(work,work);
@@ -52,24 +74,26 @@ function deskPrintReceipt(sale,automatic=false){
 }
 async function performReceiptPrint(sale,automatic=false){
  const key='receipt-auto:'+location.origin+':'+sale.id;
- if(automatic&&localStorage.getItem(key))return;
+ if(automatic&&localStorage.getItem(key))return {status:['printed','skipped'].includes(localStorage.getItem(key))?'printed':'failed'};
  const native=window.pywebview?.api,printer=receiptTerminalOptions?.printer;
- if(automatic&&(!native?.receipt_print||!printer)){posMessage('Transaction saved. Select a receipt printer in Terminal setup to enable automatic printing.');return;}
+ if(automatic&&(!native?.receipt_print||!printer)){receiptPrintBusy=true;try{const result=await receiptNoPrinter(sale);localStorage.setItem(key,'skipped');return result;}finally{receiptPrintBusy=false;}}
  receiptPrintBusy=true;
  const paper=document.createElement('section');paper.id='automaticReceiptPaper';paper.dataset.sale=String(sale.id);paper.innerHTML=checkoutPaper(sale,true);document.body.append(paper);document.body.classList.add('receiptDirectPrint');
  try{
   if(automatic)localStorage.setItem(key,'requested');
   if(native?.receipt_print&&printer){const result=await native.receipt_print(printer,String(sale.id),automatic);if(result.error)throw Error(result.error);if(automatic)localStorage.setItem(key,'printed');}
   else window.print();
- }catch(e){posMessage(e.message);const message=document.createElement('p');message.setAttribute('role','alert');message.textContent=e.message+' Use Print receipts to try again.';$('posReceipt').append(message);}
+  return {status:'printed'};
+ }catch(e){posMessage(e.message);const message=document.createElement('p');message.setAttribute('role','alert');message.textContent=e.message+' Use Print receipts to try again.';$('posReceipt').append(message);return {status:'failed'};}
  finally{document.body.classList.remove('receiptDirectPrint');paper.remove();receiptPrintBusy=false;}
 }
 if(!officeMode){
+ const followup=pickupAfterPayment;pickupAfterPayment=async function(...args){receiptFollowupBusy++;try{await receiptPrintQueue;return await followup(...args);}finally{receiptFollowupBusy--;}};
  $('deskTerminalSettings').onclick=()=>{$('deskSettings').open=false;terminalDeviceOptions();};
  customerPairButton.onclick=async()=>{await loadTerminalDevices();if(!customerPairToken){if(can('manage_pos'))return terminalDeviceOptions();return posMessage('Ask a manager to assign this register’s customer display in Terminal setup.');}const url=new URL(receiptTerminalOptions.display_path,location.origin).href;flowModal('Customer display · '+receiptTerminalOptions.terminal.name,`<p>This link stays assigned to this register and uses ${esc(receiptTerminalOptions.terminal.store_name)} branding. Open it on the customer monitor in a browser profile without a staff login.</p><label>Assigned link<input readonly value="${esc(url)}"></label><a href="${esc(url)}" target="_blank" rel="noopener">Open customer display</a>`);await customerDisplaySync();};
  customerDisplaySync=async function(){if(!customerPairToken||customerDisplayBusy||!user)return;customerDisplayBusy=true;try{await api('pos/display-state',{device:await retailDevice(),token:customerPairToken,roundup:checkoutRoundupDisplay(),cart:$('posReceipt').hidden?posCurrent?.id||null:null,sale:!$('posReceipt').hidden?posLastReceipt?.id||null:null});}catch(e){if(e.status===404)customerPairToken=null;}finally{customerDisplayBusy=false;}};
  const load=posLoad;posLoad=async function(...args){await load(...args);await loadTerminalDevices();};
- const receipt=posReceipt;posReceipt=function(sale,automatic=false){receipt(sale);if(automatic)deskPrintReceipt(sale,true);};
+ const receipt=posReceipt;posReceipt=function(sale,automatic=false){clearInterval(receiptResetTimer);const generation=++receiptAutoGeneration;receipt(sale);deskTrainingRender();if(automatic)deskPrintReceipt(sale,true).then(result=>{if(result?.status!=='failed')return startReceiptReset(sale,generation);}).catch(e=>posMessage('Receipt saved. '+e.message));};
  $('posPrintLast').onclick=()=>deskPrintReceipt(posLastReceipt);$('posPrint').onclick=()=>deskPrintReceipt(posLastReceipt);
 }
 async function customerCreateTouch(){

@@ -31,8 +31,11 @@ def wait_for_pos_save(page):
  raise AssertionError('The checkout action did not finish saving and refreshing.')
 
 
-def open_checkout(page,touch=False):
+def open_checkout(page,touch=False,acknowledge_missing_printer=True):
  """Payment-focused checks decline the default voluntary donation prompt."""
+ if acknowledge_missing_printer and not getattr(page,'_receipt_notice_handler',False):
+  page.add_locator_handler(page.locator('#receiptNoPrinterOkay'),lambda button:button.click())
+  page._receipt_notice_handler=True
  button=page.locator('#posPayNow')
  button.tap() if touch else button.click()
  page.locator('.roundupDialog,#checkoutPaymentForm').first.wait_for(state='visible')

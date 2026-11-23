@@ -226,10 +226,10 @@ function creditError(e){posMessage(e.message);}
 function creditRenderList(){const q=$('creditSearch').value.toLowerCase(),kind=$('creditFilter').value;$('creditList').innerHTML=creditAccounts.filter(a=>(!kind||kind===a.kind)&&(a.name+' '+a.code+' '+a.contact).toLowerCase().includes(q)).map(a=>`<button type="button" data-credit="${a.id}" aria-pressed="${creditSelected?.id===a.id}"><span>${esc(a.name)}<small>${esc(a.code)} · ${a.kind}</small></span><strong>${posMoney(a.balance)}</strong></button>`).join('')||'<p>No matching accounts.</p>';}
 async function creditList(){const data=await api('pos/accounts');creditAccounts=data.accounts;const old=$('creditEmployee').value;$('creditEmployee').innerHTML='<option value="">Choose employee</option>'+data.employees.map(e=>`<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('');$('creditEmployee').value=old;creditRenderList();}
 function creditHistoryRows(rows){$('creditHistory').insertAdjacentHTML('beforeend',rows.map(r=>`<tr><td>${esc(r.at)}<br>${esc(r.actor)}</td><td>${esc(r.reason)}</td><td>${r.amount>0?'+':''}${posMoney(r.amount)}</td><td>${posMoney(r.balance)}</td></tr>`).join(''));creditBefore=rows.at(-1)?.id;}
-async function creditSelect(id,older=false){const data=await api('pos/account?id='+id+(older?'&before='+creditBefore:''));if(!older){creditSelected=data.account;const a=creditSelected;$('creditSummary').innerHTML=`<small>${esc(a.code)} · ${a.kind}</small><h2>${esc(a.name)}</h2><p>${esc(a.contact)}</p><div class="creditBalance">${posMoney(a.balance)}<small>Available store credit</small></div>`;$('creditHistory').replaceChildren();$('creditAdjust').hidden=!officeMode||!can('manage_store_credit');$('creditPay').hidden=!can('use_store_credit')||!posCurrent?.lines.length||a.balance<=0;$('creditDue').textContent='Current sale: '+posMoney(posCurrent?.total||0);if(!changedForms.has($('creditPay'))){$('creditPay').elements.amount.value=(Math.min(a.balance,posCurrent?.total||0)/100).toFixed(2);$('creditPay').elements.tender.value='0';}creditRemainder();}creditHistoryRows(data.history);$('creditOlder').hidden=!data.more;creditRenderList();}
+async function creditSelect(id,older=false){const data=await api('pos/account?id='+id+(older?'&before='+creditBefore:''));if(!older){creditSelected=data.account;const a=creditSelected;$('creditSummary').innerHTML=`<small>${esc(a.code)} · ${a.kind}</small><h2>${esc(a.name)}</h2><p>${esc(a.contact)}</p><div class="creditBalance">${posMoney(a.balance)}<small>Available store credit</small></div>`;$('creditHistory').replaceChildren();$('creditAdjust').hidden=!can('manage_store_credit');$('creditPay').hidden=!can('use_store_credit')||!posCurrent?.lines.length||a.balance<=0;$('creditDue').textContent='Current sale: '+posMoney(posCurrent?.total||0);if(!changedForms.has($('creditPay'))){$('creditPay').elements.amount.value=(Math.min(a.balance,posCurrent?.total||0)/100).toFixed(2);$('creditPay').elements.tender.value='0';}creditRemainder();}creditHistoryRows(data.history);$('creditOlder').hidden=!data.more;creditRenderList();}
 function creditRemainder(){try{const amount=posCents($('creditPay').elements.amount.value);const due=Math.max(0,(posCurrent?.total||0)-amount);let text='Cash balance due: '+posMoney(due);const tender=posCents($('creditPay').elements.tender.value);if(due&&tender>=due){const exact=tender-due;const change=posCurrent?.settings.cash_rounding==='nearest5'?Math.floor((exact+2)/5)*5:exact;text+=' · Change to give: '+posMoney(change);if(change!==exact)text+=' · Cash rounding: '+signedMoney(exact-change);}$('creditRemainder').textContent=text;}catch{$('creditRemainder').textContent='Enter the store-credit amount.';}}
 $('creditPay').oninput=creditRemainder;
-creditOpen.onclick=async()=>{if(!navigationAllowed())return;creditDialog.showModal();$('creditCreateDetails').hidden=!officeMode||!can('manage_store_credit');try{await creditList();if(creditSelected)await creditSelect(creditSelected.id);}catch(e){creditError(e);}};
+creditOpen.onclick=async()=>{if(!navigationAllowed())return;creditDialog.showModal();$('creditCreateDetails').hidden=!can('manage_store_credit');try{await creditList();if(creditSelected)await creditSelect(creditSelected.id);}catch(e){creditError(e);}};
 function creditClose(){if(posBusy||posPending){posMessage('Finish or retry the pending action first.');return;}creditDialog.close();}
 $('creditRetry').onclick=()=>posDo('',{},true);$('creditClose').onclick=creditClose;creditDialog.oncancel=e=>{e.preventDefault();creditClose();};
 $('creditSearch').oninput=creditRenderList;$('creditFilter').onchange=creditRenderList;
@@ -990,16 +990,28 @@ async function thriftSettings(){
  ruleForm.onsubmit=async e=>{e.preventDefault();try{const f=ruleForm.elements;const result=await retailSave('thrift-settings',{revision:s.revision,program_revision:programs.revision,loyalty_scope:f.loyalty_scope.value,tags:s.tags,donations:f.donations.checked,loyalty:f.loyalty.checked,stack_tags:f.stack_tags.checked,earn_cents:posCents(f.earn.value),reward_points:Number(f.points.value),reward_cents:posCents(f.reward.value)});s=result.settings;programs.revision++;changedForms.delete(ruleForm);d.querySelector('#thriftRulesStatus').textContent='Thrift rules saved.';}catch(error){thriftError(d,error);}};
  const close=()=>{if(writeCount)return;if([...d.querySelectorAll('form')].some(form=>changedForms.has(form))&&!confirm('Discard unsaved rule details?'))return;thriftClose(d);};d.querySelector('.flowClose').onclick=close;d.oncancel=e=>{e.preventDefault();close();};
 }
-async function thriftDesk(){
+async function thriftDesk(section='all'){
  if(!navigationAllowed()||unfinished()){posMessage('Save or clear current entries first.');return;}
  const {settings:s}=await api('pos/thrift-config');let cart=posCurrent;
+ if(['tags','donations','rewards'].includes(section)&&!cart){posMessage('Start or reopen a sale first.');return;}
+ if(section==='donations'&&!s.donations){posMessage('Donations are not enabled in OFFICE.');return;}
+ if(section==='rewards'&&!s.loyalty){posMessage('Customer rewards are not enabled in OFFICE.');return;}
  const d=thriftModal('Thrift store checkout',`<p>${cart?'Saved sale · '+posMoney(cart.total):'Start a sale to apply tags, donations or rewards.'}</p><div class="flowToolbar"><button id="thriftAddCustomer">Add customer</button><button id="thriftCustomer">Find customer & rewards</button>${can('view_pos_sales')?'<button id="thriftSold">Sold-item pickup slip</button>':''}</div>${cart?`<form id="thriftTagForm"><h3>Color tag</h3><label>Merchandise line<select name="index">${cart.lines.map((l,i)=>l.donation?'':`<option value="${i}">${esc(l.name)}${l.tag?' · '+esc(l.tag.name):''}</option>`).join('')}</select></label><label>Tag<select name="tag"><option value="">No tag / restore tag price</option>${s.tags.map(t=>`<option>${esc(t.name)}</option>`).join('')}</select></label><button>Apply tag</button></form>${s.donations?`<form id="thriftDonation"><h3>Voluntary donation</h3><p>Ask the customer first. This is separate from cash-change rounding.</p>${thriftField('Custom amount ($), or zero to remove','amount','0.00','number','min="0" max="1000" step="0.01" required')}<button>Set donation</button><button type="button" id="thriftRoundup">Round up to next dollar</button></form>`:''}${s.loyalty?`<h3>Rewards</h3><p>${cart.customer?'Customer #'+cart.customer:'No customer selected'}</p><button id="thriftReward">${cart.reward?'Remove reward':'Redeem one reward'}</button>`:''}`:''}`);
  d.querySelector('#thriftAddCustomer').onclick=()=>{thriftClose(d);customerCreateTouch();};
  d.querySelector('#thriftCustomer').onclick=()=>{thriftClose(d);thriftCustomers(true);};
  if(d.querySelector('#thriftSold'))d.querySelector('#thriftSold').onclick=()=>{thriftClose(d);thriftPickupEditor();};
- async function act(action,data){try{if(!cart){await flowEnsureProductSale();cart=posCurrent;}await posDo(action,{cart:cart.id,revision:cart.revision,...data});thriftClose(d);if(!posPending)await thriftDesk();}catch(e){thriftError(d,e);}}
+ async function act(action,data){try{if(!cart){await flowEnsureProductSale();cart=posCurrent;}await posDo(action,{cart:cart.id,revision:cart.revision,...data});thriftClose(d);if(!posPending)await thriftDesk(section);}catch(e){thriftError(d,e);}}
  const scan=document.createElement('form');scan.innerHTML=thriftField('Scan donated-item barcode','code','','text','inputmode="numeric" pattern="[0-9]{9}" required')+'<button>Add scanned item</button>';d.querySelector('.flowToolbar').after(scan);
  scan.onsubmit=async e=>{e.preventDefault();try{const item=await api('pos/thrift-scan?code='+encodeURIComponent(scan.elements.code.value));changedForms.delete(scan);await act('add',{product:item.product,quantity:1});}catch(err){thriftError(d,err);}};
+ scan.id='thriftScan';
+ const rewardButton=d.querySelector('#thriftReward');
+ if(rewardButton){const description=rewardButton.previousElementSibling,title=description.previousElementSibling,section=document.createElement('section');section.id='thriftRewards';title.before(section);section.append(title,description,rewardButton);}
+ if(section!=='all'){
+  d.querySelector('h2').textContent=({scan:'Scan donated item',tags:'Color tags',donations:'Donation / round-up',rewards:'Customer rewards'})[section]||'Thrift store checkout';
+  d.querySelector('.flowToolbar').hidden=true;
+  for(const [id,key] of [['thriftScan','scan'],['thriftTagForm','tags'],['thriftDonation','donations'],['thriftRewards','rewards']]){const panel=d.querySelector('#'+id);if(panel)panel.hidden=section!==key;}
+  d.querySelector('form:not([hidden]) input,form:not([hidden]) select,section:not([hidden]) button')?.focus();
+ }
  if(!cart)return;
  d.querySelector('#thriftTagForm').onsubmit=e=>{e.preventDefault();changedForms.delete(e.target);act('thrift-tag',{index:Number(e.target.elements.index.value),tag:e.target.elements.tag.value});};
  if(s.donations){d.querySelector('#thriftDonation').onsubmit=e=>{e.preventDefault();changedForms.delete(e.target);act('thrift-donation',{amount:posCents(e.target.elements.amount.value)});};d.querySelector('#thriftRoundup').onclick=()=>{changedForms.delete(d.querySelector('#thriftDonation'));act('thrift-donation',{amount:0,roundup:true});};}
@@ -1445,7 +1457,7 @@ async function givingOpen(){
 // BEGIN OFFICE STATUS BAR
 // Compact OFFICE application information; no extra server requests.
 if (officeMode) (() => {
- const webVersion = '0.63.1'; // replaced by prepare_web_assets.py
+ const webVersion = '0.64.0'; // replaced by prepare_web_assets.py
  const style = document.createElement('style');
  style.textContent = `
  .retailOffice{--office-status-height:26px}
@@ -2006,6 +2018,17 @@ officeCards.push({section:'sales',action:'checkout-buttons',title:'Checkout butt
 officeNavigationGroups.splice(officeNavigationGroups.findIndex(g=>g.id==='policies')+1,0,{section:'sales',id:'checkout-choices',title:'Checkout buttons',description:'Set item and transaction choices and cancellation reasons for DESK.',actions:['checkout-buttons']});
 const checkoutOriginalOfficeAction=officeAction;officeAction=async function(action){if(action==='checkout-buttons'){try{await checkoutOffice();}catch(e){posMessage(e.message);}return;}return checkoutOriginalOfficeAction(action);};
 
+officeCards.push({section:'sales',action:'receipt-completion',title:'Receipt printing & next sale',description:'Automatic receipts and the delay before returning to a blank sale.',icon:'▤',permission:'manage_pos'});
+officeNavigationGroups.find(g=>g.id==='checkout-choices').actions.push('receipt-completion');
+const receiptCompletionOfficeAction=officeAction;officeAction=async function(action){
+ if(action!=='receipt-completion')return receiptCompletionOfficeAction(action);
+ try{
+  const {settings}=await checkoutQuery('checkout-settings');
+  const d=checkoutModal('Receipt printing & next sale',`<p>Receipts print automatically after payment using the register’s assigned printer. If no printer is configured, the cashier acknowledges a notice before continuing.</p><form id="receiptCompletionSettings"><label>Seconds to show the completed receipt<input name="seconds" type="number" min="1" max="300" step="1" required value="${settings.receipt_reset_seconds??5}"></label><p>Default: 5 seconds. Applies to all registers in this store. The countdown pauses while another task or pickup / delivery form is open. Completed sales remain available in Print receipts.</p><button class="primary">Save receipt timing</button></form>`);
+  d.querySelector('form').onsubmit=async e=>{e.preventDefault();try{await retailSave('checkout-settings-save',{...settings,receipt_reset_seconds:Number(e.target.elements.seconds.value)});changedForms.delete(e.target);checkoutClose(d);posMessage('Receipt timing saved for this store.');}catch(error){checkoutError(d,error);}};
+ }catch(error){posMessage(error.message);}
+};
+
 if(!officeMode){
  // Detached, dismissed forms cannot contain an entry the cashier can still finish.
  // Unconfirmed saves are retained separately and must never be cleared here.
@@ -2200,7 +2223,15 @@ function deskTrainingRender(){
  button.classList.toggle('trainingActive',active);button.setAttribute('aria-pressed',active);button.disabled=!user||!deskTraining.verified;
  $('deskTrainingBanner').hidden=!active;document.body.classList.toggle('trainingMode',active);
  $('deskSettings').hidden=!user;$('deskTerminalSettings').hidden=!can('manage_pos');
- $('deskCreditToggle').hidden=!can('use_store_credit')&&!can('issue_cash_advances');
+ $('deskCreditToggle').hidden=!can('use_store_credit')&&!can('manage_store_credit')&&!can('issue_cash_advances');
+ const saleTools=$('deskSaleTools');
+ if(saleTools){
+  const sale=!!posCurrent&&$('posReceipt').hidden,blocked=posBusy||!!posPending||writeCount>0;
+  saleTools.hidden=!sale||!can('use_pos');$('deskLoyaltyCustomer').disabled=blocked;
+  $('thriftTools').hidden=!can('use_pos');
+  $('deskThriftSold').hidden=!can('view_pos_sales');$('deskThriftDispatch').hidden=!can('view_schedule');
+  for(const button of $('deskThriftChoices').querySelectorAll('[data-requires-sale]'))button.disabled=!sale||blocked;
+ }
 }
 async function deskTrainingToggle(){
  if(!deskTraining.verified||!navigationAllowed()||unfinished()||posPending||writeCount||posBusy)return;
@@ -2220,21 +2251,41 @@ if(!officeMode){
  const settings=document.createElement('details');settings.id='deskSettings';settings.innerHTML='<summary>Settings ▾</summary><div class="deskSettingsMenu"><button id="deskTerminalSettings" type="button">Terminal setup</button></div>';retailAppearanceButton.before(settings);settings.querySelector('div').append(retailAppearanceButton);
  $('deskTerminalSettings').onclick=()=>{settings.open=false;if(can('manage_pos'))retailEnroll();};retailAppearanceButton.addEventListener('click',()=>settings.open=false);
  const rail=$('posPayNow').parentElement,credit=document.createElement('div');credit.className='deskCreditMenu';credit.innerHTML='<button id="deskCreditToggle" type="button" aria-expanded="false">Credit/ Advances</button><div id="deskCreditChoices" hidden></div>';rail.append(credit);credit.querySelector('div').append($('creditOpen'),$('cashAdvanceOpen'));
- const choices=$('deskCreditChoices'),creditToggle=$('deskCreditToggle');
- // A scrollable rail clips wide children, regardless of their z-index.
- // Keep the menu outside it, using the browser's top layer when available.
- document.body.append(choices);if(typeof choices.showPopover==='function')choices.setAttribute('popover','manual');
- creditToggle.setAttribute('aria-controls',choices.id);
- function closeCredit(){if(choices.hidePopover&&choices.matches(':popover-open'))choices.hidePopover();choices.hidden=true;creditToggle.setAttribute('aria-expanded','false');}
- function placeCredit(){
-  if(choices.hidden)return;const anchor=creditToggle.getBoundingClientRect(),box=choices.getBoundingClientRect(),gap=8;
-  choices.style.left=Math.max(gap,Math.min(innerWidth-box.width-gap,anchor.right-box.width))+'px';
-  choices.style.top=Math.max(gap,Math.min(innerHeight-box.height-gap,anchor.top))+'px';
+ const popups=[];
+ function buttonPopup(toggle,choices,beforeOpen=()=>true){
+  // Keep both menus outside scrolling panes so every touch target stays reachable.
+  document.body.append(choices);choices.classList.add('deskActionChoices');
+  if(typeof choices.showPopover==='function')choices.setAttribute('popover','manual');
+  toggle.setAttribute('aria-controls',choices.id);toggle.setAttribute('aria-expanded','false');
+  function close(){if(choices.hidePopover&&choices.matches(':popover-open'))choices.hidePopover();choices.hidden=true;toggle.setAttribute('aria-expanded','false');}
+  function place(){
+   if(choices.hidden)return;const anchor=toggle.getBoundingClientRect(),box=choices.getBoundingClientRect(),gap=8;
+   choices.style.left=Math.max(gap,Math.min(innerWidth-box.width-gap,anchor.right-box.width))+'px';
+   choices.style.top=Math.max(gap,Math.min(innerHeight-box.height-gap,anchor.top))+'px';
+  }
+  toggle.onclick=e=>{if(!choices.hidden){close();return;}if(!beforeOpen())return;for(const popup of popups)popup();choices.hidden=false;if(choices.showPopover)choices.showPopover();place();toggle.setAttribute('aria-expanded','true');if(e.detail===0)choices.querySelector('button:not([hidden]):not(:disabled)')?.focus();};
+  choices.addEventListener('click',e=>{if(e.target.closest('button:not(:disabled)'))close();});
+  document.addEventListener('pointerdown',e=>{if(!toggle.contains(e.target)&&!choices.contains(e.target))close();});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!choices.hidden){close();toggle.focus();}});
+  window.addEventListener('resize',place);document.addEventListener('scroll',e=>{if(!choices.contains(e.target))close();},true);
+  new MutationObserver(()=>{if($('posRoot').hidden||toggle.hidden)close();}).observe($('posRoot'),{attributes:true,subtree:true,attributeFilter:['hidden']});
+  popups.push(close);
  }
- creditToggle.onclick=()=>{if(!choices.hidden){closeCredit();return;}choices.hidden=false;if(choices.showPopover)choices.showPopover();placeCredit();creditToggle.setAttribute('aria-expanded','true');};
- choices.addEventListener('click',closeCredit);document.addEventListener('pointerdown',e=>{if(!credit.contains(e.target)&&!choices.contains(e.target))closeCredit();if(!settings.contains(e.target))settings.open=false;});document.addEventListener('keydown',e=>{if(e.key==='Escape'){const wasOpen=!choices.hidden;closeCredit();if(wasOpen)creditToggle.focus();settings.open=false;}});
- window.addEventListener('resize',placeCredit);document.addEventListener('scroll',e=>{if(!choices.contains(e.target))closeCredit();},true);
- new MutationObserver(()=>{if($('posRoot').hidden)closeCredit();}).observe($('posRoot'),{attributes:true,attributeFilter:['hidden']});
+ buttonPopup($('deskCreditToggle'),$('deskCreditChoices'));
+ document.addEventListener('pointerdown',e=>{if(!settings.contains(e.target))settings.open=false;});document.addEventListener('keydown',e=>{if(e.key==='Escape')settings.open=false;});
+ const tools=document.createElement('div');tools.id='deskThriftChoices';tools.hidden=true;
+ tools.innerHTML='<button type="button" id="deskThriftCustomer">Find customer &amp; rewards</button><button type="button" id="deskThriftAddCustomer">Add new customer</button><button type="button" id="deskThriftScan">Scan donated item</button><button type="button" id="deskThriftTags" data-requires-sale>Color tags</button><button type="button" id="deskThriftDonation" data-requires-sale>Donation / round-up</button><button type="button" id="deskThriftRewards" data-requires-sale>Redeem rewards</button><button type="button" id="deskThriftSold">Sold-item pickup slip</button><button type="button" id="deskThriftDispatch">Pickup &amp; delivery · STORE OPS</button>';
+ function toolsAllowed(){if(!navigationAllowed())return false;if(unfinished()){posMessage('Save or clear current entries first.');return false;}return can('use_pos');}
+ buttonPopup($('thriftTools'),tools,()=>{deskTrainingRender();return toolsAllowed();});
+ const toolAction=action=>async()=>{if(!toolsAllowed())return;try{await action();}catch(e){posMessage('Thrift store tools could not open: '+e.message);}};
+ $('deskThriftCustomer').onclick=toolAction(()=>thriftCustomers(true));$('deskThriftAddCustomer').onclick=toolAction(()=>customerCreateTouch());
+ for(const [id,section] of [['deskThriftScan','scan'],['deskThriftTags','tags'],['deskThriftDonation','donations'],['deskThriftRewards','rewards']])$(id).onclick=toolAction(()=>thriftDesk(section));
+ $('deskThriftSold').onclick=toolAction(()=>{if(can('view_pos_sales'))return thriftPickupEditor();});
+ // Reuse the permitted Operations route, including native Return to POS handling.
+ $('deskThriftDispatch').onclick=()=>{if(toolsAllowed()&&can('view_schedule'))$('linkReservations').click();};
+ const saleTools=document.createElement('div');saleTools.id='deskSaleTools';saleTools.hidden=true;
+ const loyalty=document.createElement('button');loyalty.type='button';loyalty.id='deskLoyaltyCustomer';loyalty.textContent='Loyalty customer';loyalty.onclick=toolAction(()=>{if(posCurrent&&$('posReceipt').hidden)return thriftCustomers(true);});
+ $('posDiscard').before(saleTools);saleTools.append($('posDiscard'),loyalty);
  rail.append($('posFindCart'),$('posSalesShortcut'),$('posPrintLast'),$('checkoutPayLater'),$('posPayNow'));
  const load=posLoad;posLoad=async function(...args){await load(...args);await deskTrainingRefresh();};
  const render=posRender;posRender=function(...args){const result=render(...args);deskTrainingRender();return result;};
@@ -2293,7 +2344,29 @@ async function loadTerminalDevices(){
  if(officeMode||!user)return;
  try{receiptTerminalOptions=await api('pos/terminal-options?device='+encodeURIComponent(await retailDevice()));customerPairToken=receiptTerminalOptions.display_path.split('#')[1]||null;}catch{receiptTerminalOptions=null;customerPairToken=null;}
 }
-let receiptPrintBusy=false,receiptPrintQueue=Promise.resolve();
+let receiptPrintBusy=false,receiptPrintQueue=Promise.resolve(),receiptResetTimer=null,receiptAutoGeneration=0,receiptFollowupBusy=0;
+function receiptNoPrinter(sale){
+ return new Promise(resolve=>{
+  const d=checkoutModal('No receipt printer configured',`<p id="receiptNoPrinterMessage">Receipt #${esc(sale.id)} is saved. No receipt printer is configured for this register. Select Okay to continue to the next sale without a paper receipt.</p><p>A manager can assign a printer in OFFICE under Terminals → Printer &amp; customer display. This receipt remains available in Print receipts.</p><button type="button" class="primary" id="receiptNoPrinterOkay">Okay</button>`);
+  d.querySelector('.flowClose').hidden=true;d.beforeDismiss=()=>false;
+  d.querySelector('#receiptNoPrinterOkay').onclick=()=>{checkoutClose(d);resolve({status:'skipped'});};
+ });
+}
+async function startReceiptReset(sale,generation){
+ let seconds=5;
+ try{const {settings}=await checkoutQuery('checkout-settings');seconds=settings.receipt_reset_seconds??5;}catch{posMessage('Receipt saved. Using the default 5-second display time because receipt settings could not be loaded.');}
+ if(generation!==receiptAutoGeneration||posLastReceipt?.id!==sale.id||$('posReceipt').hidden||posCurrent)return;
+ const owner=user?.name,content=$('posReceipt').firstElementChild,notice=document.createElement('p');notice.id='receiptResetNotice';notice.setAttribute('role','status');$('posReceipt').append(notice);
+ let remaining=Math.max(1,Math.min(300,seconds))*1000,last=performance.now();
+ const update=()=>{
+  const now=performance.now(),elapsed=now-last;last=now;
+  if(generation!==receiptAutoGeneration||user?.name!==owner||$('posRoot').hidden||posCurrent||$('posReceipt').hidden||$('posReceipt').firstElementChild!==content){clearInterval(receiptResetTimer);notice.remove();return;}
+  if(document.hidden||document.querySelector('dialog[open]')||unfinished()||receiptPrintBusy||receiptFollowupBusy){notice.textContent='Next sale countdown paused while you finish the open task.';return;}
+  remaining-=elapsed;notice.textContent='Ready for the next sale in '+Math.max(0,Math.ceil(remaining/1000))+' seconds.';
+  if(remaining<=0){clearInterval(receiptResetTimer);$('posReceipt').hidden=true;$('posReceipt').replaceChildren();$('posPrint').hidden=true;$('posCart').hidden=false;posRender();customerDisplaySync();posMessage('Ready for the next sale. Select a product.');}
+ };
+ notice.textContent='Ready for the next sale in '+seconds+' seconds.';receiptResetTimer=setInterval(update,250);
+}
 function deskPrintReceipt(sale,automatic=false){
  if(!sale)return Promise.resolve();
  const work=()=>performReceiptPrint(sale,automatic),result=receiptPrintQueue.then(work,work);
@@ -2301,24 +2374,26 @@ function deskPrintReceipt(sale,automatic=false){
 }
 async function performReceiptPrint(sale,automatic=false){
  const key='receipt-auto:'+location.origin+':'+sale.id;
- if(automatic&&localStorage.getItem(key))return;
+ if(automatic&&localStorage.getItem(key))return {status:['printed','skipped'].includes(localStorage.getItem(key))?'printed':'failed'};
  const native=window.pywebview?.api,printer=receiptTerminalOptions?.printer;
- if(automatic&&(!native?.receipt_print||!printer)){posMessage('Transaction saved. Select a receipt printer in Terminal setup to enable automatic printing.');return;}
+ if(automatic&&(!native?.receipt_print||!printer)){receiptPrintBusy=true;try{const result=await receiptNoPrinter(sale);localStorage.setItem(key,'skipped');return result;}finally{receiptPrintBusy=false;}}
  receiptPrintBusy=true;
  const paper=document.createElement('section');paper.id='automaticReceiptPaper';paper.dataset.sale=String(sale.id);paper.innerHTML=checkoutPaper(sale,true);document.body.append(paper);document.body.classList.add('receiptDirectPrint');
  try{
   if(automatic)localStorage.setItem(key,'requested');
   if(native?.receipt_print&&printer){const result=await native.receipt_print(printer,String(sale.id),automatic);if(result.error)throw Error(result.error);if(automatic)localStorage.setItem(key,'printed');}
   else window.print();
- }catch(e){posMessage(e.message);const message=document.createElement('p');message.setAttribute('role','alert');message.textContent=e.message+' Use Print receipts to try again.';$('posReceipt').append(message);}
+  return {status:'printed'};
+ }catch(e){posMessage(e.message);const message=document.createElement('p');message.setAttribute('role','alert');message.textContent=e.message+' Use Print receipts to try again.';$('posReceipt').append(message);return {status:'failed'};}
  finally{document.body.classList.remove('receiptDirectPrint');paper.remove();receiptPrintBusy=false;}
 }
 if(!officeMode){
+ const followup=pickupAfterPayment;pickupAfterPayment=async function(...args){receiptFollowupBusy++;try{await receiptPrintQueue;return await followup(...args);}finally{receiptFollowupBusy--;}};
  $('deskTerminalSettings').onclick=()=>{$('deskSettings').open=false;terminalDeviceOptions();};
  customerPairButton.onclick=async()=>{await loadTerminalDevices();if(!customerPairToken){if(can('manage_pos'))return terminalDeviceOptions();return posMessage('Ask a manager to assign this register’s customer display in Terminal setup.');}const url=new URL(receiptTerminalOptions.display_path,location.origin).href;flowModal('Customer display · '+receiptTerminalOptions.terminal.name,`<p>This link stays assigned to this register and uses ${esc(receiptTerminalOptions.terminal.store_name)} branding. Open it on the customer monitor in a browser profile without a staff login.</p><label>Assigned link<input readonly value="${esc(url)}"></label><a href="${esc(url)}" target="_blank" rel="noopener">Open customer display</a>`);await customerDisplaySync();};
  customerDisplaySync=async function(){if(!customerPairToken||customerDisplayBusy||!user)return;customerDisplayBusy=true;try{await api('pos/display-state',{device:await retailDevice(),token:customerPairToken,roundup:checkoutRoundupDisplay(),cart:$('posReceipt').hidden?posCurrent?.id||null:null,sale:!$('posReceipt').hidden?posLastReceipt?.id||null:null});}catch(e){if(e.status===404)customerPairToken=null;}finally{customerDisplayBusy=false;}};
  const load=posLoad;posLoad=async function(...args){await load(...args);await loadTerminalDevices();};
- const receipt=posReceipt;posReceipt=function(sale,automatic=false){receipt(sale);if(automatic)deskPrintReceipt(sale,true);};
+ const receipt=posReceipt;posReceipt=function(sale,automatic=false){clearInterval(receiptResetTimer);const generation=++receiptAutoGeneration;receipt(sale);deskTrainingRender();if(automatic)deskPrintReceipt(sale,true).then(result=>{if(result?.status!=='failed')return startReceiptReset(sale,generation);}).catch(e=>posMessage('Receipt saved. '+e.message));};
  $('posPrintLast').onclick=()=>deskPrintReceipt(posLastReceipt);$('posPrint').onclick=()=>deskPrintReceipt(posLastReceipt);
 }
 async function customerCreateTouch(){

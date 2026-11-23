@@ -55,7 +55,7 @@ try:
   expect(p.locator('#posReceipt')).to_contain_text('Cash rounding');expect(p.locator('#posPrintLast')).to_be_enabled();settle()
   with server.connect() as c:assert c.execute('SELECT count(*) FROM pos_sales').fetchone()[0]==1
   p.locator('#posSalesShortcut').tap();p.locator('[data-checkout-receipt]').first.tap();expect(p.locator('#checkoutReceiptPreview')).to_contain_text('Store credit');p.screenshot(path=str(out/'DESK-Print-Receipts.png'));p.evaluate("document.body.classList.add('checkoutPrinting')");p.emulate_media(media='print');expect(p.locator('#checkoutReceiptPreview')).to_be_visible();expect(p.locator('#checkoutReceiptList')).to_be_hidden();p.pdf(path=str(out/'Sample-Checkout-Receipt.pdf'));p.emulate_media(media='screen');p.evaluate("document.body.classList.remove('checkoutPrinting')");p.locator('#checkoutReceiptClose').tap()
-  p.locator('#thriftTools').tap();expect(p.locator('dialog[open]')).to_contain_text('Thrift store checkout');p.locator('dialog[open] .flowClose').tap()
+  p.locator('#thriftTools').tap();expect(p.locator('#deskThriftChoices')).to_be_visible();p.locator('#deskThriftScan').tap();expect(p.locator('dialog[open]')).to_contain_text('Scan donated item');p.locator('dialog[open] .flowClose').tap()
   # Detached form residue must not trap a user. Real unsaved work still blocks exit.
   p.evaluate('()=>{const f=document.createElement("form");changedForms.set(f,"old");}')
   p.locator('#posExitButton').tap();p.locator('#posExitForm [name=code]').fill('123456');p.locator('#posExitForm button.primary').tap();expect(p.locator('#posExitError')).to_have_text('Fixture exit verified');assert p.evaluate('window.exitCalls')==1;p.locator('#posExitCancel').tap()

@@ -27,6 +27,16 @@ class CheckoutTests(WorkflowTests):
   self.assertFalse(self.f.call('pos/checkout-payment-status?request='+args['request'],client=e)[1]['confirmed'])
   s=first[1]['sale'];self.assertEqual((s['total'],s['cash_rounding'],s['cash_paid'],s['change']),(1002,-2,1000,0))
   self.assertEqual(server.retail_cash_change({'cash_rounding':'nearest5'},1003,1002)['cash_paid'],1003)
+ def test_receipt_timing_defaults_scope_validation_and_legacy_save(self):
+  self.assertEqual(self.f.call('pos/checkout-settings')[1]['settings']['receipt_reset_seconds'],5)
+  configured=self.choices(receipt_reset_seconds=12)
+  self.assertEqual(configured['receipt_reset_seconds'],12)
+  old_client={k:v for k,v in configured.items() if k!='receipt_reset_seconds'}
+  self.assertEqual(self.ok('checkout-settings-save',**old_client)['settings']['receipt_reset_seconds'],12)
+  for invalid in [0,301,2.5,True,'5']:
+   current=self.f.call('pos/checkout-settings')[1]['settings']
+   self.assertEqual(self.post('checkout-settings-save',**dict(current,receipt_reset_seconds=invalid))[0],400)
+  self.assertEqual(self.f.call('pos/checkout-settings?store_id=binopoly')[1]['settings']['receipt_reset_seconds'],5)
  def test_partial_credit_and_cash_and_email_snapshot(self):
   policy=self.f.call('pos/policies')[1]['policy'];self.ok('policies-save',**dict(policy,cash_rounding='nearest5'))
   a=self.ok('account-create',kind='customer',name='Sample customer',contact='')['account'];a=self.ok('account-adjust',account=a['id'],account_revision=a['revision'],amount=500,direction='add',reason='Sample credit')['account']

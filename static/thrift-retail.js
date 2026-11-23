@@ -40,16 +40,28 @@ async function thriftSettings(){
  ruleForm.onsubmit=async e=>{e.preventDefault();try{const f=ruleForm.elements;const result=await retailSave('thrift-settings',{revision:s.revision,program_revision:programs.revision,loyalty_scope:f.loyalty_scope.value,tags:s.tags,donations:f.donations.checked,loyalty:f.loyalty.checked,stack_tags:f.stack_tags.checked,earn_cents:posCents(f.earn.value),reward_points:Number(f.points.value),reward_cents:posCents(f.reward.value)});s=result.settings;programs.revision++;changedForms.delete(ruleForm);d.querySelector('#thriftRulesStatus').textContent='Thrift rules saved.';}catch(error){thriftError(d,error);}};
  const close=()=>{if(writeCount)return;if([...d.querySelectorAll('form')].some(form=>changedForms.has(form))&&!confirm('Discard unsaved rule details?'))return;thriftClose(d);};d.querySelector('.flowClose').onclick=close;d.oncancel=e=>{e.preventDefault();close();};
 }
-async function thriftDesk(){
+async function thriftDesk(section='all'){
  if(!navigationAllowed()||unfinished()){posMessage('Save or clear current entries first.');return;}
  const {settings:s}=await api('pos/thrift-config');let cart=posCurrent;
+ if(['tags','donations','rewards'].includes(section)&&!cart){posMessage('Start or reopen a sale first.');return;}
+ if(section==='donations'&&!s.donations){posMessage('Donations are not enabled in OFFICE.');return;}
+ if(section==='rewards'&&!s.loyalty){posMessage('Customer rewards are not enabled in OFFICE.');return;}
  const d=thriftModal('Thrift store checkout',`<p>${cart?'Saved sale · '+posMoney(cart.total):'Start a sale to apply tags, donations or rewards.'}</p><div class="flowToolbar"><button id="thriftAddCustomer">Add customer</button><button id="thriftCustomer">Find customer & rewards</button>${can('view_pos_sales')?'<button id="thriftSold">Sold-item pickup slip</button>':''}</div>${cart?`<form id="thriftTagForm"><h3>Color tag</h3><label>Merchandise line<select name="index">${cart.lines.map((l,i)=>l.donation?'':`<option value="${i}">${esc(l.name)}${l.tag?' · '+esc(l.tag.name):''}</option>`).join('')}</select></label><label>Tag<select name="tag"><option value="">No tag / restore tag price</option>${s.tags.map(t=>`<option>${esc(t.name)}</option>`).join('')}</select></label><button>Apply tag</button></form>${s.donations?`<form id="thriftDonation"><h3>Voluntary donation</h3><p>Ask the customer first. This is separate from cash-change rounding.</p>${thriftField('Custom amount ($), or zero to remove','amount','0.00','number','min="0" max="1000" step="0.01" required')}<button>Set donation</button><button type="button" id="thriftRoundup">Round up to next dollar</button></form>`:''}${s.loyalty?`<h3>Rewards</h3><p>${cart.customer?'Customer #'+cart.customer:'No customer selected'}</p><button id="thriftReward">${cart.reward?'Remove reward':'Redeem one reward'}</button>`:''}`:''}`);
  d.querySelector('#thriftAddCustomer').onclick=()=>{thriftClose(d);customerCreateTouch();};
  d.querySelector('#thriftCustomer').onclick=()=>{thriftClose(d);thriftCustomers(true);};
  if(d.querySelector('#thriftSold'))d.querySelector('#thriftSold').onclick=()=>{thriftClose(d);thriftPickupEditor();};
- async function act(action,data){try{if(!cart){await flowEnsureProductSale();cart=posCurrent;}await posDo(action,{cart:cart.id,revision:cart.revision,...data});thriftClose(d);if(!posPending)await thriftDesk();}catch(e){thriftError(d,e);}}
+ async function act(action,data){try{if(!cart){await flowEnsureProductSale();cart=posCurrent;}await posDo(action,{cart:cart.id,revision:cart.revision,...data});thriftClose(d);if(!posPending)await thriftDesk(section);}catch(e){thriftError(d,e);}}
  const scan=document.createElement('form');scan.innerHTML=thriftField('Scan donated-item barcode','code','','text','inputmode="numeric" pattern="[0-9]{9}" required')+'<button>Add scanned item</button>';d.querySelector('.flowToolbar').after(scan);
  scan.onsubmit=async e=>{e.preventDefault();try{const item=await api('pos/thrift-scan?code='+encodeURIComponent(scan.elements.code.value));changedForms.delete(scan);await act('add',{product:item.product,quantity:1});}catch(err){thriftError(d,err);}};
+ scan.id='thriftScan';
+ const rewardButton=d.querySelector('#thriftReward');
+ if(rewardButton){const description=rewardButton.previousElementSibling,title=description.previousElementSibling,section=document.createElement('section');section.id='thriftRewards';title.before(section);section.append(title,description,rewardButton);}
+ if(section!=='all'){
+  d.querySelector('h2').textContent=({scan:'Scan donated item',tags:'Color tags',donations:'Donation / round-up',rewards:'Customer rewards'})[section]||'Thrift store checkout';
+  d.querySelector('.flowToolbar').hidden=true;
+  for(const [id,key] of [['thriftScan','scan'],['thriftTagForm','tags'],['thriftDonation','donations'],['thriftRewards','rewards']]){const panel=d.querySelector('#'+id);if(panel)panel.hidden=section!==key;}
+  d.querySelector('form:not([hidden]) input,form:not([hidden]) select,section:not([hidden]) button')?.focus();
+ }
  if(!cart)return;
  d.querySelector('#thriftTagForm').onsubmit=e=>{e.preventDefault();changedForms.delete(e.target);act('thrift-tag',{index:Number(e.target.elements.index.value),tag:e.target.elements.tag.value});};
  if(s.donations){d.querySelector('#thriftDonation').onsubmit=e=>{e.preventDefault();changedForms.delete(e.target);act('thrift-donation',{amount:posCents(e.target.elements.amount.value)});};d.querySelector('#thriftRoundup').onclick=()=>{changedForms.delete(d.querySelector('#thriftDonation'));act('thrift-donation',{amount:0,roundup:true});};}

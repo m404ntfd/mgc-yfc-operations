@@ -5,7 +5,7 @@ def checkout_init(c):
 def checkout_settings(c,store):
     row=c.execute('SELECT * FROM retail_checkout_settings WHERE store=?',(store,)).fetchone()
     body=json.loads(row['body']) if row else {'presets':[], 'reasons':[{'id':'customer-change','name':'Customer changed their mind'},{'id':'entry-error','name':'Incorrect item or entry'},{'id':'unable-to-pay','name':'Customer unable to pay'}]}
-    return dict(body,store_id=store,revision=row['revision'] if row else 0)
+    return dict({'receipt_reset_seconds':5,**body},store_id=store,revision=row['revision'] if row else 0)
 
 def checkout_get(c,u,path,query):
     if path=='checkout-payment-status':
@@ -37,7 +37,7 @@ def checkout_post(c,u,path,d,finish):
         store=pos_text(d.get('store_id'),'a store',80);stores_profile(c,store)
         old=checkout_settings(c,store)
         if d.get('revision')!=old['revision']:raise Problem('Checkout choices changed. Reopen this screen.',409)
-        result={}
+        result={'receipt_reset_seconds':pos_int(d.get('receipt_reset_seconds',old['receipt_reset_seconds']),'receipt display seconds',1,300)}
         for key in ('presets','reasons'):
             values=d.get(key)
             if not isinstance(values,list) or len(values)>100:raise Problem('Use no more than 100 '+key+'.')

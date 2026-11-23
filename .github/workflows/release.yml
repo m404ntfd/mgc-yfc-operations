@@ -69,6 +69,7 @@ jobs:
       - run: python -m unittest test_training.TrainingTests test_terminal_devices.TerminalDeviceTests test_update_policy
       - run: python test_desk_experience_ui.py
       - run: python test_desk_focus_menu_ui.py
+      - run: python test_desk_tools_completion_ui.py
       - run: python test_checkout_ui.py
       - run: python test_checkout_roundup_ui.py
       - run: python test_checkout_focus_ui.py
@@ -167,7 +168,7 @@ jobs:
         shell: pwsh
         run: |
           $baseline = Join-Path $env:RUNNER_TEMP 'retail-upgrade-baseline'
-          git clone --depth 1 --branch v0.63.0 https://github.com/m404ntfd/mgc-yfc-operations.git $baseline
+          git clone --depth 1 --branch v0.63.1 https://github.com/m404ntfd/mgc-yfc-operations.git $baseline
           if ($LASTEXITCODE -ne 0) { throw 'Baseline checkout failed' }
           $env:RETAIL_BASE_SOURCE = $baseline
           python test_retail_release_upgrade.py
@@ -257,4 +258,4 @@ jobs:
             echo "Release already exists; leaving published assets unchanged."
             exit 0
           fi
-          gh release create "$tag" dist/*.exe dist/Store-Dispatch-Update.zip --target "$GITHUB_SHA" --title "CoastYouth Retail Readability $tag" --notes-file RELEASE-NOTES.md
+          gh release create "$tag" dist/*.exe dist/Store-Dispatch-Update.zip --target "$GITHUB_SHA" --title "CoastYouth Retail DESK Checkout $tag" --notes-file RELEASE-NOTES.md

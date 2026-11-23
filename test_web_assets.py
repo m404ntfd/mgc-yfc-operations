@@ -32,7 +32,7 @@ class WebAssetTests(unittest.TestCase):
    self.assertEqual(set(ast.literal_eval(pos.value)),{'pos.html','pos.js','pos.css','customer-display.html','customer-display.js','customer-display.css','hr.html','hr.js','hr.css'})
    self.assertIn('officeStatusBar',ast.literal_eval(pos.value)['pos.js'])
    self.assertNotIn('__OFFICE_WEB_VERSION__',ast.literal_eval(pos.value)['pos.js'])
-   self.assertIn('function thriftDesk()',ast.literal_eval(pos.value)['pos.js'])
+   self.assertIn('function thriftDesk(',ast.literal_eval(pos.value)['pos.js'])
    self.assertIn((source/'static/giving-office.js').read_text(encoding='utf-8'),ast.literal_eval(pos.value)['pos.js'])
    self.assertTrue(any(isinstance(node,ast.FunctionDef) and node.name=='giving_init' for node in module.body))
    # Decode only the generated asset assignment: do not execute the server.

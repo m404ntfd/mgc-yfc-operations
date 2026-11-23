@@ -179,6 +179,17 @@ officeCards.push({section:'sales',action:'checkout-buttons',title:'Checkout butt
 officeNavigationGroups.splice(officeNavigationGroups.findIndex(g=>g.id==='policies')+1,0,{section:'sales',id:'checkout-choices',title:'Checkout buttons',description:'Set item and transaction choices and cancellation reasons for DESK.',actions:['checkout-buttons']});
 const checkoutOriginalOfficeAction=officeAction;officeAction=async function(action){if(action==='checkout-buttons'){try{await checkoutOffice();}catch(e){posMessage(e.message);}return;}return checkoutOriginalOfficeAction(action);};
 
+officeCards.push({section:'sales',action:'receipt-completion',title:'Receipt printing & next sale',description:'Automatic receipts and the delay before returning to a blank sale.',icon:'▤',permission:'manage_pos'});
+officeNavigationGroups.find(g=>g.id==='checkout-choices').actions.push('receipt-completion');
+const receiptCompletionOfficeAction=officeAction;officeAction=async function(action){
+ if(action!=='receipt-completion')return receiptCompletionOfficeAction(action);
+ try{
+  const {settings}=await checkoutQuery('checkout-settings');
+  const d=checkoutModal('Receipt printing & next sale',`<p>Receipts print automatically after payment using the register’s assigned printer. If no printer is configured, the cashier acknowledges a notice before continuing.</p><form id="receiptCompletionSettings"><label>Seconds to show the completed receipt<input name="seconds" type="number" min="1" max="300" step="1" required value="${settings.receipt_reset_seconds??5}"></label><p>Default: 5 seconds. Applies to all registers in this store. The countdown pauses while another task or pickup / delivery form is open. Completed sales remain available in Print receipts.</p><button class="primary">Save receipt timing</button></form>`);
+  d.querySelector('form').onsubmit=async e=>{e.preventDefault();try{await retailSave('checkout-settings-save',{...settings,receipt_reset_seconds:Number(e.target.elements.seconds.value)});changedForms.delete(e.target);checkoutClose(d);posMessage('Receipt timing saved for this store.');}catch(error){checkoutError(d,error);}};
+ }catch(error){posMessage(error.message);}
+};
+
 if(!officeMode){
  // Detached, dismissed forms cannot contain an entry the cashier can still finish.
  // Unconfirmed saves are retained separately and must never be cleared here.

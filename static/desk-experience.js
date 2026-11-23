@@ -11,7 +11,15 @@ function deskTrainingRender(){
  button.classList.toggle('trainingActive',active);button.setAttribute('aria-pressed',active);button.disabled=!user||!deskTraining.verified;
  $('deskTrainingBanner').hidden=!active;document.body.classList.toggle('trainingMode',active);
  $('deskSettings').hidden=!user;$('deskTerminalSettings').hidden=!can('manage_pos');
- $('deskCreditToggle').hidden=!can('use_store_credit')&&!can('issue_cash_advances');
+ $('deskCreditToggle').hidden=!can('use_store_credit')&&!can('manage_store_credit')&&!can('issue_cash_advances');
+ const saleTools=$('deskSaleTools');
+ if(saleTools){
+  const sale=!!posCurrent&&$('posReceipt').hidden,blocked=posBusy||!!posPending||writeCount>0;
+  saleTools.hidden=!sale||!can('use_pos');$('deskLoyaltyCustomer').disabled=blocked;
+  $('thriftTools').hidden=!can('use_pos');
+  $('deskThriftSold').hidden=!can('view_pos_sales');$('deskThriftDispatch').hidden=!can('view_schedule');
+  for(const button of $('deskThriftChoices').querySelectorAll('[data-requires-sale]'))button.disabled=!sale||blocked;
+ }
 }
 async function deskTrainingToggle(){
  if(!deskTraining.verified||!navigationAllowed()||unfinished()||posPending||writeCount||posBusy)return;
@@ -31,21 +39,41 @@ if(!officeMode){
  const settings=document.createElement('details');settings.id='deskSettings';settings.innerHTML='<summary>Settings ▾</summary><div class="deskSettingsMenu"><button id="deskTerminalSettings" type="button">Terminal setup</button></div>';retailAppearanceButton.before(settings);settings.querySelector('div').append(retailAppearanceButton);
  $('deskTerminalSettings').onclick=()=>{settings.open=false;if(can('manage_pos'))retailEnroll();};retailAppearanceButton.addEventListener('click',()=>settings.open=false);
  const rail=$('posPayNow').parentElement,credit=document.createElement('div');credit.className='deskCreditMenu';credit.innerHTML='<button id="deskCreditToggle" type="button" aria-expanded="false">Credit/ Advances</button><div id="deskCreditChoices" hidden></div>';rail.append(credit);credit.querySelector('div').append($('creditOpen'),$('cashAdvanceOpen'));
- const choices=$('deskCreditChoices'),creditToggle=$('deskCreditToggle');
- // A scrollable rail clips wide children, regardless of their z-index.
- // Keep the menu outside it, using the browser's top layer when available.
- document.body.append(choices);if(typeof choices.showPopover==='function')choices.setAttribute('popover','manual');
- creditToggle.setAttribute('aria-controls',choices.id);
- function closeCredit(){if(choices.hidePopover&&choices.matches(':popover-open'))choices.hidePopover();choices.hidden=true;creditToggle.setAttribute('aria-expanded','false');}
- function placeCredit(){
-  if(choices.hidden)return;const anchor=creditToggle.getBoundingClientRect(),box=choices.getBoundingClientRect(),gap=8;
-  choices.style.left=Math.max(gap,Math.min(innerWidth-box.width-gap,anchor.right-box.width))+'px';
-  choices.style.top=Math.max(gap,Math.min(innerHeight-box.height-gap,anchor.top))+'px';
+ const popups=[];
+ function buttonPopup(toggle,choices,beforeOpen=()=>true){
+  // Keep both menus outside scrolling panes so every touch target stays reachable.
+  document.body.append(choices);choices.classList.add('deskActionChoices');
+  if(typeof choices.showPopover==='function')choices.setAttribute('popover','manual');
+  toggle.setAttribute('aria-controls',choices.id);toggle.setAttribute('aria-expanded','false');
+  function close(){if(choices.hidePopover&&choices.matches(':popover-open'))choices.hidePopover();choices.hidden=true;toggle.setAttribute('aria-expanded','false');}
+  function place(){
+   if(choices.hidden)return;const anchor=toggle.getBoundingClientRect(),box=choices.getBoundingClientRect(),gap=8;
+   choices.style.left=Math.max(gap,Math.min(innerWidth-box.width-gap,anchor.right-box.width))+'px';
+   choices.style.top=Math.max(gap,Math.min(innerHeight-box.height-gap,anchor.top))+'px';
+  }
+  toggle.onclick=e=>{if(!choices.hidden){close();return;}if(!beforeOpen())return;for(const popup of popups)popup();choices.hidden=false;if(choices.showPopover)choices.showPopover();place();toggle.setAttribute('aria-expanded','true');if(e.detail===0)choices.querySelector('button:not([hidden]):not(:disabled)')?.focus();};
+  choices.addEventListener('click',e=>{if(e.target.closest('button:not(:disabled)'))close();});
+  document.addEventListener('pointerdown',e=>{if(!toggle.contains(e.target)&&!choices.contains(e.target))close();});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!choices.hidden){close();toggle.focus();}});
+  window.addEventListener('resize',place);document.addEventListener('scroll',e=>{if(!choices.contains(e.target))close();},true);
+  new MutationObserver(()=>{if($('posRoot').hidden||toggle.hidden)close();}).observe($('posRoot'),{attributes:true,subtree:true,attributeFilter:['hidden']});
+  popups.push(close);
  }
- creditToggle.onclick=()=>{if(!choices.hidden){closeCredit();return;}choices.hidden=false;if(choices.showPopover)choices.showPopover();placeCredit();creditToggle.setAttribute('aria-expanded','true');};
- choices.addEventListener('click',closeCredit);document.addEventListener('pointerdown',e=>{if(!credit.contains(e.target)&&!choices.contains(e.target))closeCredit();if(!settings.contains(e.target))settings.open=false;});document.addEventListener('keydown',e=>{if(e.key==='Escape'){const wasOpen=!choices.hidden;closeCredit();if(wasOpen)creditToggle.focus();settings.open=false;}});
- window.addEventListener('resize',placeCredit);document.addEventListener('scroll',e=>{if(!choices.contains(e.target))closeCredit();},true);
- new MutationObserver(()=>{if($('posRoot').hidden)closeCredit();}).observe($('posRoot'),{attributes:true,attributeFilter:['hidden']});
+ buttonPopup($('deskCreditToggle'),$('deskCreditChoices'));
+ document.addEventListener('pointerdown',e=>{if(!settings.contains(e.target))settings.open=false;});document.addEventListener('keydown',e=>{if(e.key==='Escape')settings.open=false;});
+ const tools=document.createElement('div');tools.id='deskThriftChoices';tools.hidden=true;
+ tools.innerHTML='<button type="button" id="deskThriftCustomer">Find customer &amp; rewards</button><button type="button" id="deskThriftAddCustomer">Add new customer</button><button type="button" id="deskThriftScan">Scan donated item</button><button type="button" id="deskThriftTags" data-requires-sale>Color tags</button><button type="button" id="deskThriftDonation" data-requires-sale>Donation / round-up</button><button type="button" id="deskThriftRewards" data-requires-sale>Redeem rewards</button><button type="button" id="deskThriftSold">Sold-item pickup slip</button><button type="button" id="deskThriftDispatch">Pickup &amp; delivery · STORE OPS</button>';
+ function toolsAllowed(){if(!navigationAllowed())return false;if(unfinished()){posMessage('Save or clear current entries first.');return false;}return can('use_pos');}
+ buttonPopup($('thriftTools'),tools,()=>{deskTrainingRender();return toolsAllowed();});
+ const toolAction=action=>async()=>{if(!toolsAllowed())return;try{await action();}catch(e){posMessage('Thrift store tools could not open: '+e.message);}};
+ $('deskThriftCustomer').onclick=toolAction(()=>thriftCustomers(true));$('deskThriftAddCustomer').onclick=toolAction(()=>customerCreateTouch());
+ for(const [id,section] of [['deskThriftScan','scan'],['deskThriftTags','tags'],['deskThriftDonation','donations'],['deskThriftRewards','rewards']])$(id).onclick=toolAction(()=>thriftDesk(section));
+ $('deskThriftSold').onclick=toolAction(()=>{if(can('view_pos_sales'))return thriftPickupEditor();});
+ // Reuse the permitted Operations route, including native Return to POS handling.
+ $('deskThriftDispatch').onclick=()=>{if(toolsAllowed()&&can('view_schedule'))$('linkReservations').click();};
+ const saleTools=document.createElement('div');saleTools.id='deskSaleTools';saleTools.hidden=true;
+ const loyalty=document.createElement('button');loyalty.type='button';loyalty.id='deskLoyaltyCustomer';loyalty.textContent='Loyalty customer';loyalty.onclick=toolAction(()=>{if(posCurrent&&$('posReceipt').hidden)return thriftCustomers(true);});
+ $('posDiscard').before(saleTools);saleTools.append($('posDiscard'),loyalty);
  rail.append($('posFindCart'),$('posSalesShortcut'),$('posPrintLast'),$('checkoutPayLater'),$('posPayNow'));
  const load=posLoad;posLoad=async function(...args){await load(...args);await deskTrainingRefresh();};
  const render=posRender;posRender=function(...args){const result=render(...args);deskTrainingRender();return result;};

@@ -6,8 +6,13 @@
  :root body.deskTouch.checkoutRedesign[data-retail-theme] .registerLayout .registerRail #posPayNow{background:#ad1735!important;color:white!important;border-color:#8f102a!important}
  :root body.deskTouch.checkoutRedesign[data-retail-theme] .registerRail #creditOpen,:root body.deskTouch.checkoutRedesign[data-retail-theme] .registerRail #cashAdvanceOpen,:root body.deskTouch.checkoutRedesign[data-retail-theme] .registerRail #deskCreditToggle{background:#17653d!important;color:white!important;border-color:#104c2d!important}
  .deskTouch #posPayNow:disabled{opacity:.6}.deskCreditMenu{position:relative}.deskCreditMenu>button{width:100%;height:100%;min-height:62px;-webkit-tap-highlight-color:transparent}
- #deskCreditChoices{position:fixed;inset:auto;margin:0;width:240px;max-width:calc(100vw - 16px);max-height:calc(100dvh - 16px);overflow:auto;z-index:1000;padding:8px;background:#f5fff7;border:2px solid #17653d;border-radius:10px;box-shadow:0 8px 24px #0006;display:flex;flex-direction:column;gap:10px}
- #deskCreditChoices[hidden]{display:none}#deskCreditChoices button{min-height:64px;width:100%;margin:0;font-size:17px;padding:12px 8px;line-height:1.25;border-radius:6px;background:#17653d!important;color:white!important;border:1px solid #104c2d!important}
+ .deskActionChoices{position:fixed;inset:auto;margin:0;width:280px;max-width:calc(100vw - 16px);max-height:calc(100dvh - 16px);box-sizing:border-box;overflow:auto;z-index:1000;padding:8px;background:#f5fff7;border:2px solid #17653d;border-radius:10px;box-shadow:0 8px 24px #0006;display:flex;flex-direction:column;gap:10px}
+ #deskCreditChoices{width:240px}
+ .deskActionChoices[hidden]{display:none}.deskActionChoices button{min-height:64px;flex-shrink:0;width:100%;margin:0;font-size:17px;padding:12px 8px;line-height:1.25;border-radius:6px;background:#17653d!important;color:white!important;border:1px solid #104c2d!important;touch-action:manipulation}
+ .deskActionChoices button:disabled{opacity:.55}.deskActionChoices button:focus-visible{outline:3px solid #102e48;outline-offset:2px}
+ #deskSaleTools{display:grid;grid-row:span 2;gap:8px;grid-template-rows:repeat(2,minmax(48px,1fr))}
+ #deskSaleTools[hidden]{display:none}
+ .thriftDialog [hidden]{display:none!important}
  #deskSettings{position:relative}#deskSettings summary{list-style:none;cursor:pointer;border:1px solid #71899e;border-radius:8px;padding:12px 20px;display:flex;align-items:center}
  .deskSettingsMenu{position:absolute;right:0;top:100%;z-index:90;min-width:220px;background:var(--panel,#fff);padding:10px;border:1px solid #71899e;border-radius:10px;box-shadow:0 8px 24px #0005}.deskSettingsMenu button{display:block;width:100%;margin:4px 0}
  .deskTouch #retailEnroll{display:none!important}.deskTouch #posCategories,.deskTouch #posCatalog,.deskTouch .receiptLines{touch-action:pan-y;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}.deskTouch #posCatalog button,.deskTouch #posCategories button{touch-action:pan-y}
@@ -16,7 +21,7 @@
  dialog:has(#trainingReportRows){width:min(1050px,94vw);max-width:94vw}#trainingReportFilter{display:flex;align-items:end;gap:16px}#trainingReportFilter>*{flex:1}#trainingReportRows th{background:#173451;color:white}
 }
 @media(prefers-reduced-motion:reduce){.trainingDot,.trainingActive .trainingStatus{animation:none}}
-@media print{#deskCreditChoices{display:none!important}}
+@media print{.deskActionChoices{display:none!important}}
 
 #automaticReceiptPaper{display:none}
 @media print{body.receiptDirectPrint>*{display:none!important}body.receiptDirectPrint>#automaticReceiptPaper{display:block!important;background:white;color:black;max-width:76mm;font:12px Arial,sans-serif}#automaticReceiptPaper h2{font-size:18px}#automaticReceiptPaper img{max-width:60mm;max-height:30mm;object-fit:contain}#automaticReceiptPaper table{width:100%;border-collapse:collapse}#automaticReceiptPaper td{padding:5px 1px;border-bottom:1px solid #ccc}#automaticReceiptPaper small{display:block}#automaticReceiptPaper dl{display:grid;grid-template-columns:1fr auto}#automaticReceiptPaper dd{text-align:right;margin:0}#automaticReceiptPaper p{white-space:pre-wrap}}

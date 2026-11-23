@@ -1,19 +1,24 @@
-# CoastYouth Retail Readability — v0.63.1
+# CoastYouth Retail DESK Checkout — v0.64.0
 
-The Assigned employees selector in request reviews and appointment editing now uses matching text and background colors in light, dark and glass themes. Dark mode no longer shows pale employee names on a white background.
+DESK now opens Thrift store tools as large green popup buttons, matching Credit/Advances. The menu gives access to customer lookup and creation, donated-item scans, color tags, donations, rewards, sold-item pickup slips, and the existing STORE OPS pickup/delivery area. Existing feature settings and user permissions still apply.
 
-- Selected employees have a clear row highlight, and keyboard focus on the selector remains visible.
-- Nearby request-screen totals, the older-address notice and the pending-request summary retain readable contrast in dark and glass themes.
-- Employee selections, saved assignments, permissions and request approval behavior are unchanged.
+- An active sale shows **Loyalty customer** immediately below **Cancel sale**. Cashiers can select an existing customer or add a profile without opening Thrift store tools.
+- Staff with **Manage store credit** permission can create customer/employee credit accounts and add or subtract credit through DESK’s green **Store credit** button. Adjustments require a reason and retain the existing account history, revision checks and audit records.
+- Operations opened inside DESK has a red **Return to DESK / Exit POS** bar. It is absent from ordinary browser and standalone STORE OPS sessions. Saved-cart navigation and the protected exit remain in effect.
+- Completed sales print automatically to the register’s configured printer. If automatic printing has no configured printer, an **Okay** notice lets the cashier continue without paper; the paid transaction and receipt remain saved.
+- After printing or acknowledging that notice, DESK returns to a blank receipt area. The default is **5 seconds**. Configure **OFFICE → Sales → Checkout buttons → Receipt printing & next sale** for each store (1–300 seconds).
+- The countdown pauses during open tasks, printing and pickup/delivery follow-up. It stops when another sale starts or a different receipt opens. Printer failures retain the receipt and show an error for deliberate reprinting. Print last receipt and Print receipts retain access to saved sales.
 
 ## Installation
 
-Server / Computer Setup **0.63.1** includes the compatible DESK **1.22.0**, OFFICE **1.19.0** and STORE OPS desktop **1.6.0** installers. Those desktop versions remain unchanged because the shared server supplies the updated screens.
+Server / Computer Setup **0.64.0** includes DESK **1.22.0**, OFFICE **1.19.0**, and STORE OPS desktop **1.6.0**. The desktop launcher versions are unchanged; the shared server supplies these screens and checkout changes.
 
-Verify a current backup and let staff finish or save their work. **Update the Operations server first**, using the existing installation and data folders. Then refresh the web page or close and reopen the desktop application. Computer Setup retains the verified server connection and administrator registration workflow introduced in 0.63.0.
+Verify a current backup and allow staff to finish or save their work. **Update the Operations server first**, using its existing installation and data folders. Close and reopen DESK, OFFICE and STORE OPS, or refresh browser tabs. Existing clients do not need reinstallation for these changes.
 
-This release changes screen styling and release metadata; it makes no database schema or operational-record changes. Sales, timecards, reservations, reports, users, settings, attachments and computer registrations remain in the existing shared data source. Publishing does not itself install or restart the live server; its configured update policy remains in effect.
+No database schema changes, resets or replacement of operational records are involved. The new store-specific timing setting defaults to five seconds without rewriting old records, and older settings clients preserve a previously configured delay. Existing sales, timecards, breaks, reservations, reports, users, credit balances, attachments, settings and terminal registrations remain in the shared data source. Publishing does not itself install or restart the live server.
 
 ## Verification
 
-The rendered contrast check covers **268 theme/layout combinations**, including request review with a selected employee on desktop and mobile. The populated **0.63.0 → 0.63.1** release check verifies upgrade, backup, repeated startup and rollback while retaining original rows, open and historical timecards and breaks, sales, accounts, registrations, reservations and attachments. Windows installer checks verify repeated installation without replacing existing data or client settings.
+Isolated browser checks cover touch targets at 1920×1080, 1366×768 and 1024×768 in Classic Gray, Midnight and Glass Blue; customer assignment; permitted credit management and restricted-user controls; missing-printer acknowledgement; automatic printing; receipt timing; open-task pauses; preservation of a newly started sale; and the DESK-only return bar. Existing checkout, training, pickup/delivery and credit workflows are rechecked.
+
+The release process verifies populated **0.63.1 → 0.64.0** upgrades, backups, repeated startup and rollback, plus repeated Windows installation without replacing operational data or client settings.
