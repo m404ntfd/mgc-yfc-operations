@@ -53,6 +53,7 @@ def run():
      sale=f.call('pos/sales')[1]['sales'][0]
      assert sale['tender']==3000 and sale['total']==(1300 if answer=='Yes' else 1237),sale
      assert bool([line for line in sale['lines'] if line.get('donation')])==(answer=='Yes')
+     expect(page.locator('#receiptNoPrinterOkay')).to_be_visible();choose('#receiptNoPrinterOkay')
     ctx.close()
    assert not errors,errors;browser.close()
   print('PASS immediate keyboard cash entry after Yes/No on mouse and touch displays, mixed keypad/keyboard entry, method changes, Tab navigation, and correct payment/receipt totals')

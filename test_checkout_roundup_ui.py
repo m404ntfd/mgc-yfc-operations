@@ -73,6 +73,7 @@ def run():
    expect(customer.locator('#customerRoundup')).to_be_hidden(timeout=12000)
    cancel_payment();p.locator('#posPayNow').tap();expect(p.locator('#checkoutPaymentForm')).to_be_visible();expect(p.locator('.roundupDialog')).to_have_count(0)
    p.locator('[data-tender=exact]').tap();p.locator('#checkoutComplete').tap();expect(p.locator('#posReceipt')).to_contain_text('Voluntary donation');expect(p.locator('#posReceipt')).to_contain_text('$0.63');settle()
+   expect(p.locator('#receiptNoPrinterOkay')).to_be_visible();p.locator('#receiptNoPrinterOkay').tap()
    product(1);p.locator('#posPayNow').tap();expect(p.locator('#checkoutPaymentForm')).to_be_visible();expect(p.locator('.roundupDialog')).to_have_count(0);cancel_payment();discard()
    settings=f.call('pos/thrift-config')[1]['settings'];post('thrift-settings',**dict(settings,donations=False))
    product(0);p.locator('#posPayNow').tap();expect(p.locator('#checkoutPaymentForm')).to_be_visible();expect(p.locator('.roundupDialog')).to_have_count(0)
