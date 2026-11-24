@@ -2,7 +2,7 @@ from test_ui_helpers import password_login_page,select_saved_sale
 import os
 from pathlib import Path
 from playwright.sync_api import sync_playwright,expect
-from test_ui_helpers import open_checkout
+from test_ui_helpers import open_checkout,wait_for_pos_save
 from test_update_coordination import CoordinatorFixture
 
 def run():
@@ -40,6 +40,8 @@ def run():
    open_checkout(p);p.locator('#checkoutTender').fill('40.00');p.locator('#checkoutComplete').click();expect(p.locator('#posReceipt')).to_contain_text('Change: $10.07')
    p.emulate_media(media='print');expect(p.locator('#posReceipt')).to_be_visible();expect(p.locator('#posCatalog')).to_be_hidden();p.emulate_media(media='screen')
    p.locator('#posCatalog button').first.click();expect(p.locator('#posReceipt')).to_be_hidden()
+   # Hiding the old receipt happens before the new cart has finished saving.
+   wait_for_pos_save(p)
    p.locator('#posSalesShortcut').click();p.locator('[data-checkout-receipt]').first.click();expect(p.locator('#checkoutReceiptPreview')).to_contain_text('Change');p.locator('#checkoutReceiptClose').click();expect(p.locator('#posCart')).to_be_visible()
    assert not errors,errors;b.close()
  finally:f.close()
