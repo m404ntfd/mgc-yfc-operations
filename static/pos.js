@@ -2517,7 +2517,7 @@ officeCards.push(
  {section:'sales',action:'shift-settings',title:'Register shifts & business day',description:'Daily closing time and Letter or receipt report paper.',icon:'◷',permission:'manage_pos',keywords:'end shift terminal cutoff business day closing printer'},
  {section:'reports',action:'shift-history',title:'Register shift reports',description:'Terminal sales, payments, cash advances and unpaid voids by business day.',icon:'▤',permission:'view_pos_sales',keywords:'end shift summary detail close day void'}
 );
-officeNavigationGroups.find(g=>g.id==='transactions').actions.push('shift-settings');
+officeNavigationGroups.splice(officeNavigationGroups.findIndex(g=>g.id==='transactions')+1,0,{section:'sales',id:'register-closing',title:'Register closing',description:'Business-day closing and register-shift setup.',actions:['shift-settings']});
 officeNavigationGroups.find(g=>g.id==='sales'&&g.section==='reports').actions.push('shift-history');
 
 function shiftReportHTML(r,detail=false){
