@@ -111,6 +111,9 @@ class KioskBridge:
  def receipt_printers(self):
   from receipt_printer import printers
   return printers(self)
+ def clover_connection_check(self,token):
+  from clover_desktop import check_from_desk
+  return check_from_desk(self,token)
  def shift_print(self,printer,shift):
   from receipt_printer import print_shift
   return print_shift(self,printer,shift)

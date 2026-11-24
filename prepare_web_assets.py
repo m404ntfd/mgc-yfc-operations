@@ -39,6 +39,7 @@ def prepare(root=None):
   content=re.sub(r'// BEGIN UPDATE NOTICES.*?// END UPDATE NOTICES','',content,flags=re.S).rstrip()+'\n// BEGIN UPDATE NOTICES\n'+(root/'static/update-notices.js').read_text(encoding='utf-8')+'\n// END UPDATE NOTICES\n'
   if filename=='pos.js':content=re.sub(r'\n*// BEGIN DESK CONNECTION.*?// END DESK CONNECTION\n*','\n',content,flags=re.S).rstrip()+'\n// BEGIN DESK CONNECTION\n'+(root/'static/desk-connection.js').read_text(encoding='utf-8')+'\n// END DESK CONNECTION\n'
   if filename=='pos.js':content=re.sub(r'\n*// BEGIN REGISTER SHIFTS.*?// END REGISTER SHIFTS\n*','\n',content,flags=re.S).rstrip()+'\n// BEGIN REGISTER SHIFTS\n'+(root/'static/register-shifts.js').read_text(encoding='utf-8')+'\n// END REGISTER SHIFTS\n'
+  if filename=='pos.js':content=re.sub(r'\n*// BEGIN CLOVER PILOT.*?// END CLOVER PILOT\n*','\n',content,flags=re.S).rstrip()+'\n// BEGIN CLOVER PILOT\n'+(root/'static/clover-pilot.js').read_text(encoding='utf-8')+'\n// END CLOVER PILOT\n'
   file.write_text(content,encoding='utf-8')
  for name in ('pos.css','style.css'):
   css=root/'static'/name;content=css.read_text(encoding='utf-8-sig');content=re.sub(r'\n*/\* BEGIN GLASS THEME \*/.*?/\* END GLASS THEME \*/\n*','\n',content,flags=re.S);css.write_text(content.rstrip()+'\n/* BEGIN GLASS THEME */\n'+(root/'static/glass-theme.css').read_text(encoding='utf-8')+'\n/* END GLASS THEME */\n',encoding='utf-8')
@@ -53,6 +54,7 @@ def prepare(root=None):
  for name in ('pos.css','customer-display.css'):
   css=root/'static'/name;content=css.read_text(encoding='utf-8');content=re.sub(r'\n*/\* BEGIN CHECKOUT ROUNDUP \*/.*?/\* END CHECKOUT ROUNDUP \*/\n*','\n',content,flags=re.S)
   css.write_text(content.rstrip()+'\n/* BEGIN CHECKOUT ROUNDUP */\n'+(root/'static/checkout-roundup.css').read_text(encoding='utf-8')+'\n/* END CHECKOUT ROUNDUP */\n',encoding='utf-8')
+ css=root/'static/pos.css';content=css.read_text(encoding='utf-8');content=re.sub(r'\n*/\* BEGIN CLOVER PILOT \*/.*?/\* END CLOVER PILOT \*/\n*','\n',content,flags=re.S);css.write_text(content.rstrip()+'\n/* BEGIN CLOVER PILOT */\n'+(root/'static/clover-pilot.css').read_text(encoding='utf-8')+'\n/* END CLOVER PILOT */\n',encoding='utf-8')
  pos={name:(root/'static'/name).read_text(encoding='utf-8') for name in ('pos.html','pos.js','pos.css','customer-display.html','customer-display.js','customer-display.css','hr.html','hr.js','hr.css')}
  source,count=re.subn(r'^POS_ASSETS=.* # prepared POS application assets$',lambda _: 'POS_ASSETS='+repr(pos)+' # prepared POS application assets',source,flags=re.M)
  if count!=1:raise ValueError('POS asset marker missing')
@@ -68,6 +70,8 @@ def prepare(root=None):
  source=re.sub(r'# BEGIN HR BROWSER.*?# END HR BROWSER',lambda _: '# BEGIN HR BROWSER\n'+(root/'hr_browser.py').read_text(encoding='utf-8')+'\n# END HR BROWSER',source,flags=re.S)
  source=re.sub(r'^HR_SOURCE_FORMS=.* # prepared HR source forms$',lambda _: 'HR_SOURCE_FORMS='+repr(json.loads((root/'assets/hr-source-forms.json').read_text(encoding='utf-8')))+' # prepared HR source forms',source,flags=re.M)
  source=re.sub(r'# BEGIN RETAIL DEVICES.*?# END RETAIL DEVICES',lambda _: '# BEGIN RETAIL DEVICES\n'+(root/'retail_devices.py').read_text(encoding='utf-8')+'\n# END RETAIL DEVICES',source,flags=re.S)
+ source=re.sub(r'\n*# BEGIN CLOVER PILOT.*?# END CLOVER PILOT\n*','\n',source,flags=re.S)
+ source=source.replace('# END RETAIL DEVICES','# END RETAIL DEVICES\n\n# BEGIN CLOVER PILOT\n'+(root/'retail_clover.py').read_text(encoding='utf-8')+'\n# END CLOVER PILOT',1)
  source=re.sub(r'# BEGIN SERVER MAINTENANCE.*?# END SERVER MAINTENANCE',lambda _: '# BEGIN SERVER MAINTENANCE\n'+(root/'server_maintenance.py').read_text(encoding='utf-8')+'\n# END SERVER MAINTENANCE',source,flags=re.S)
  source=re.sub(r'# BEGIN RETAIL TRAINING.*?# END RETAIL TRAINING',lambda _: '# BEGIN RETAIL TRAINING\n'+(root/'retail_training.py').read_text(encoding='utf-8')+'\n# END RETAIL TRAINING',source,flags=re.S)
  source=re.sub(r'# BEGIN CHECKOUT.*?# END CHECKOUT',lambda _: '# BEGIN CHECKOUT\n'+(root/'checkout.py').read_text(encoding='utf-8')+'\n# END CHECKOUT',source,flags=re.S)
