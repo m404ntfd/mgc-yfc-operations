@@ -1,0 +1,10 @@
+.onlineRequestsControl{border:1px solid #bca96a;border-radius:10px;background:#fff3cf;margin-top:14px;padding:14px;display:flex;align-items:center;flex-wrap:wrap;gap:12px;color:#322500!important}
+.onlineRequestsControl>div{flex:0 0 100%;display:grid;gap:5px}
+.onlineRequestsControl button{min-height:46px;background:#725000!important;color:#fff!important;border:1px solid #725000!important}
+.onlineRequestsControl button.secondary{background:#fff8df!important;color:#322500!important}
+#onlineRequestsDialog{max-width:560px;width:calc(100% - 32px)}
+#onlineRequestsDialog h2{margin-top:0}#onlineRequestsDialog p{line-height:1.55}
+.onlinePauseChoices{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:20px 0}
+.onlinePauseChoices button{min-height:60px;font-size:18px;font-weight:700}
+#onlinePauseError{color:#b21928}body[data-theme=dark] #onlinePauseError{color:#ffaaaa}
+@media(max-width:500px){.onlineRequestsControl button{flex:1 1 auto}.onlinePauseChoices{gap:8px}}

@@ -81,7 +81,7 @@ function renderTotals(){
  return `<article class="totalCard"><h2>${label}</h2><p class="totalDates">${esc(dateLabel(from))}${from===to?'':' – '+esc(dateLabel(to))}</p><div class="totalNumbers"><span><strong>${jobs.filter(j=>j.type==='Pickup').length}</strong> Pickups</span><span><strong>${jobs.filter(j=>j.type==='Delivery').length}</strong> Deliveries</span></div></article>`;
  }).join('');
  const counts=state.pendingCounts?Object.values(state.pendingCounts).reduce((a,c)=>({Pickup:a.Pickup+(c.Pickup||0),Delivery:a.Delivery+(c.Delivery||0)}),{Pickup:0,Delivery:0}):{Pickup:(state.requests||[]).filter(j=>j.status!=='Canceled'&&j.type==='Pickup').length,Delivery:(state.requests||[]).filter(j=>j.status!=='Canceled'&&j.type==='Delivery').length};
- $('pendingOverview').innerHTML=`<h2>Pending Requests <span class="pendingBadge">${counts.Pickup+counts.Delivery}</span></h2><div class="pendingBreakdown"><span><strong>${counts.Pickup}</strong> Pickups</span><span><strong>${counts.Delivery}</strong> Deliveries</span></div><p>All dates, including requests without a date. Approved and cancelled requests excluded.</p>`;
+ $('pendingOverview').innerHTML=`<h2>Pending Requests <span class="pendingBadge">${counts.Pickup+counts.Delivery}</span></h2><div class="pendingBreakdown"><span><strong>${counts.Pickup}</strong> Pickups</span><span><strong>${counts.Delivery}</strong> Deliveries</span></div><p>All dates, including requests without a date. Approved and cancelled requests excluded.</p>${onlineRequestsMarkup()}`;
 }
 // Use directions links rather than a location search. The OS/browser controls app handoff.
 function navigationUrl(address,ua=navigator.userAgent,platform=navigator.platform,touch=navigator.maxTouchPoints){
@@ -3543,3 +3543,43 @@ api('session').then(s=>{hrOpsButton.hidden=!s.user||!(s.user.admin||s.user.grant
 })();
 
 // END UPDATE NOTICES
+// BEGIN ONLINE REQUESTS
+/* Shared availability is server-owned; browser timers never decide acceptance. */
+function onlineRequestsMarkup(){
+ const value=state.onlineRequests;
+ const status=value?`Online Requests are ${value.paused?'paused':'active'}`:'Checking Online Requests…';
+ const until=value?.paused?`<span>Automatically resumes ${esc(onlineRequestsDate(value.paused_until))}.</span>`:'';
+ return `<div class="onlineRequestsControl"><div role="status"><strong><span aria-hidden="true">${value?.paused?'⏸':'●'}</span> ${status}</strong>${until}</div>${can('review_requests')&&value?`<button type="button" data-online-pause>Pause Online Requests</button>${value.paused?'<button type="button" class="secondary" data-online-resume>Resume now</button>':''}`:''}</div>`;
+}
+function onlineRequestsDate(stamp){return new Date(stamp*1000).toLocaleString('en-US',{timeZone:'America/Chicago',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'});}
+const onlineRequestsDialog=document.createElement('dialog');
+onlineRequestsDialog.id='onlineRequestsDialog';
+onlineRequestsDialog.setAttribute('aria-labelledby','onlineRequestsTitle');
+onlineRequestsDialog.innerHTML=`<h2 id="onlineRequestsTitle">Pause Online Requests</h2><p>Pause new online donation pickup requests on coastyfc.com, thriftmart.coastyfc.com, and binopoly.coastyfc.com.</p><p>Existing requests and appointments stay available. Requests reopen automatically when the pause ends.</p><div class="onlinePauseChoices"><button type="button" data-pause-hours="8">8 hours</button><button type="button" data-pause-hours="12">12 hours</button><button type="button" data-pause-hours="24">24 hours</button></div><p id="onlinePauseError" role="alert"></p><button type="button" class="secondary" data-pause-close>Cancel</button>`;
+document.body.append(onlineRequestsDialog);
+let onlinePauseBusy=false,onlinePauseRevision=0;
+$('pendingOverview').addEventListener('click',async event=>{
+ const pause=event.target.closest('[data-online-pause]'),resume=event.target.closest('[data-online-resume]');
+ if(!pause&&!resume)return;
+ if(onlinePauseBusy)return;
+ if(resume){await onlineRequestsSave({resume:true,revision:state.onlineRequests.revision},resume);return;}
+ onlinePauseRevision=state.onlineRequests.revision;
+ $('onlinePauseError').textContent='';onlineRequestsDialog.showModal();
+});
+async function onlineRequestsSave(data,button){
+ onlinePauseBusy=true;button.disabled=true;
+ for(const b of onlineRequestsDialog.querySelectorAll('button'))b.disabled=true;
+ try{
+  state.onlineRequests=await api('online-requests',data);renderTotals();
+  onlineRequestsDialog.close();toast(data.resume?'Online Requests are active.':`Online Requests are paused until ${onlineRequestsDate(state.onlineRequests.paused_until)}.`);
+ }catch(error){if(onlineRequestsDialog.open)$('onlinePauseError').textContent=error.message;else toast(error.message);await refresh();}
+ finally{onlinePauseBusy=false;button.disabled=false;for(const b of onlineRequestsDialog.querySelectorAll('button'))b.disabled=false;}
+}
+onlineRequestsDialog.addEventListener('cancel',event=>{if(onlinePauseBusy)event.preventDefault();});
+onlineRequestsDialog.addEventListener('click',event=>{
+ const button=event.target.closest('button');if(!button||onlinePauseBusy)return;
+ if(button.hasAttribute('data-pause-close')){onlineRequestsDialog.close();return;}
+ if(button.dataset.pauseHours)onlineRequestsSave({hours:Number(button.dataset.pauseHours),revision:onlinePauseRevision},button);
+});
+
+// END ONLINE REQUESTS

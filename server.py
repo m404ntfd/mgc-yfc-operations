@@ -4859,6 +4859,59 @@ def giving_post(c,u,path,d):
 
 # END GIVING
 
+# BEGIN ONLINE REQUESTS
+"""Shared, expiring online pickup pause. Existing dispatch records stay untouched."""
+
+def online_requests_init(c):
+    c.execute('''CREATE TABLE IF NOT EXISTS online_request_settings(
+        id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL,
+        paused_until REAL NOT NULL, changed_at REAL NOT NULL, actor TEXT NOT NULL)''')
+    c.execute("INSERT OR IGNORE INTO online_request_settings VALUES(1,0,0,0,'')")
+
+
+def online_requests_status(c):
+    row=c.execute('SELECT * FROM online_request_settings WHERE id=1').fetchone()
+    now=time.time();until=row['paused_until'] if row else 0
+    paused=until>now
+    return dict(service='coastyouth-online-requests',supported=True,paused=paused,
+                status='paused' if paused else 'active',paused_until=until if paused else None,
+                server_now=now,revision=row['revision'] if row else 0)
+
+
+def online_requests_change(c,u,d):
+    if not has_permission(u,'review_requests'):
+        raise Problem('Review and approve requests permission is required to pause online requests.',403)
+    current=online_requests_status(c)
+    if type(d.get('revision')) is not int or d['revision']!=current['revision']:
+        raise Problem('Online request availability changed. Refresh and try again.',409)
+    resume=d.get('resume') is True
+    hours=d.get('hours')
+    if resume:
+        if hours is not None:raise Problem('Choose either resume or a pause duration.')
+    elif type(hours) is not int or hours not in (8,12,24) or 'resume' in d:
+        raise Problem('Choose 8, 12, or 24 hours.')
+    now=time.time();until=0 if resume else now+hours*3600
+    c.execute('UPDATE online_request_settings SET revision=revision+1,paused_until=?,changed_at=?,actor=? WHERE id=1',
+              (until,now,u['name']))
+    details=json.dumps(dict(hours=None if resume else hours,paused_until=until,previous_until=current['paused_until']))
+    c.execute('INSERT INTO audit VALUES(?,?,?,?)',(dt.datetime.now().astimezone().isoformat(timespec='seconds'),
+              u['name'],'Resumed online requests' if resume else 'Paused online requests',details))
+    return online_requests_status(c)
+
+
+def online_requests_guard(c,u,d):
+    # The website's existing integration account is deliberately submission-only.
+    # Recognize it as well as the explicit marker, including older website builds.
+    grants={key for key,value in u.get('grants',{}).items() if value}
+    online=d.get('online_request') is True or (not u['admin'] and grants=={'submit_requests'})
+    if d.get('id') or not online:return
+    status=online_requests_status(c)
+    if status['paused']:
+        raise Problem('Online donation pickup requests are temporarily paused. Please try again when requests reopen.',
+                      423,code='online_requests_paused',availability=status)
+
+# END ONLINE REQUESTS
+
 def init():
     with connect() as c:
         c.executescript('''CREATE TABLE IF NOT EXISTS users(name TEXT PRIMARY KEY COLLATE NOCASE, salt TEXT, hash TEXT, admin INTEGER);
@@ -4884,6 +4937,7 @@ CREATE TABLE IF NOT EXISTS audit(at TEXT, actor TEXT, action TEXT, job TEXT);'''
         training_init(c)
         devices_init(c)
         shifts_init(c)
+        online_requests_init(c)
         giving_init(c)
         catalog_init(c)
         hr_init(c)
@@ -5490,6 +5544,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         try:
             request=urlsplit(self.path)
+            if request.path=='/api/online-requests':
+                with LOCK,connect() as c:return self.send(online_requests_status(c))
             if request.path=='/api/desk-connection':
                 nonce=parse_qs(request.query).get('nonce',[''])[0]
                 if not re.fullmatch('[0-9a-f]{32}',nonce):raise Problem('Invalid connection check.')
@@ -5702,7 +5758,7 @@ class Handler(BaseHTTPRequestHandler):
                             counts=pending_counts.setdefault(date,{'Pickup':0,'Delivery':0})
                             if request.get('type') in counts: counts[request['type']]+=1
                     notice=c.execute('SELECT * FROM update_notices ORDER BY id DESC LIMIT 1').fetchone()
-                    return self.send({'updateNotice':dict(notice) if notice else None,'pendingCounts':pending_counts,'jobs':[dict(json.loads(r['body']),id=r['id'],revision=r['revision']) for r in c.execute('SELECT * FROM jobs') if not json.loads(r['body']).get('request')], 'requests':[dict(json.loads(r['body']),id=r['id'],revision=r['revision']) for r in c.execute('SELECT * FROM jobs') if json.loads(r['body']).get('request') and (u['can_create'] or json.loads(r['body']).get('requestedBy')==u['name'])], 'permissions':{'can_create':u['can_create'],'see_requests':u['see_requests'],'grants':u['grants']}, 'vehicles':[r[0] for r in c.execute('SELECT name FROM vehicles ORDER BY name')], 'users':[dict(r) for r in c.execute('SELECT users.name,admin,COALESCE(permissions.can_create,1) AS can_create,COALESCE(permissions.see_requests,admin) AS see_requests FROM users LEFT JOIN permissions ON users.name=permissions.name ORDER BY users.name')]})
+                    return self.send({'updateNotice':dict(notice) if notice else None,'pendingCounts':pending_counts,'jobs':[dict(json.loads(r['body']),id=r['id'],revision=r['revision']) for r in c.execute('SELECT * FROM jobs') if not json.loads(r['body']).get('request')], 'requests':[dict(json.loads(r['body']),id=r['id'],revision=r['revision']) for r in c.execute('SELECT * FROM jobs') if json.loads(r['body']).get('request') and (u['can_create'] or json.loads(r['body']).get('requestedBy')==u['name'])], 'onlineRequests':online_requests_status(c),'permissions':{'can_create':u['can_create'],'see_requests':u['see_requests'],'grants':u['grants']}, 'vehicles':[r[0] for r in c.execute('SELECT name FROM vehicles ORDER BY name')], 'users':[dict(r) for r in c.execute('SELECT users.name,admin,COALESCE(permissions.can_create,1) AS can_create,COALESCE(permissions.see_requests,admin) AS see_requests FROM users LEFT JOIN permissions ON users.name=permissions.name ORDER BY users.name')]})
                 if self.path=='/api/audit' and route_allowed(u,self.path):
                     return self.send([dict(r) for r in c.execute('SELECT * FROM audit ORDER BY rowid DESC LIMIT 100')])
                 raise Problem('Not found',404)
@@ -5817,6 +5873,8 @@ class Handler(BaseHTTPRequestHandler):
                     c.execute('INSERT INTO receipt_details VALUES(?,?,?)',(ident,int(reimbursement),int(uploader is None)))
                     return self.send({'ok':True,'id':ident,'email_pending':True})
                 u=self.user()
+                if self.path=='/api/online-requests':
+                    return self.send(online_requests_change(c,u,d))
                 if self.path=='/api/activity-settings':
                     if not u['admin']:raise Problem('Administrator access required.',403)
                     minutes=d.get('inactive_minutes')
@@ -6202,6 +6260,7 @@ class Handler(BaseHTTPRequestHandler):
                     c.execute('UPDATE jobs SET revision=?,body=? WHERE id=?',(old['revision']+1,json.dumps(j),jid))
                     c.execute('INSERT INTO audit VALUES(?,?,?,?)',(dt.datetime.now().isoformat(timespec='seconds'),u['name'],'Status: '+previous+' → '+status+' · '+j['customer'],jid))
                 elif self.path in ('/api/save','/api/delete'):
+                    if self.path=='/api/save':online_requests_guard(c,u,d)
                     fulfillment=None
                     if self.path=='/api/save' and 'retail_sale' in d:
                         fulfillment=fulfillment_delivery_prepare(c,u,d)

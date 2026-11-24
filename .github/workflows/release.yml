@@ -31,7 +31,7 @@ jobs:
       - run: python -m unittest test_desktop_reconnect.ReconnectTests
       - run: python -m unittest test_installer_registration
       - run: python -m unittest test_desktop_update_security
-      - run: python -m unittest test_desk_connection test_register_shifts
+      - run: python -m unittest test_desk_connection test_register_shifts test_online_requests
       - run: python -m unittest test_cash_advances test_thrift_retail.ThriftTests test_retail_stores.StoreTests test_pickup_followup.PickupTests test_hr_catalog test_catalog_hierarchy test_hr_browser test_hr_completion test_hr_formats test_hr_sources
       - run: python -m unittest test_schedule_redesign test_data_integrity test_update_connections test_update_coordination test_activity_controller test_pos test_pos_quantity.QuantityTests test_pos_credit test_pos_kiosk test_pos_updates
   mobile-browser:
@@ -104,6 +104,7 @@ jobs:
       - run: python test_office_expansion_ui.py
       - run: python test_store_ops_ui.py
       - run: python test_request_photos_ui.py
+      - run: python test_online_requests_ui.py
       - run: python test_terminal_registration_ui.py
       - run: python test_terminal_recovery_ui.py
       - run: python test_pos_redesign_ui.py

@@ -73,5 +73,10 @@ def prepare(root=None):
  source=re.sub(r'# BEGIN CHECKOUT.*?# END CHECKOUT',lambda _: '# BEGIN CHECKOUT\n'+(root/'checkout.py').read_text(encoding='utf-8')+'\n# END CHECKOUT',source,flags=re.S)
  source=re.sub(r'# BEGIN GIVING.*?# END GIVING',lambda _: '# BEGIN GIVING\n'+(root/'giving.py').read_text(encoding='utf-8')+'\n# END GIVING',source,flags=re.S)
  source=re.sub(r'# BEGIN REGISTER SHIFTS.*?# END REGISTER SHIFTS',lambda _: '# BEGIN REGISTER SHIFTS\n'+(root/'retail_shifts.py').read_text(encoding='utf-8')+'\n# END REGISTER SHIFTS',source,flags=re.S)
+ source=re.sub(r'# BEGIN ONLINE REQUESTS.*?# END ONLINE REQUESTS',lambda _: '# BEGIN ONLINE REQUESTS\n'+(root/'online_requests.py').read_text(encoding='utf-8')+'\n# END ONLINE REQUESTS',source,flags=re.S)
+ for filename,module,begin,end in [('app.js','online-requests.js','// BEGIN ONLINE REQUESTS','// END ONLINE REQUESTS'),('style.css','online-requests.css','/* BEGIN ONLINE REQUESTS */','/* END ONLINE REQUESTS */')]:
+  target=root/'static'/filename;content=target.read_text(encoding='utf-8')
+  content=re.sub(re.escape(begin)+'.*?'+re.escape(end),'',content,flags=re.S)
+  target.write_text(content.rstrip()+'\n'+begin+'\n'+(root/'static'/module).read_text(encoding='utf-8')+'\n'+end+'\n',encoding='utf-8')
  path.write_text(source,encoding='utf-8')
 if __name__=='__main__':prepare()
