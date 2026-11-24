@@ -6,7 +6,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 TITLE = "CoastYouth Retail STORE OPS"
-VERSION = "1.6.0"
+VERSION = "1.6.1"
 DEFAULT_SERVER = "https://operations.coastyfc.com"
 
 from desktop_connection import server_url, connect_before_open
@@ -97,6 +97,8 @@ def main():
         from pos_updater import apply_update
         apply_update(sys.argv[sys.argv.index("--apply-pos-update")+1]);return
     if "--smoke-test" in sys.argv:
+        from desktop_update_security import update_ssl_context
+        update_ssl_context()
         errors = []
         window = webview.create_window(TITLE, html="<html><body>STORE OPS</body></html>", hidden=True)
         def check():

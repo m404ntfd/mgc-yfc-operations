@@ -25,6 +25,8 @@ def main():
   from pos_updater import apply_update
   apply_update(sys.argv[sys.argv.index('--apply-pos-update')+1]);return
  if '--smoke-test' in sys.argv:
+  from desktop_update_security import update_ssl_context
+  update_ssl_context()  # Fail packaging checks if the bundled trust roots are missing.
   assert server_url('localhost:8080')=='http://localhost:8080'
   assert server_url('https://store.example/')=='https://store.example'
   for bad in ['file:///C:/data','https://user:password@example.com','https://example.com/path']:

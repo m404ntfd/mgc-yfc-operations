@@ -3,6 +3,7 @@ import hashlib
 import json
 from pathlib import Path
 import tempfile
+import ssl
 import unittest
 from unittest.mock import Mock, patch
 import desktop_startup as startup
@@ -27,6 +28,15 @@ class StartupTests(unittest.TestCase):
                 self.assertEqual(self.check(published(app,'1.20.0'),app,'1.9.0')['version'],'1.20.0')
                 self.assertIsNone(self.check(published(app,'1.20.0'),app,'1.20.0'))
                 self.assertIsNone(self.check(published(app,'1.20.0'),app,'2.0.0'))
+
+    def test_startup_uses_verified_system_and_bundled_context(self):
+        with patch.object(startup,'urlopen') as fetch:
+            fetch.return_value.__enter__.return_value.read.return_value=json.dumps(published()).encode()
+            startup.check_release('pos','1.0.0')
+            context=fetch.call_args.kwargs['context']
+            self.assertTrue(context.check_hostname)
+            self.assertEqual(context.verify_mode,ssl.CERT_REQUIRED)
+            self.assertGreater(context.cert_store_stats()['x509_ca'],0)
 
     def test_untrusted_or_incomplete_release_never_offered(self):
         for change in ('draft','prerelease','digest','url','asset'):

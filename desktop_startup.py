@@ -11,6 +11,7 @@ import subprocess
 import sys
 import threading
 from urllib.request import Request, urlopen
+from desktop_update_security import update_ssl_context, update_error_message
 
 REPO = 'm404ntfd/mgc-yfc-operations'
 APPS = {
@@ -51,7 +52,7 @@ def check_release(app, current):
     prefix = APPS[app][1]
     request = Request('https://api.github.com/repos/' + REPO + '/releases/latest',
                       headers={'User-Agent': 'CoastYouth-Startup-Updater', 'Accept': 'application/vnd.github+json'})
-    with urlopen(request, timeout=10) as response:
+    with urlopen(request, timeout=10, context=update_ssl_context()) as response:
         raw = response.read(1000001)
     if len(raw) > 1000000:
         raise ValueError('Update information is too large.')
@@ -123,7 +124,7 @@ def startup_update(app, current, settings):
     from tkinter import ttk
     root = tk.Tk()
     root.title(APPS[app][0] + ' — Updates')
-    root.geometry('620x330')
+    root.geometry('620x400')
     root.resizable(False, False)
     frame = ttk.Frame(root, padding=24)
     frame.pack(fill='both', expand=True)
@@ -152,17 +153,19 @@ def startup_update(app, current, settings):
     later = ttk.Button(buttons, text='Continue opening', command=close, padding=12)
     later.pack(side='right')
     update = ttk.Button(buttons, text='Restart & update', padding=12)
+    retry = ttk.Button(buttons, text='Check again', padding=12)
 
     def work(fn):
         def worker():
             try: results.put(('ok', fn()))
-            except Exception as exc: results.put(('error', str(exc)))
+            except Exception as exc: results.put(('error', update_error_message(exc)))
         threading.Thread(target=worker, daemon=True).start()
 
     def install():
         if state['installing'] or not state['offer']:
             return
         state['installing'] = True
+        retry.pack_forget()
         update.configure(state='disabled')
         later.configure(state='disabled')
         text.set('Downloading and verifying the update. The application will restart when it is ready. Your saved data and connection settings will be kept.')
@@ -170,6 +173,17 @@ def startup_update(app, current, settings):
         work(lambda: stage_installer(state['offer'], settings))
 
     update.configure(command=install)
+    def check_again():
+        if state['installing'] or state['closed']:
+            return
+        state['offer'] = None
+        retry.pack_forget()
+        update.pack_forget()
+        frame.winfo_children()[0].configure(text='Checking for updates')
+        text.set('Checking for a newer version of ' + APPS[app][0] + '\u2026')
+        progress.start(15)
+        work(lambda: check_release(app, current))
+    retry.configure(command=check_again)
     root.protocol('WM_DELETE_WINDOW', close)
 
     def poll():
@@ -182,10 +196,12 @@ def startup_update(app, current, settings):
             return
         progress.stop()
         if kind == 'error':
+            frame.winfo_children()[0].configure(text='Update not installed' if state['installing'] else 'Unable to check for updates')
             state['installing'] = False
             text.set('The update could not be completed. ' + value + '\nYou can continue opening the application and try again later.')
             later.configure(state='normal', text='Continue opening')
             update.pack_forget()
+            retry.pack(side='left')
         elif state['installing']:
             try:
                 launch_installer(state['offer'], settings, *value)
@@ -202,6 +218,7 @@ def startup_update(app, current, settings):
             return
         else:
             state['offer'] = value
+            update.configure(state='normal')
             frame.winfo_children()[0].configure(text='Update available')
             text.set('An update is available. Restart ' + value['name'] + ' to install it.')
             later.configure(text='Not now')

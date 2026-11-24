@@ -2,7 +2,7 @@
 import json,os,sys,threading
 from pathlib import Path
 from desktop_connection import server_url, connect_before_open
-VERSION='1.19.0'
+VERSION='1.19.1'
 
 def save_connection(settings,address):
  from pos_kiosk import KioskStore
@@ -113,6 +113,8 @@ def main():
   apply_update(sys.argv[sys.argv.index('--apply-pos-update')+1]);return
  import webview
  if '--smoke-test' in sys.argv:
+  from desktop_update_security import update_ssl_context
+  update_ssl_context()
   errors=[];window=webview.create_window('OFFICE startup check',html='<html><body>OFFICE</body></html>',hidden=True)
   def check():
    try:

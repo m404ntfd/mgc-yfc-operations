@@ -8,7 +8,7 @@ try:
 except ImportError:
     from client import Client
 NAME='MGC YFC Operations Remote Manager'
-VERSION='0.64.0'
+VERSION='0.64.1'
 CONFIG=Path(os.environ.get('APPDATA',Path.home()))/'ThriftMartDispatchRemoteManager'/'config.json'
 
 class App:
@@ -365,6 +365,8 @@ def main():
         from restore import restore_window
         restore_window(Path(sys.argv[sys.argv.index('--restore-dir')+1]));return
     if '--smoke-test' in sys.argv:
+        from desktop_update_security import update_ssl_context
+        update_ssl_context()
         root=tk.Tk();root.withdraw();App(root);root.update();root.destroy();return
     from desktop_startup import startup_update,claim_instance
     if not claim_instance('remote'):return

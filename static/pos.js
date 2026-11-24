@@ -1457,7 +1457,7 @@ async function givingOpen(){
 // BEGIN OFFICE STATUS BAR
 // Compact OFFICE application information; no extra server requests.
 if (officeMode) (() => {
- const webVersion = '0.64.0'; // replaced by prepare_web_assets.py
+ const webVersion = '0.64.1'; // replaced by prepare_web_assets.py
  const style = document.createElement('style');
  style.textContent = `
  .retailOffice{--office-status-height:26px}
