@@ -5,7 +5,7 @@ def checkout_init(c):
 def checkout_settings(c,store):
     row=c.execute('SELECT * FROM retail_checkout_settings WHERE store=?',(store,)).fetchone()
     body=json.loads(row['body']) if row else {'presets':[], 'reasons':[{'id':'customer-change','name':'Customer changed their mind'},{'id':'entry-error','name':'Incorrect item or entry'},{'id':'unable-to-pay','name':'Customer unable to pay'}]}
-    return dict({'receipt_reset_seconds':5,**body},store_id=store,revision=row['revision'] if row else 0)
+    return dict({'receipt_reset_seconds':5,'connection_monitor':{'interval_seconds':10,'warning_seconds':20,'offline_seconds':30},**body},store_id=store,revision=row['revision'] if row else 0)
 
 def checkout_get(c,u,path,query):
     if path=='checkout-payment-status':
@@ -38,6 +38,12 @@ def checkout_post(c,u,path,d,finish):
         old=checkout_settings(c,store)
         if d.get('revision')!=old['revision']:raise Problem('Checkout choices changed. Reopen this screen.',409)
         result={'receipt_reset_seconds':pos_int(d.get('receipt_reset_seconds',old['receipt_reset_seconds']),'receipt display seconds',1,300)}
+        monitor=d.get('connection_monitor',old['connection_monitor'])
+        if not isinstance(monitor,dict):raise Problem('Choose valid connection indicator timings.')
+        interval=pos_int(monitor.get('interval_seconds'),'connection check seconds',5,60)
+        warning=pos_int(monitor.get('warning_seconds'),'connection warning seconds',interval*2,300)
+        offline=pos_int(monitor.get('offline_seconds'),'server unreachable seconds',warning+interval,600)
+        result['connection_monitor']={'interval_seconds':interval,'warning_seconds':warning,'offline_seconds':offline}
         for key in ('presets','reasons'):
             values=d.get(key)
             if not isinstance(values,list) or len(values)>100:raise Problem('Use no more than 100 '+key+'.')

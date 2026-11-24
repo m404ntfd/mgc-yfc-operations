@@ -1,0 +1,23 @@
+.registerShiftDialog{width:min(1000px,95vw)!important;max-width:95vw!important}
+.registerShiftDialog table{width:100%;border-collapse:collapse}.registerShiftDialog td,.registerShiftDialog th{padding:12px;text-align:left;border-bottom:1px solid #71899e}
+.shiftStatusRow,.shiftActions,.shiftPrintControls,#shiftHistoryFilter{display:flex;gap:14px;flex-wrap:wrap;align-items:end;margin:16px 0}.shiftActions button,.shiftPrintControls button{min-height:48px}.shiftStatusRow>*{flex:1}.shiftStatusRow strong{display:block}
+.shiftTotals{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:16px 0}.shiftMetric{padding:15px;border:1px solid #8095a8;border-radius:8px}.shiftMetric small,.shiftMetric strong{display:block}.shiftMetric strong{font-size:22px;margin-top:7px}
+.shiftBlocked{border:2px solid #b91c1c;background:#fff1f2;color:#881337;padding:16px;border-radius:8px}
+#registerShiftSettings{display:grid;gap:12px}#registerShiftSettings input,#registerShiftSettings select{min-height:48px}
+.shiftReportPreview{background:white!important;color:#172b3d!important;padding:28px;border-radius:8px}.shiftReportHeader{display:flex;align-items:center;gap:20px;border-bottom:4px solid #173451;padding-bottom:15px}.shiftReportHeader img{max-width:130px;max-height:90px;object-fit:contain}.shiftReportHeader h2,.shiftReportHeader h3,.shiftReportHeader p{margin:6px 0;color:inherit!important}.shiftReportHeader small{font-size:11px;letter-spacing:.08em}.shiftReportMeta{display:flex;justify-content:space-between;gap:20px}.shiftReportNote{font-size:12px}.shiftSectionBar{background:#173451!important;color:white!important;padding:10px}.shiftEntry{padding:12px 0;border-bottom:1px solid #bcc6cc;break-inside:avoid}.shiftEntry>div{display:flex;justify-content:space-between;gap:15px}.shiftEntry p{margin:4px 0;font-size:12px}.shiftEntry li{font-size:12px}.shiftReportPreview *{color:inherit}.shiftReportPreview .shiftSectionBar{color:white!important}
+#registerShiftPaper{display:none}
+.registerShiftDialog .shiftBlocked p{color:#881337!important}.registerShiftDialog .shiftReportPreview :is(p,small,span,div,section,li,h2,h3,strong){color:inherit!important}
+.registerShiftDialog .shiftReportPreview .shiftReportHeader,#registerShiftPaper .shiftReportHeader{position:static!important;background:transparent!important;color:#172b3d!important;box-shadow:none!important;border-radius:0!important}
+.registerShiftDialog .shiftReportPreview .shiftSectionBar{color:white!important}
+@media(max-width:650px){.shiftTotals{grid-template-columns:repeat(2,minmax(0,1fr))}.shiftReportMeta{display:block}.shiftReportPreview{padding:12px}}
+@media print{
+ @page shiftLetter{size:letter;margin:12mm} @page shiftReceipt{size:auto;margin:0}
+ body.registerShiftPrinting>*{display:none!important}body.registerShiftPrinting>#registerShiftPaper{display:block!important;color:black!important;background:white!important;font:11px Arial,sans-serif}
+ #registerShiftPaper *{color:inherit!important;box-shadow:none!important}#registerShiftPaper .shiftReportHeader{display:flex!important}#registerShiftPaper .shiftSectionBar{color:white!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+ #registerShiftPaper[data-format=letter]{page:shiftLetter;width:auto}#registerShiftPaper[data-format=receipt]{page:shiftReceipt;width:72mm;margin:0;padding:3mm;font-size:11px}
+ #registerShiftPaper[data-format=receipt] .shiftReportHeader{display:block!important}#registerShiftPaper[data-format=receipt] .shiftReportHeader img{max-width:50mm;max-height:20mm}
+ #registerShiftPaper[data-format=receipt] .shiftReportHeader h2{font-size:18px}#registerShiftPaper[data-format=receipt] .shiftReportHeader h3{font-size:15px}
+ #registerShiftPaper[data-format=receipt] .shiftReportMeta{display:block}#registerShiftPaper[data-format=receipt] .shiftTotals{display:block}#registerShiftPaper[data-format=receipt] .shiftMetric{border:0;border-bottom:1px dashed #999;border-radius:0;padding:6px 0;display:flex;justify-content:space-between;gap:4px}
+ #registerShiftPaper[data-format=receipt] .shiftMetric strong{font-size:12px;margin:0;white-space:nowrap}#registerShiftPaper[data-format=receipt] .shiftEntry>div{display:block;overflow-wrap:anywhere}#registerShiftPaper[data-format=receipt] .shiftEntry ul{padding-left:15px}
+ #registerShiftPaper[data-format=receipt] .shiftEntry>div>strong{display:block;margin-bottom:4px}
+}

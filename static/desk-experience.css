@@ -13,7 +13,15 @@
  #deskSaleTools{display:grid;grid-row:span 2;gap:8px;grid-template-rows:repeat(2,minmax(48px,1fr))}
  #deskSaleTools[hidden]{display:none}
  .thriftDialog [hidden]{display:none!important}
- #deskSettings{position:relative}#deskSettings summary{list-style:none;cursor:pointer;border:1px solid #71899e;border-radius:8px;padding:12px 20px;display:flex;align-items:center}
+ #deskSettings{position:relative;margin:0}#deskSettings summary{list-style:none;cursor:pointer;border:1px solid #71899e;border-radius:8px;padding:10px 14px;display:flex;align-items:center;justify-content:center;font-weight:600}
+ .deskTouch .headerRight>button,.deskTouch #deskSettings>summary{min-height:48px;font-size:15px;line-height:20px}
+ #navCheckout:has(#deskConnectionIndicator){display:flex;align-items:center;justify-content:center;gap:10px}
+ #deskConnectionIndicator{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;flex:none;border:1px solid #172f43;border-radius:3px;background:#ffd34d;color:#142d3d;font:bold 13px/1 Arial,sans-serif;box-shadow:0 0 0 1px #ffffff80}
+ #deskConnectionIndicator[data-state=connected]{background:#43da82;color:#07331b}
+ #deskConnectionIndicator[data-state=disconnected]{background:#ff6464;color:#3e0808}
+ .deskTouch #connection:is([data-connection-state=delayed],[data-connection-state=disconnected],[data-connection-state=checking]){color:inherit}
+ dialog:has(#deskConnectionSettings){width:min(760px,94vw)}
+ #deskConnectionSettings{display:grid;gap:12px}#deskConnectionSettings label{display:grid;gap:6px}#deskConnectionSettings p{margin:0}
  .deskSettingsMenu{position:absolute;right:0;top:100%;z-index:90;min-width:220px;background:var(--panel,#fff);padding:10px;border:1px solid #71899e;border-radius:10px;box-shadow:0 8px 24px #0005}.deskSettingsMenu button{display:block;width:100%;margin:4px 0}
  .deskTouch #retailEnroll{display:none!important}.deskTouch #posCategories,.deskTouch #posCatalog,.deskTouch .receiptLines{touch-action:pan-y;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}.deskTouch #posCatalog button,.deskTouch #posCategories button{touch-action:pan-y}
  .checkoutCancelReasons{display:grid;grid-template-columns:1fr 1fr;gap:12px}.checkoutCancelReasons button{min-height:70px;font-size:18px}

@@ -2,7 +2,7 @@
 import json,os,sys,threading
 from pathlib import Path
 from desktop_connection import server_url, connect_before_open
-VERSION='1.19.1'
+VERSION='1.20.0'
 
 def save_connection(settings,address):
  from pos_kiosk import KioskStore
@@ -59,6 +59,9 @@ class OfficeBridge:
  def receipt_printers(self):
   from receipt_printer import printers
   return printers(self)
+ def shift_print(self,printer,shift):
+  from receipt_printer import print_shift
+  return print_shift(self,printer,shift)
  def receipt_print(self,printer,sale,automatic=False):
   from receipt_printer import print_receipt
   return print_receipt(self,printer,sale,automatic)

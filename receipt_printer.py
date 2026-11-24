@@ -3,6 +3,35 @@ import hashlib,json,os,threading,time
 from pathlib import Path
 _lock=threading.Lock()
 
+def print_shift(bridge,printer,shift):
+    """Print only the visible, server-sourced register-shift report."""
+    if not bridge._trusted():return {'error':'Open the configured application.'}
+    if not isinstance(printer,str) or printer not in printers(bridge).get('printers',[]):return {'error':'The configured receipt printer is not installed on this computer. The shift report is saved.'}
+    if not _lock.acquire(blocking=False):return {'error':'Another document is printing. Try again when it finishes.'}
+    try:
+        if bridge._window.evaluate_js('document.getElementById("registerShiftPaper")?.dataset.shift')!=str(shift):return {'error':'The shift report changed. Reopen it before printing.'}
+        from webview.platforms.winforms import BrowserView
+        from System import Action
+        form=BrowserView.instances[bridge._window.uid];result={};ready=threading.Event()
+        def start():
+            try:
+                core=form.browser.webview.CoreWebView2;settings=core.Environment.CreatePrintSettings()
+                settings.PrinterName=printer;settings.ShouldPrintBackgrounds=True;settings.ShouldPrintHeaderAndFooter=False
+                result['task']=core.PrintAsync(settings)
+            except Exception as exc:result['error']=str(exc)
+            finally:ready.set()
+        form.BeginInvoke(Action(start))
+        if not ready.wait(10):return {'error':'Printer status is uncertain. Check the printer before reprinting. The shift report is saved.'}
+        if result.get('error'):return {'error':'Could not print the shift report: '+result['error']}
+        task=result['task'];deadline=time.monotonic()+30
+        while not task.IsCompleted and time.monotonic()<deadline:time.sleep(.05)
+        if not task.IsCompleted:return {'error':'Printer status is uncertain. The shift report is saved; check the printer before reprinting.'}
+        status=str(task.GetAwaiter().GetResult())
+        if status!='Succeeded':return {'error':'Shift printing failed ('+status+'). Reprint the saved report after checking the printer.'}
+        return {'ok':True}
+    except Exception as exc:return {'error':'Shift report printing failed: '+str(exc)}
+    finally:_lock.release()
+
 def printers(bridge):
     if not bridge._trusted():return {'error':'Open the configured application.'}
     try:

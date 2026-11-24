@@ -22,11 +22,11 @@ async function api(path,data){
  if(mutation)writeCount++;
  try{
   const r=await fetch('/api/'+path,{method:data?'POST':'GET',headers:{'X-Dispatch-Connection':connectionId,...(data?{'Content-Type':'application/json','X-Dispatch':'1'}:{})},body:data?JSON.stringify(data):undefined,signal:AbortSignal.timeout(20000)});
-  const value=await r.json();$('connection').textContent='Connected to Operations';
+  const value=await r.json();if(!window.deskConnectionMonitor)$('connection').textContent='Connected to Operations';
   if(!r.ok){if(r.status===401){$('cashAdvanceDialog')?.close();$('creditDialog')?.close();user=null;$('posRoot').hidden=true;$('auth').hidden=false;$('cashier').textContent='';}throw Object.assign(Error(value.error||'Request failed'),{status:r.status});}
   if(mutation&&form&&stamp===snapshot(form))changedForms.delete(form);
   return value;
- }catch(e){if(!e.status)$('connection').textContent='Connection interrupted';throw e;}
+ }catch(e){if(!e.status&&!window.deskConnectionMonitor)$('connection').textContent='Connection interrupted';throw e;}
  finally{if(mutation)writeCount--;}
 }
 async function boot(){
@@ -1181,10 +1181,6 @@ if(!document.body.dataset.retailTheme)document.body.dataset.retailTheme='glass-b
 
 officeCards.push({section:'sales',action:'surcharge-settings',title:'Surcharge rules',description:'Set general sale surcharge limits separately from discounts.',permission:'manage_pos',icon:'+'},{section:'sales',action:'card-future-settings',title:'Credit card settings (future)',description:'Card payments and card surcharges will be added in future updates.',permission:'manage_pos',icon:'▤'});
 const surchargeOfficeAction=officeAction;officeAction=async function(action){if(['surcharge-settings','card-future-settings'].includes(action)){await surchargeOfficeAction('cash-rules');if($('financeRules')){financeTab=action==='surcharge-settings'?'surcharges':'cards';$('financeRules').querySelector(`[data-finance-tab="${financeTab}"]`).click();}return;}return surchargeOfficeAction(action);};
-
-
-
-
 // BEGIN CASH ADVANCES
 // Employee cash payments use their own immutable ledger, separate from checkout.
 function cashAdvancePending(){try{return user?JSON.parse(sessionStorage.getItem('retail-save:'+user.name+':cash-advance')||'null'):null;}catch{return null;}}
@@ -1457,7 +1453,7 @@ async function givingOpen(){
 // BEGIN OFFICE STATUS BAR
 // Compact OFFICE application information; no extra server requests.
 if (officeMode) (() => {
- const webVersion = '0.64.1'; // replaced by prepare_web_assets.py
+ const webVersion = '0.65.0'; // replaced by prepare_web_assets.py
  const style = document.createElement('style');
  style.textContent = `
  .retailOffice{--office-status-height:26px}
@@ -2248,7 +2244,7 @@ const beforeTrainingOffice=officeAction;officeAction=async function(action){if(a
 if(!officeMode){
  const banner=document.createElement('aside');banner.id='deskTrainingBanner';banner.hidden=true;banner.setAttribute('role','status');banner.innerHTML='<span class="trainingDot" aria-hidden="true"></span><strong>TRAINING MODE ACTIVE</strong><span>Practice only · No money collected</span>';$('posPanel').prepend(banner);
  $('navSales').onclick=deskTrainingToggle;
- const settings=document.createElement('details');settings.id='deskSettings';settings.innerHTML='<summary>Settings ▾</summary><div class="deskSettingsMenu"><button id="deskTerminalSettings" type="button">Terminal setup</button></div>';retailAppearanceButton.before(settings);settings.querySelector('div').append(retailAppearanceButton);
+ const settings=document.createElement('details');settings.id='deskSettings';settings.innerHTML='<summary>MORE ▾</summary><div class="deskSettingsMenu"><button id="deskTerminalSettings" type="button">Terminal setup</button></div>';retailAppearanceButton.before(settings);settings.querySelector('div').append(retailAppearanceButton);
  $('deskTerminalSettings').onclick=()=>{settings.open=false;if(can('manage_pos'))retailEnroll();};retailAppearanceButton.addEventListener('click',()=>settings.open=false);
  const rail=$('posPayNow').parentElement,credit=document.createElement('div');credit.className='deskCreditMenu';credit.innerHTML='<button id="deskCreditToggle" type="button" aria-expanded="false">Credit/ Advances</button><div id="deskCreditChoices" hidden></div>';rail.append(credit);credit.querySelector('div').append($('creditOpen'),$('cashAdvanceOpen'));
  const popups=[];
@@ -2427,3 +2423,199 @@ async function customerCreateTouch(){
 })();
 
 // END UPDATE NOTICES
+// BEGIN DESK CONNECTION
+// Read-only server reachability; never replays a sale or modifies a session.
+const deskConnectionDefaults={interval_seconds:10,warning_seconds:20,offline_seconds:30};
+officeCards.push({section:'system',action:'desk-connection',title:'Register connection indicator',description:'Check frequency and yellow/red connection warnings for DESK.',icon:'●',permission:'manage_pos',keywords:'ping server network connection offline status'});
+officeNavigationGroups.find(g=>g.id==='computers').actions.push('desk-connection');
+const beforeDeskConnectionOffice=officeAction;
+officeAction=async function(action){
+ if(action!=='desk-connection')return beforeDeskConnectionOffice(action);
+ if(!officeMode||!can('manage_pos')||!navigationAllowed()||unfinished())return;
+ try{
+  const {settings}=await checkoutQuery('checkout-settings'),timing=settings.connection_monitor||deskConnectionDefaults;
+  const d=checkoutModal('Register connection indicator',`<p>Applies to registers assigned to this store. Changes reach open registers within one minute.</p><form id="deskConnectionSettings"><label>Check server every (seconds)<input name="interval_seconds" type="number" min="5" max="60" step="1" required value="${timing.interval_seconds}"></label><label>Yellow after no successful check for (seconds)<input name="warning_seconds" type="number" min="10" max="300" step="1" required value="${timing.warning_seconds}"></label><label>Red after no successful check for (seconds)<input name="offline_seconds" type="number" min="15" max="600" step="1" required value="${timing.offline_seconds}"></label><p>Defaults: check every 10 seconds, yellow after 20 seconds, red after 30 seconds. Yellow must allow at least two checks; red must allow at least one further check. A reported network disconnect turns red immediately.</p><p>Green means the server answered a verified connection check. It does not confirm a payment. A restored connection never submits a transaction automatically.</p><button class="primary">Save connection timings</button></form>`);
+  let saving=false;
+  d.querySelector('form').onsubmit=async e=>{
+   e.preventDefault();if(saving)return;
+   const f=e.target,connection_monitor=Object.fromEntries(Object.keys(deskConnectionDefaults).map(k=>[k,Number(f.elements[k].value)]));
+   try{saving=true;await retailSave('checkout-settings-save',{...settings,connection_monitor});changedForms.delete(f);checkoutClose(d);posMessage('Register connection timings saved for this store.');}
+   catch(error){checkoutError(d,error);}finally{saving=false;}
+  };
+ }catch(error){posMessage(error.message);}
+};
+
+if(!officeMode)(()=>{
+ const register=$('navCheckout'),label=$('connection');
+ register.innerHTML='<span id="deskConnectionIndicator" aria-hidden="true"></span><span>Register</span>';
+ const light=$('deskConnectionIndicator');label.setAttribute('role','status');label.setAttribute('aria-live','polite');
+ let timing={...deskConnectionDefaults},started=Date.now(),startedTick=performance.now(),lastSuccess=null,lastSuccessTick=null,lastSuccessLabel='',offlineObserved=!navigator.onLine;
+ let nextCheck=0,inflight=null,controller=null,timeout=null,ticker=null,stopped=false;
+ let configStore=null,configOwner=null,nextConfig=0,configLoading=false;
+ const labels={checking:'Checking server connection…',connected:'Connected to Operations',delayed:'Connection delayed',disconnected:'Server unreachable'};
+ function render(){
+  // A PC clock correction must not keep a stale connection green. Wall time
+  // also catches platforms whose monotonic clock pauses while the PC sleeps.
+  const age=Math.max(0,Date.now()-(lastSuccess??started),performance.now()-(lastSuccessTick??startedTick));
+  const state=offlineObserved||!navigator.onLine||age>=timing.offline_seconds*1000?'disconnected':lastSuccess===null?'checking':age>=timing.warning_seconds*1000?'delayed':'connected';
+  light.dataset.state=state;light.textContent={checking:'…',connected:'✓',delayed:'!',disconnected:'×'}[state];
+  if(label.textContent!==labels[state])label.textContent=labels[state];
+  label.dataset.connectionState=state;
+  const detail=labels[state]+'. Last successful check: '+(lastSuccess===null?'none yet':lastSuccessLabel+' ('+Math.floor(age/1000)+' seconds ago)')+'. Checks every '+timing.interval_seconds+' seconds.';
+  register.title=detail;label.title=detail;register.setAttribute('aria-label','Register — '+labels[state]);
+ }
+ function checkNow(){
+  if(stopped||inflight)return inflight;
+  nextCheck=performance.now()+timing.interval_seconds*1000;
+  if(!navigator.onLine){offlineObserved=true;render();return Promise.resolve();}
+  const nonce=crypto.randomUUID().replaceAll('-','');controller=new AbortController();
+  timeout=setTimeout(()=>controller?.abort(),Math.min(5000,timing.interval_seconds*500));
+  inflight=(async()=>{
+   try{
+    const response=await fetch('/api/desk-connection?nonce='+nonce,{cache:'no-store',credentials:'omit',redirect:'error',signal:controller.signal});
+    if(!response.ok||!response.headers.get('content-type')?.includes('application/json'))throw Error('No verified server response');
+    const result=await response.json();
+    if(result.service!=='coastyouth-operations'||result.online!==true||result.nonce!==nonce)throw Error('Unexpected server response');
+    if(stopped)return;
+    lastSuccess=Date.now();lastSuccessTick=performance.now();lastSuccessLabel=new Date(lastSuccess).toLocaleTimeString();offlineObserved=false;
+   }catch{}finally{clearTimeout(timeout);timeout=null;controller=null;inflight=null;render();}
+  })();
+  return inflight;
+ }
+ async function loadConfig(){
+  if(!user||configLoading)return;
+  const store=checkoutStore(),owner=user.name,now=performance.now();
+  if(store===configStore&&owner===configOwner&&now<nextConfig)return;
+  if(store!==configStore||owner!==configOwner){timing={...deskConnectionDefaults};configStore=store;configOwner=owner;nextCheck=0;}
+  configLoading=true;nextConfig=now+60000;
+  try{
+   const {settings}=await checkoutQuery('checkout-settings');
+   if(user?.name!==owner||checkoutStore()!==store)return;
+   const candidate=settings.connection_monitor;
+   if(candidate&&Object.keys(deskConnectionDefaults).every(k=>Number.isInteger(candidate[k]))&&candidate.interval_seconds>=5&&candidate.interval_seconds<=60&&candidate.warning_seconds>=candidate.interval_seconds*2&&candidate.warning_seconds<=300&&candidate.offline_seconds>=candidate.warning_seconds+candidate.interval_seconds&&candidate.offline_seconds<=600){
+    const changed=JSON.stringify(timing)!==JSON.stringify(candidate);timing={...candidate};if(changed)nextCheck=0;
+   }
+  }catch{}finally{configLoading=false;render();}
+ }
+ function tick(){render();if(performance.now()>=nextCheck)checkNow();loadConfig();}
+ function start(){stopped=false;clearInterval(ticker);render();checkNow();loadConfig();ticker=setInterval(tick,1000);}
+ window.deskConnectionMonitor={checkNow};
+ window.addEventListener('offline',()=>{offlineObserved=true;render();});
+ window.addEventListener('online',()=>{render();checkNow();});
+ document.addEventListener('visibilitychange',()=>{if(!document.hidden){render();checkNow();loadConfig();}});
+ window.addEventListener('pagehide',()=>{stopped=true;clearInterval(ticker);clearTimeout(timeout);controller?.abort();});
+ window.addEventListener('pageshow',e=>{if(e.persisted)start();});
+ start();
+})();
+
+// END DESK CONNECTION
+// BEGIN REGISTER SHIFTS
+// Register shifts are shared by every cashier on a terminal, not employee punches.
+const shiftDate=n=>n==null?'—':new Date(n*1000).toLocaleString('en-US',{timeZone:'America/Chicago'});
+const shiftTotal=(label,value)=>`<div class="shiftMetric"><small>${esc(label)}</small><strong>${posMoney(value)}</strong></div>`;
+officeCards.push(
+ {section:'sales',action:'shift-settings',title:'Register shifts & business day',description:'Daily closing time and Letter or receipt report paper.',icon:'◷',permission:'manage_pos',keywords:'end shift terminal cutoff business day closing printer'},
+ {section:'reports',action:'shift-history',title:'Register shift reports',description:'Terminal sales, payments, cash advances and unpaid voids by business day.',icon:'▤',permission:'view_pos_sales',keywords:'end shift summary detail close day void'}
+);
+officeNavigationGroups.find(g=>g.id==='transactions').actions.push('shift-settings');
+officeNavigationGroups.find(g=>g.id==='sales'&&g.section==='reports').actions.push('shift-history');
+
+function shiftReportHTML(r,detail=false){
+ const totals=`<section class="shiftTotals">${shiftTotal('Completed sales (including tax)',r.sales_total)}${shiftTotal('Tax included',r.tax)}${shiftTotal('Cash rounding',r.cash_rounding)}${shiftTotal('Cash collected after change',r.cash)}${shiftTotal('Store credit collected',r.store_credit)}${shiftTotal('Cash refunds',r.cash_refunds)}${shiftTotal('Store credit refunds',r.credit_refunds)}${shiftTotal('Employee cash advances',r.advances)}${shiftTotal('Net cash movement',r.net_cash)}</section>`;
+ const entries=r.events.map(e=>{
+  const amount=e.kind==='sale'?e.sale.total:e.kind==='advance'?-e.advance.amount:e.kind==='refund'?-(e.refund.cash+e.refund.store_credit):0;
+  const title={sale:'Receipt',void:'Unpaid void',advance:'Cash advance',refund:'Refund'}[e.kind];
+  const note=e.kind==='void'?e.reason+' · Original amount '+posMoney(e.original.total)+' · $0.00 collected':e.kind==='advance'?e.advance.employee_name+' · '+e.advance.reason:e.kind==='refund'?'Original receipt #'+e.refund.sale:e.sale.method.replaceAll('_',' ');
+  const lines=detail?(e.sale?.lines||e.original?.lines||[]):[];
+  return `<article class="shiftEntry"><div><strong>${esc(title)} #${esc(e.reference)}</strong><strong>${posMoney(amount)}</strong></div><p>${esc(e.cashier)} · ${esc(shiftDate(e.at))}</p><p>${esc(note)}</p>${lines.length?'<ul>'+lines.map(l=>`<li>${esc(l.quantity)} × ${esc(l.name)} — ${posMoney(l.subtotal)}${e.kind==='void'?' (voided)':''}</li>`).join('')+'</ul>':''}</article>`;
+ }).join('');
+ return `<header class="shiftReportHeader">${r.logo?`<img src="${esc(r.logo)}" alt="Store logo">`:''}<div><small>COASTYOUTH RETAIL · ${r.closed?'CLOSED SHIFT':'SHIFT IN PROGRESS'}</small><h2>${esc(r.store_name)}</h2><h3>Register shift ${detail?'detail':'summary'} #${r.id}</h3><p>${esc(r.terminal_name)} · Business date ${esc(r.business_date)}</p></div></header><section class="shiftReportMeta"><p>Opened: ${esc(shiftDate(r.opened))}<br>Closed: ${esc(shiftDate(r.closed))} · Central time<br>${r.closed?'Closed by '+esc(r.actor)+' · '+esc(r.reason):'Scheduled close: '+esc(shiftDate(r.deadline))}</p><p>Cashiers: ${esc(r.users.join(', ')||'No completed activity')}<br>${r.completed} completed transactions · ${r.voided} unpaid voids</p></section>${totals}<p class="shiftReportNote">Net cash movement is cash collected less cash refunds and employee advances. Opening floats, paid-in/out movements and drawer counts remain in Cash drawer reconciliation. Unpaid voids collect $0.00 and do not increase sales or tax.</p><h3 class="shiftSectionBar">${detail?'Transaction detail':'Transactions & audit references'}</h3>${entries||'<p>No completed transactions.</p>'}`;
+}
+
+async function shiftPrint(r,format,detail){
+ const paper=document.createElement('section');paper.id='registerShiftPaper';paper.dataset.shift=String(r.id);paper.dataset.format=format;paper.innerHTML=shiftReportHTML(r,detail);
+ const native=window.pywebview?.api;
+ if(format==='receipt'){
+  if(officeMode){const d=checkoutModal('Print from this register','<p>Open this shift on its DESK terminal to use the configured receipt printer. From OFFICE, choose Letter paper and select a printer in the print dialog.</p>');return;}
+  await loadTerminalDevices();
+  if(!receiptTerminalOptions?.printer){checkoutModal('No receipt printer configured','<p>Assign a receipt printer in Terminal setup, or choose Letter paper. The shift report is saved and can be printed later.</p>');return;}
+  if(!native?.shift_print){checkoutModal('Update DESK to print this report','<p>Install the latest DESK update to print directly to the configured receipt printer. Letter printing is available now.</p>');return;}
+ }
+ document.body.append(paper);document.body.classList.add('registerShiftPrinting');
+ try{
+  if(format==='receipt'){
+   const result=await native.shift_print(receiptTerminalOptions.printer,String(r.id));
+   if(result.error)throw Error(result.error);
+  }else window.print();
+ }finally{document.body.classList.remove('registerShiftPrinting');paper.remove();}
+}
+
+function shiftShowReport(r,format='letter'){
+ const d=checkoutModal('Register shift report',`<div class="shiftPrintControls"><label>Paper<select id="shiftReportFormat"><option value="letter">Letter · 8.5 × 11 inches</option><option value="receipt">Configured receipt printer</option></select></label><button id="shiftPrintSummary" type="button">Print summary</button><button id="shiftPrintDetail" type="button">Print detail</button></div><div class="shiftReportPreview">${shiftReportHTML(r,true)}</div>`);d.classList.add('registerShiftDialog');
+ d.querySelector('#shiftReportFormat').value=format;
+ for(const [id,detail] of [['shiftPrintSummary',false],['shiftPrintDetail',true]])d.querySelector('#'+id).onclick=async()=>{try{await shiftPrint(r,d.querySelector('#shiftReportFormat').value,detail);}catch(e){checkoutError(d,e);}};
+}
+
+async function shiftEndDialog(){
+ $('deskSettings').open=false;
+ if(posBusy||posPending||writeCount||unfinished()){posMessage('Finish or cancel the current entry before ending the register shift.');return;}
+ if(deskTraining.enabled){checkoutModal('Training mode is active','<p>End training before closing a live register shift. Practice transactions remain separate from sales.</p>');return;}
+ try{
+  const s=await checkoutQuery('shift-status'),r=s.current;
+  const rows=s.open.map(c=>`<tr><td>${esc(c.id.slice(0,8))}</td><td>${esc(c.cashier)}</td><td>${c.held?'Saved in Find':'Open sale'}</td><td>${posMoney(c.total)}</td></tr>`).join('');
+  const d=checkoutModal('End Shift · '+s.terminal.name,`<p>This closes the register shift for <strong>all cashiers on this terminal</strong>. Employee timecards are unchanged.</p>${r?`<div class="shiftStatusRow"><span>Business date <strong>${esc(r.business_date)}</strong></span><span>Scheduled close <strong>${esc(shiftDate(r.deadline))}</strong></span></div><div class="shiftTotals">${shiftTotal('Completed transactions · '+r.completed,r.sales_total)}${shiftTotal('Open transactions · '+s.open.length,s.open.reduce((n,c)=>n+c.total,0))}</div>`:'<p>No register shift is currently open. Selecting a product or issuing an advance starts the next shift.</p>'}${s.open.length?`<div class="shiftBlocked" role="alert"><strong>Cannot end shift: ${s.open.length} open transaction${s.open.length===1?'':'s'}.</strong><p>Use Find to finish or cancel saved sales. Another cashier or a manager may need to resolve their transactions.</p></div><table><thead><tr><th>Transaction</th><th>Cashier</th><th>Status</th><th>Amount due</th></tr></thead><tbody>${rows}</tbody></table>`:'<p>There are no open transactions on this terminal.</p>'}<div class="shiftActions"><button id="shiftEndConfirm" class="primary" type="button" ${!r||s.open.length?'disabled':''}>End Shift for all cashiers</button>${r?'<button id="shiftPreview" type="button">View / print current summary</button>':''}${s.last?'<button id="shiftLastReport" type="button">Last closed shift report</button>':''}<button id="shiftEndBack" type="button">Keep working</button></div>`);d.classList.add('registerShiftDialog');
+  let saving=false;d.beforeDismiss=()=>!saving;
+  d.querySelector('#shiftEndBack').onclick=()=>checkoutClose(d);
+  d.querySelector('#shiftPreview')?.addEventListener('click',()=>shiftShowReport(r,s.settings.print_format));
+  d.querySelector('#shiftLastReport')?.addEventListener('click',()=>shiftShowReport(s.last,s.settings.print_format));
+  d.querySelector('#shiftEndConfirm').onclick=async()=>{
+   if(saving||!r)return;saving=true;
+   try{
+    const {report}=await retailSave('shift-end',{shift:r.id,confirmed:true});
+    shiftSeenClosed=report.id;checkoutClose(d);posMessage('Register shift ended for all cashiers on '+s.terminal.name+'.');shiftShowReport(report,s.settings.print_format);
+   }catch(e){checkoutError(d,e);}finally{saving=false;}
+  };
+ }catch(e){posMessage(e.message);}
+}
+
+async function shiftSettingsDialog(){
+ const s=await checkoutQuery('shift-settings');
+ const d=checkoutModal('Register shifts & business day',`<p>Applies to all registers assigned to this store. Closing is automatic even when DESK is closed.</p><form id="registerShiftSettings"><label>End of business day · Central time<input name="cutoff" type="time" step="1" required value="${s.cutoff}"></label><label>Default report paper<select name="print_format"><option value="letter">Letter · 8.5 × 11 inches</option><option value="receipt">Receipt printer configured on the register</option></select></label><p>Default closing time: 11:59:59 PM (23:59:59). The business date is the date of the scheduled closing time. Existing open shifts keep their scheduled closing time; changes apply to the next shift.</p><p>At closing, unpaid open and saved sales are voided for $0.00 with no payment collected. Their original items and amounts remain in that business day's shift report. Paid receipts and employee timecards remain intact.</p><button class="primary">Save shift settings</button></form>`);d.classList.add('registerShiftDialog');
+ const f=d.querySelector('form');f.elements.print_format.value=s.print_format;
+ f.onsubmit=async e=>{e.preventDefault();try{let cutoff=f.elements.cutoff.value;if(cutoff.length===5)cutoff+=':00';await retailSave('shift-settings-save',{...s,cutoff,print_format:f.elements.print_format.value});changedForms.delete(f);checkoutClose(d);posMessage('Shift settings saved. Existing open shifts retain their scheduled closing time.');}catch(error){checkoutError(d,error);}};
+}
+async function shiftHistoryDialog(){
+ const d=checkoutModal('Register shift reports','<form id="shiftHistoryFilter"><label>From<input type="date" name="from" required></label><label>Through<input type="date" name="to" required></label><button>Run report</button></form><p>Dates are business closing dates in Central time. Includes all cashiers, unpaid voids and retained terminal history.</p><div id="shiftHistoryRows"></div>');d.classList.add('registerShiftDialog');
+ const f=d.querySelector('form'),today=new Date().toLocaleDateString('en-CA',{timeZone:'America/Chicago'});f.elements.from.value=today;f.elements.to.value=today;
+ const run=async()=>{try{const q=new URLSearchParams({store_id:checkoutStore(),from:f.elements.from.value,to:f.elements.to.value});const data=await api('pos/shift-history?'+q);changedForms.delete(f);d.querySelector('#shiftHistoryRows').innerHTML=`${data.more?'<p>Showing 500 shifts. Narrow the date range for more.</p>':''}<table><thead><tr><th>Business date / shift</th><th>Terminal</th><th>Status</th><th></th></tr></thead><tbody>${data.shifts.map(r=>`<tr><td>${esc(r.business_date)} · #${r.id}</td><td>${esc(r.terminal_name)}</td><td>${r.closed?esc(r.reason):'Open'}</td><td><button type="button" data-shift-report="${r.id}">View / print</button></td></tr>`).join('')||'<tr><td colspan="4">No register shifts in this period.</td></tr>'}</tbody></table>`;for(const b of d.querySelectorAll('[data-shift-report]'))b.onclick=async()=>{try{shiftShowReport(await api('pos/shift-report?id='+b.dataset.shiftReport));}catch(e){checkoutError(d,e);}};}catch(e){checkoutError(d,e);}};
+ f.onsubmit=e=>{e.preventDefault();run();};await run();
+}
+const beforeShiftOffice=officeAction;officeAction=async function(action){
+ if(!['shift-settings','shift-history'].includes(action))return beforeShiftOffice(action);
+ if(!officeMode||!can(action==='shift-settings'?'manage_pos':'view_pos_sales')||!navigationAllowed()||unfinished())return;
+ try{if(action==='shift-settings')await shiftSettingsDialog();else await shiftHistoryDialog();}catch(e){posMessage(e.message);}
+};
+let shiftSeenClosed=null,shiftWatchBusy=false,shiftWatchDevice=null;
+async function shiftWatch(){
+ if(officeMode||!user||shiftWatchBusy||posBusy||posPending||writeCount)return;
+ shiftWatchBusy=true;
+ try{
+  const device=await retailDevice(),data=await api('pos/shift-watch?'+new URLSearchParams({device,cart:posCurrent?.id||''}));
+  if(shiftWatchDevice!==device){shiftWatchDevice=device;shiftSeenClosed=null;}
+  const last=data.last;
+  if(last&&shiftSeenClosed!==last.id){
+   const initial=shiftSeenClosed===null;shiftSeenClosed=last.id;
+   if(!initial)posMessage(`Register shift #${last.id} closed ${last.reason==='manual'?'by a cashier':'automatically'} for business date ${last.business_date}. Reports are available under MORE → End Shift.`);
+  }
+  if(posCurrent&&data.cart_status==='discarded'&&!posBusy&&!posPending&&!writeCount){
+   posCurrent=null;sessionStorage.removeItem('yfc-pos-selected:'+user.name);await posLoad();
+   checkoutModal('Transaction closed',`<p>This unpaid transaction has been closed. No payment was collected. ${last?.reason==='end-of-business-day'?'The business day ended; the transaction is retained as a $0.00 void in the shift report for '+esc(last.business_date)+'.':'Its history remains on the server.'}</p><p>You can start a new sale by selecting a product.</p>`);
+  }
+ }catch{}finally{shiftWatchBusy=false;}
+}
+if(!officeMode){
+ const b=document.createElement('button');b.id='deskEndShift';b.type='button';b.textContent='End Shift';b.onclick=shiftEndDialog;$('deskSettings').querySelector('.deskSettingsMenu').append(b);
+ setInterval(shiftWatch,10000);
+}
+
+// END REGISTER SHIFTS

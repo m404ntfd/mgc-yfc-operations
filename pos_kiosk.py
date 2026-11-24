@@ -111,6 +111,9 @@ class KioskBridge:
  def receipt_printers(self):
   from receipt_printer import printers
   return printers(self)
+ def shift_print(self,printer,shift):
+  from receipt_printer import print_shift
+  return print_shift(self,printer,shift)
  def receipt_print(self,printer,sale,automatic=False):
   from receipt_printer import print_receipt
   return print_receipt(self,printer,sale,automatic)

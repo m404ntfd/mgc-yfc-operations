@@ -56,6 +56,8 @@ def maintenance_check(server,now=None):
 
 def maintenance_worker(server):
     while not STOPPING and not RESTART:
+        try:shifts_tick()
+        except Exception as exc:print('Register shift closing needs attention: '+str(exc),flush=True)
         try:maintenance_check(server)
         except Exception as exc:
             # An unavailable state folder must not take down the server or cause a forced restart.

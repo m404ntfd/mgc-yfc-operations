@@ -4,7 +4,7 @@ from pathlib import Path
 from urllib.request import Request,urlopen
 from desktop_connection import USER_AGENT
 from desktop_update_security import update_ssl_context
-VERSION='1.22.1'
+VERSION='1.23.0'
 REPO='m404ntfd/mgc-yfc-operations'
 def version(value):
  if not isinstance(value,str) or not re.fullmatch(r'\d+\.\d+\.\d+',value):raise ValueError('Invalid POS version.')

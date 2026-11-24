@@ -90,12 +90,18 @@ class CashAdvanceTests(unittest.TestCase):
   with server.connect() as c:
    person=self.people['Employee'];c.execute('INSERT INTO work_periods VALUES(11,?,100,NULL,?,NULL)',(person,'Office'));c.execute('INSERT INTO work_breaks VALUES(21,11,200,NULL)')
    c.execute('INSERT INTO jobs VALUES(?,?,?)',('sample',7,json.dumps({'customer':'SAMPLE reservation','notes':'Keep'})));c.execute('INSERT INTO photos VALUES(?,?,?)',('sample',0,b'sample attachment'))
-   tables=[r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT IN ('audit','pos_operations','retail_cash_advances','retail_drawer_events')")]
+   tables=[r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT IN ('audit','pos_operations','retail_cash_advances','retail_drawer_events','retail_register_shifts','retail_shift_events')")]
    before={t:[tuple(r) for r in c.execute('SELECT * FROM '+t)] for t in tables}
   self.assertEqual(self.f.call('pos/cash-advance',self.payload())[0],200)
   with server.connect() as c:
+   shift_before={t:[tuple(r) for r in c.execute('SELECT * FROM '+t)] for t in ('retail_register_shifts','retail_shift_events')}
+   self.assertEqual(len(shift_before['retail_register_shifts']),1)
+   self.assertEqual(len(shift_before['retail_shift_events']),1)
+   self.assertEqual(shift_before['retail_shift_events'][0][0],'advance')
    server.stores_init(c);server.stores_init(c)
+   server.shifts_init(c);server.shifts_init(c)
    self.assertEqual(before,{t:[tuple(r) for r in c.execute('SELECT * FROM '+t)] for t in tables})
+   self.assertEqual(shift_before,{t:[tuple(r) for r in c.execute('SELECT * FROM '+t)] for t in shift_before})
    self.assertEqual(c.execute('PRAGMA integrity_check').fetchone()[0],'ok')
 
 if __name__=='__main__':unittest.main()

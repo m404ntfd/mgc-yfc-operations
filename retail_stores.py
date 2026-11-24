@@ -399,6 +399,7 @@ def stores_advance_post(c,u,d,finish):
     ident=c.execute('''INSERT INTO retail_cash_advances(request,employee,employee_name,actor,actor_name,store,store_name,terminal,terminal_name,drawer,drawer_event,at,amount,reason)
         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',(d['request'],employee,person['name'],u['receipt_owner'],u['name'],context['store_id'],context['store_name'],context['terminal'],context['terminal_name'],context['drawer_id'],event,now,amount,reason)).lastrowid
     advance=dict(c.execute('SELECT * FROM retail_cash_advances WHERE id=?',(ident,)).fetchone())
+    shifts_terminal_event(c,d.get('device'),'advance',ident,dict(cashier=u['name'],advance=advance))
     return finish(dict(advance=advance),'Employee cash advance #'+str(ident)+' issued to '+person['name'])
 
 def stores_advance_rows(c,start,end,store='',employee=''):
