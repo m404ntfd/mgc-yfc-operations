@@ -1,7 +1,7 @@
 """Connection-only Clover pilot. No payment/order/refund API and no database access.
 
-This is an unshipped adapter, not yet exposed by DESK or OFFICE. OAuth sessions
-and credentials live only in memory. A future admin-only HTTPS callback must
+DESK exposes only its unauthenticated network check. OAuth sessions and
+credentials live only in memory. A future admin-only HTTPS callback must
 supply its authenticated session identity; see CLOVER-CONNECTION-PILOT.md.
 """
 from __future__ import annotations

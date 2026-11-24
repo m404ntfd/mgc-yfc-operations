@@ -1,6 +1,7 @@
 # Clover connection-only pilot
 
-Prepared November 24, 2026. This adapter is **not deployed or enabled in DESK**.
+Prepared for v0.66.0 / DESK 1.24.0 on November 24, 2026. Setup and network checks
+are included in this release; **card payments and merchant authorization remain disabled**.
 It does not implement charges, refunds, orders, or payment cancellation. Existing
 cash and store-credit checkout behavior is unchanged. The connection adapter never
 opens a business database or writes credentials to disk. The new setup screen
@@ -17,9 +18,8 @@ it does not modify terminal registration or existing operational records.
   connection**. No payment requests were made.
 - The Clover sandbox draft app is prepared with Merchant Read only. Sandbox
   authorization must not be used against the live Clover.
-- The owner confirmed submitting verification under office@coastyfc.com. The signed-in production dashboard
-  still displayed Account Unverified and missing identity/contact details when
-  checked. Account submission/approval has not been confirmed by the portal.
+- The owner confirmed submitting developer-account verification. Production
+  approval has not yet been confirmed by the portal.
 - Clover's published approval pause runs November 10, 2026 through January 3,
   2027. Account verification and app approval are separate prerequisites.
 
@@ -38,7 +38,7 @@ diagnostic folder `output/clover-pilot`, not in release assets or this guide.
 - In-memory token handling with redacted representations and expiration checks.
   This pilot deliberately requires reauthorization after expiration. It does not
   persist or automatically refresh tokens; production persistence and refresh
-  rotation are separate work before release.
+  rotation are separate work before enabling merchant authorization.
 - Read-only verification that the device serial belongs to the expected merchant,
   followed by `GET /connect/v1/device/ping`. Only a 200 response containing boolean
   `connected: true` counts as successful authorization and connectivity.
@@ -139,8 +139,8 @@ python clover_connection.py --address <private-ip> --terminal <terminal-id> --se
 ```
 
 The output includes the actual source computer so a server-side check cannot be
-mistaken for a check originating on pos1. No automatic release or updater changes
-are part of this pilot.
+mistaken for a check originating on pos1. Install server 0.66.0 first and DESK
+1.24.0 on the test terminal. Existing update controls distribute this release.
 
 ## Official references
 

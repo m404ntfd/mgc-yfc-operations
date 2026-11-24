@@ -1,7 +1,6 @@
 # Online request pause — prepared November 24, 2026
 
-Server changes are built and tested locally, pending the next application release.
-The current published application release remains v0.65.0. No production pause
+Server changes are included in application release v0.66.0. No production pause
 was created and no live requests or other operational records were changed.
 
 ## Staff controls
@@ -57,7 +56,7 @@ availability failures show a retry notice and do not submit.
   no cache, CORS, old-server compatibility and outage behavior. Worker build passed.
 - No physical data changes or live pause tests performed.
 
-Before publishing the server release: bump server/suite versions, update release
-notes, run the populated v0.65.0 upgrade/backup/rollback check and full release CI.
+The v0.66.0 release checks include a populated v0.65.0 upgrade, backup and rollback
+check and full release CI.
 DESK/OFFICE/STORE OPS native launchers do not need changes for this server feature.
 Preview PNGs are in ignored `output/preview/online-requests/`.

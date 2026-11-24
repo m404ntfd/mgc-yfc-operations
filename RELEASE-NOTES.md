@@ -1,28 +1,32 @@
-# CoastYouth Retail Register Shifts — v0.65.0
+# CoastYouth Retail Clover Setup — v0.66.0
 
-DESK now uses **MORE → End Shift** to close the register for every cashier on that terminal. It displays completed transactions, open transactions and amounts due. Manual closing is blocked until all live open/saved transactions on that terminal are completed or canceled. Employee timecards are separate and are not clocked out.
+Administrators can prepare a registered DESK computer for a Clover connection test while merchant authorization is pending. **Card payments remain disabled.** This release cannot charge, refund, or cancel a Clover payment and does not create Clover orders.
 
-The server automatically closes register shifts at the configured end of business day, default **23:59:59 Central time**. Unpaid open/saved transactions become **$0.00 voids with no payment collected**, retained with their original items, amounts, cashier and terminal in the closing business day's shift report. Paid receipts, inventory deductions, credit balances and loyalty awards are never fabricated for those voids. Closing catches up after a server restart; retrying a close or a payment does not duplicate it. Training transactions remain separate.
+## Clover connection setup
 
-In **OFFICE → Sales → Register closing → Register shifts & business day**, configure the per-store closing time and default report paper. Open shifts keep the closing time captured when they started; changed settings apply to the next shift. Business dates are the dates of scheduled closing times in America/Chicago, including daylight saving changes.
+- In **OFFICE → System → Payment devices → Clover connection setup**, select the registered terminal and save its Clover local IP address, serial number, and optional confirmed merchant ID.
+- On that computer, open **DESK → MORE → Clover connection setup → Check connection · no charge**. REST Pay Display must be running on the Clover and both devices must be on the same local network. The check reports which computer performed it.
+- A reachable device is clearly distinguished from an authorized device. Clover approval and a later merchant-authorization step are still required; this release provides setup and network testing only.
+- Administrator permissions are checked on the server. Tests use short-lived, single-use approval tied to the current terminal, administrator session, and saved configuration. Certificates remain verified. No token, password, API key, or card-number entry is requested.
+- Store transfers require the administrator to reconfirm Clover settings. Duplicate serial assignments and stale edits are rejected. Existing terminal registrations, receipt settings, taxes and transactions remain intact.
 
-**OFFICE → Reports → Sales analysis → Register shift reports** provides retained terminal shift summaries and transaction detail. Reports show store branding, cash and store-credit receipts, refunds processed at the terminal, employee cash advances, cash rounding and unpaid void history. Print to Letter (8.5 × 11) using the print dialog, or from DESK to its configured receipt printer. Cash counts and opening floats remain in the existing optional cash-drawer reconciliation feature. New shift tracking begins with this update; historical paid receipts remain in their existing reports.
+## Online donation request controls
 
-The Register navigation icon is now a verified connection indicator. Defaults: check every **10 seconds**, yellow after **20 seconds** without a successful check, red after **30 seconds**, or immediately when Windows reports disconnection. OFFICE can change these timings under **System → Computers & versions → Register connection indicator**. Checks do not replay transactions or count as staff activity. DESK's header buttons are also aligned and equally tall.
+This release also includes the previously prepared **Pause Online Requests** control in Dispatch's Pending Requests box. Authorized staff can pause requests across coastyfc.com, thriftmart.coastyfc.com and binopoly.coastyfc.com for **8, 12 or 24 hours**, see current status, or resume early. Requests remain active by default. Customers see a reopening notice when entering the item-donation flow. Existing requests and appointments are retained, staff can continue managing them, and monetary giving is unaffected.
 
 ## Installation and automatic updates
 
-- Server / Server Admin / Computer Setup: **0.65.0**
-- DESK: **1.23.0**
-- OFFICE: **1.20.0**
+- Server / Server Admin / Computer Setup: **0.66.0**
+- DESK: **1.24.0**
+- OFFICE: **1.20.0** (unchanged launcher; server supplies the new setup screen)
 - STORE OPS desktop: **1.6.1** (unchanged launcher; server supplies current screens)
 
-Update the shared server first, then DESK and OFFICE. This release is offered through the existing update checks, server update schedule, and OFFICE computer-update controls. Publishing does not immediately force an installation or change the current update-consent rules. Older clients with a certificate error may require the browser-downloaded installer once; certificate and checksum verification remain enabled.
+Update the existing Operations server first. Then use the all-in-one installer on **pos1**, selecting **POS checkout**, to update DESK. Install over the existing versions; do not uninstall or remove application data. Keep the existing server address and terminal registration. The release is offered through the existing update checks and OFFICE update controls; publishing does not force an immediate installation.
 
-The all-in-one installer retains application identity, terminal registration, server address and settings. Install over the existing version; do not uninstall or remove application data.
+Older clients that cannot download updates because of a certificate error can use the browser-downloaded installer. Certificate and checksum verification remain enabled.
 
-## Data integrity and checks
+## Data integrity and validation
 
-Migrations add shift/settings/audit tables. Existing sales, timecards, open punches and breaks, reservation records and attachments, users, store credit and other operational data are retained. The requested automatic close changes only unpaid carts to discarded status, retains their original body, and writes an immutable $0 void snapshot and audit record. Existing paid receipts are never rewritten. Terminal removal retains historical reports.
+Only additive Clover-configuration and online-request-settings tables are introduced. Existing sales, reports, timecards, open punches and breaks, reservations and attachments, store-credit records, users, and terminal history are preserved. No payment processing is enabled and no production data is included in release files.
 
-Checks cover all-cashier manual blocking, idempotency, exact closing-boundary payment retries, restart catch-up, store/terminal isolation, terminal transfers, training separation, immutable void history, daylight saving transitions, settings permissions, print routing, Letter/receipt layouts, theme contrast, connection failures/recovery and preserved carts. Populated 0.64.1 upgrade, backup, repeated startup and rollback checks verify retained records and attachments. Receipt print routing is tested with a printer stub; no physical receipt printer is attached to the test computer.
+Release checks cover a populated **0.65.0 → 0.66.0** upgrade, backup, repeated startup and code rollback; permission and configuration isolation; TLS and authorization restrictions; light/dark theme readability; preserved active carts; and actual installed Windows application startup. Automated Clover device responses use isolated fixtures. The real authorized connection on pos1 remains pending Clover approval and merchant authorization.

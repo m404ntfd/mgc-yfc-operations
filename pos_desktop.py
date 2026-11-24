@@ -25,6 +25,12 @@ def main():
   from pos_updater import apply_update
   apply_update(sys.argv[sys.argv.index('--apply-pos-update')+1]);return
  if '--smoke-test' in sys.argv:
+  # Ensure the connection-only bridge and its TLS adapter survive packaging.
+  from clover_desktop import check_from_desk
+  from clover_connection import device_address
+  from pos_kiosk import KioskBridge
+  assert callable(check_from_desk) and callable(KioskBridge.clover_connection_check)
+  assert device_address('192.168.2.50')=='192.168.2.50'
   from desktop_update_security import update_ssl_context
   update_ssl_context()  # Fail packaging checks if the bundled trust roots are missing.
   assert server_url('localhost:8080')=='http://localhost:8080'
