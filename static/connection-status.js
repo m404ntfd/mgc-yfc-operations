@@ -113,7 +113,9 @@
   // API response parsing remains with its existing caller. Invalid credentials
   // are an authentication error, not a lost server connection.
   const task=async signal=>{if(logoutPending)await finishLogout(signal);const response=await ordinaryFetch('/api/'+path,{...options,signal,redirect:'error'});if(response.status>=500)throw Error('The Operations server is unavailable.');const body=await response.clone().text();if(response.ok){const data=JSON.parse(body);if(path==='session'&&data.application!=='thrift-mart-dispatch')throw Error('This address is not an Operations server.');if(!signal.aborted){if(path==='session')syncSession(data);else{authenticated=true;acceptSettings(data.connection_settings);}}}return response;};
-  if(active)return task(AbortSignal.timeout(timeout()*1000));
+  // Routine signed-in session polling must not interrupt typing or cover an
+  // active checkout. Startup, sign-in and explicit recovery own the dialog.
+  if(active||(path==='session'&&authenticated&&!logoutPending))return task(AbortSignal.timeout(timeout()*1000));
   return run(task);
  }
  window.ConnectionStatus={run,fail,close,retry,configure,request,get timeout(){return timeout();},get visible(){return !!dialog?.open;},get failed(){return failed;}};

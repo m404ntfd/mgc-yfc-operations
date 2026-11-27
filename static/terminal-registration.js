@@ -78,7 +78,9 @@
      await api('login',{name:login.elements.name.value,password:login.elements.password.value});clearForm(login);
      const session=await api('session');user=session.user;
      if(!user?.admin)throw Error('This account is not an administrator. Enter an administrator account to register the PC.');
-     dialog.close();delete dialog.dataset.saving;await boot();await refresh(true);await show();
+     // Boot also refreshes registration. Keep that refresh deferred until the
+     // administrator handoff finishes, so it cannot redraw a newly edited form.
+     dialog.close();await boot();delete dialog.dataset.saving;await refresh(true);await show();
     }catch(error){reportError(error.message);}
     finally{login.elements.password.value='';clearForm(login);delete dialog.dataset.saving;submit.disabled=false;}
    };

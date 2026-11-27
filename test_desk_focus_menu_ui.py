@@ -33,6 +33,12 @@ try:
         # No click, fill(), or locator.press() that could focus the input for us.
         p.keyboard.type('654321');expect(pin).to_have_value('654321');p.keyboard.press('Enter')
         expect(p.locator('#posRoot')).to_be_visible()
+        # Signed-in session polling cannot open a modal over the cashier's work.
+        assert p.evaluate('''async()=>{
+          let shown=0;const original=HTMLDialogElement.prototype.showModal;
+          HTMLDialogElement.prototype.showModal=function(...args){if(this.id==='serverConnectionDialog')shown++;return original.apply(this,args)};
+          try{await api('session');return shown===0}finally{HTMLDialogElement.prototype.showModal=original}
+        }''')
         p.locator('[data-pos-product="'+product+'"]').tap();expect(p.locator('#posCart')).to_contain_text('$32.10')
         for width,height in [(1920,1080),(1366,768),(1024,768)]:
             p.set_viewport_size({'width':width,'height':height})

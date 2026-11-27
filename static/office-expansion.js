@@ -10,6 +10,7 @@ if(!officeMode){
  let nativePinFocusPending=false;
  function restorePinFocus(){window.focusDeskPin();requestAnimationFrame(()=>{if(!window.deskPinReady())return;window.focusDeskPin();const focus=window.pywebview?.api?.focus_pin;if(focus&&!nativePinFocusPending){nativePinFocusPending=true;Promise.resolve(focus()).catch(()=>{}).finally(()=>nativePinFocusPending=false);}});}
  for(const event of ['focus','pageshow','pywebviewready'])window.addEventListener(event,restorePinFocus);
+ document.addEventListener('close',e=>{if(e.target.id==='serverConnectionDialog')restorePinFocus();},true);
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)restorePinFocus();});
  new MutationObserver(restorePinFocus).observe($('auth'),{attributes:true,attributeFilter:['hidden']});restorePinFocus();
  // If startup or a keypad tap left focus on the page/button, accept the first

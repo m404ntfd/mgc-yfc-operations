@@ -115,7 +115,9 @@
   // API response parsing remains with its existing caller. Invalid credentials
   // are an authentication error, not a lost server connection.
   const task=async signal=>{if(logoutPending)await finishLogout(signal);const response=await ordinaryFetch('/api/'+path,{...options,signal,redirect:'error'});if(response.status>=500)throw Error('The Operations server is unavailable.');const body=await response.clone().text();if(response.ok){const data=JSON.parse(body);if(path==='session'&&data.application!=='thrift-mart-dispatch')throw Error('This address is not an Operations server.');if(!signal.aborted){if(path==='session')syncSession(data);else{authenticated=true;acceptSettings(data.connection_settings);}}}return response;};
-  if(active)return task(AbortSignal.timeout(timeout()*1000));
+  // Routine signed-in session polling must not interrupt typing or cover an
+  // active checkout. Startup, sign-in and explicit recovery own the dialog.
+  if(active||(path==='session'&&authenticated&&!logoutPending))return task(AbortSignal.timeout(timeout()*1000));
   return run(task);
  }
  window.ConnectionStatus={run,fail,close,retry,configure,request,get timeout(){return timeout();},get visible(){return !!dialog?.open;},get failed(){return failed;}};
@@ -856,6 +858,7 @@ if(!officeMode){
  let nativePinFocusPending=false;
  function restorePinFocus(){window.focusDeskPin();requestAnimationFrame(()=>{if(!window.deskPinReady())return;window.focusDeskPin();const focus=window.pywebview?.api?.focus_pin;if(focus&&!nativePinFocusPending){nativePinFocusPending=true;Promise.resolve(focus()).catch(()=>{}).finally(()=>nativePinFocusPending=false);}});}
  for(const event of ['focus','pageshow','pywebviewready'])window.addEventListener(event,restorePinFocus);
+ document.addEventListener('close',e=>{if(e.target.id==='serverConnectionDialog')restorePinFocus();},true);
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)restorePinFocus();});
  new MutationObserver(restorePinFocus).observe($('auth'),{attributes:true,attributeFilter:['hidden']});restorePinFocus();
  // If startup or a keypad tap left focus on the page/button, accept the first
@@ -2286,7 +2289,9 @@ if(!officeMode){
      await api('login',{name:login.elements.name.value,password:login.elements.password.value});clearForm(login);
      const session=await api('session');user=session.user;
      if(!user?.admin)throw Error('This account is not an administrator. Enter an administrator account to register the PC.');
-     dialog.close();delete dialog.dataset.saving;await boot();await refresh(true);await show();
+     // Boot also refreshes registration. Keep that refresh deferred until the
+     // administrator handoff finishes, so it cannot redraw a newly edited form.
+     dialog.close();await boot();delete dialog.dataset.saving;await refresh(true);await show();
     }catch(error){reportError(error.message);}
     finally{login.elements.password.value='';clearForm(login);delete dialog.dataset.saving;submit.disabled=false;}
    };
