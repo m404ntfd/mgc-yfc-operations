@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 from playwright.sync_api import sync_playwright, expect
 import connection_preferences
+import server
 from test_update_coordination import CoordinatorFixture
 from test_ui_helpers import password_login_page, office_setting
 from test_theme_contrast import AUDIT
@@ -48,6 +49,14 @@ def run():
                 page.reload();expect(page.locator('#serverConnectionDialog')).to_have_attribute('data-state','failed')
                 assert page.evaluate('ConnectionStatus.timeout')==25
                 page.unroute('**/api/session');page.locator('#serverConnectionRetry').click();cached(page,app,15)
+                # Retry and background setting refresh must not create an
+                # invisible second client that blocks coordinated updates.
+                with page.expect_response('**/api/connection-settings'):
+                    page.evaluate("window.dispatchEvent(new Event('online'))")
+                identity=page.evaluate('connectionId')
+                sessions=[s for s in server.SESSIONS.values() if identity in s.get('connections',{})]
+                assert len(sessions)==1
+                assert 'legacy' not in sessions[0]['connections'],sessions[0]['connections']
                 # Native startup cache works even if the web-view cache is absent.
                 page.evaluate('(app)=>localStorage.removeItem("coastyouth-connection-"+app)',app)
                 page.route('**/api/session',lambda route:route.abort());page.reload()

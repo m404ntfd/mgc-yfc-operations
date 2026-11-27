@@ -7,7 +7,8 @@
  const read=()=>{try{return JSON.parse(localStorage.getItem(key)||'{}');}catch{return {};}};
  let preferences=read(),dialog=null,sequence=0,active=null,failed=false,logoutPending=false;
  let authenticated=false,serverSettingsSeen=false,nativeReady=false,nativeLoading=null,nativeWrites=Promise.resolve(),settingsRefresh=null,refreshNeeded=false,refreshAfter=0;
- let serverRevision=-1;
+ let serverRevision=-1,clientConnection='';
+ const connectionHeaders=()=>({'X-Dispatch':'1',...(clientConnection?{'X-Dispatch-Connection':clientConnection}:{})});
  try{logoutPending=localStorage.getItem(logoutKey)==='1';}catch{}
  const timeout=()=>Number.isInteger(preferences.timeout_seconds)&&preferences.timeout_seconds>=1&&preferences.timeout_seconds<=120?preferences.timeout_seconds:10;
  const rings='<span class="connectionRings" role="img" aria-label="Youth for Christ three rings"><i></i><i></i><i></i></span>';
@@ -41,12 +42,12 @@
   }catch(error){if(sequence===id){if(error.status&&error.status<500)close();else fail(error.message);}throw error;}
  }
  async function verified(signal){
-  const response=await fetch('/api/session',{cache:'no-store',signal,redirect:'error'});
+  const response=await fetch('/api/session',{headers:connectionHeaders(),cache:'no-store',signal,redirect:'error'});
   if(!response.ok)throw Error('The Operations server is unavailable.');
   const data=await response.json();if(data.application!=='thrift-mart-dispatch')throw Error('This address is not an Operations server.');if(!signal.aborted&&!logoutPending)syncSession(data);return data;
  }
  async function finishLogout(signal){
-  const response=await fetch('/api/logout',{method:'POST',headers:{'Content-Type':'application/json','X-Dispatch':'1'},body:'{}',signal,redirect:'error'});
+  const response=await fetch('/api/logout',{method:'POST',headers:{...connectionHeaders(),'Content-Type':'application/json'},body:'{}',signal,redirect:'error'});
   if(!response.ok)throw Error('Reconnect to finish signing out of the server.');
   logoutPending=false;authenticated=false;try{localStorage.removeItem(logoutKey);}catch{}
  }
@@ -94,10 +95,13 @@
  async function refreshSettings(){
   if(!authenticated||logoutPending||settingsRefresh||Date.now()<refreshAfter)return settingsRefresh;
   refreshAfter=Date.now()+30000;
-  settingsRefresh=(async()=>{try{const response=await ordinaryFetch('/api/connection-settings',{cache:'no-store',redirect:'error',signal:AbortSignal.timeout(timeout()*1000)});if(response.ok&&authenticated&&!logoutPending)acceptSettings(await response.json());}catch{}finally{settingsRefresh=null;}})();return settingsRefresh;
+  settingsRefresh=(async()=>{try{const response=await ordinaryFetch('/api/connection-settings',{headers:connectionHeaders(),cache:'no-store',redirect:'error',signal:AbortSignal.timeout(timeout()*1000)});if(response.ok&&authenticated&&!logoutPending)acceptSettings(await response.json());}catch{}finally{settingsRefresh=null;}})();return settingsRefresh;
  }
  const ordinaryFetch=window.fetch.bind(window);
  async function request(path,options){
+  // Recovery and policy reads belong to this same tab. A headerless read would
+  // register a second client that could never acknowledge a coordinated update.
+  const identity=new Headers(options?.headers).get('X-Dispatch-Connection');if(/^[a-f0-9]{32}$/.test(identity||''))clientConnection=identity;
   const isLogin=['session','login','pos-pin-login'].includes(path);
   if(!isLogin){
    try{const response=await ordinaryFetch('/api/'+path,options);
@@ -3463,6 +3467,12 @@ const hrOpsButton=document.createElement('button');hrOpsButton.textContent='HR Â
 
 api('account/retail-theme').then(pref=>{document.body.dataset.retailTheme=pref.theme==='default'?pref.default:pref.theme;}).catch(()=>{});
 api('session').then(s=>{hrOpsButton.hidden=!s.user||!(s.user.admin||s.user.grants?.manage_hr);}).catch(()=>{});
+
+
+
+
+
+
 
 
 
