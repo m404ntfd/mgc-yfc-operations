@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 def run():
     import faulthandler
-    faulthandler.dump_traceback_later(100, exit=True)
+    faulthandler.dump_traceback_later(240, exit=True)
     f = CoordinatorFixture(); tmp = tempfile.TemporaryDirectory(); errors = []
     seed_photos(f)
     os.environ['APPDATA']=tmp.name
@@ -24,6 +24,7 @@ def run():
         raise AssertionError("Timed out: " + js)
     def test():
         try:
+            assert w.events.loaded.wait(90), 'WebView2 did not initialize within 90 seconds'
             wait('typeof hasUnfinishedWork === "function" && document.querySelector("#login")')
             assert not w.evaluate_js('!!document.querySelector(".posNativeToolbar")')
             w.evaluate_js("document.querySelector('#login [name=name]').value='Admin';document.querySelector('#login [name=password]').value='testpassword';document.querySelector('#login').requestSubmit()")
@@ -51,7 +52,7 @@ def run():
             wait('!hasUnfinishedWork()')
             w.destroy()
         except Exception:
-            errors.append(traceback.format_exc());w._ops_guard.exiting=True;w.destroy()
+            errors.append(traceback.format_exc());print(errors[-1],flush=True);w._ops_guard.exiting=True;w.destroy()
     try:
         webview.start(test, gui='edgechromium', debug=False, private_mode=True, storage_path=str(Path(tmp.name)/'webview'))
         if errors: raise AssertionError(errors[0])

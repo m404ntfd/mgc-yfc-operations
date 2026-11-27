@@ -1,5 +1,5 @@
 """Real hidden WebView2 integration; isolated server and local device settings."""
-import tempfile,time,traceback
+import os,tempfile,time,traceback
 from pathlib import Path
 import webview
 from pos_kiosk import KioskStore,KioskBridge
@@ -7,8 +7,9 @@ from test_update_coordination import CoordinatorFixture
 
 def run():
  import faulthandler
- faulthandler.dump_traceback_later(100,exit=True)
+ faulthandler.dump_traceback_later(240,exit=True)
  f=CoordinatorFixture();tmp=tempfile.TemporaryDirectory();errors=[]
+ os.environ['APPDATA']=tmp.name
  store=KioskStore(Path(tmp.name)/'settings.json');origin=f'http://127.0.0.1:{f.port}'
  bridge=KioskBridge(store,origin)
  w=webview.create_window('POS isolated native test',origin+'/pos?kiosk=1',js_api=bridge,hidden=True,fullscreen=True,frameless=True,easy_drag=False,resizable=False)
@@ -26,6 +27,9 @@ def run():
   raise AssertionError('Timed out: '+js)
  def test():
   try:
+   # Cold WebView2 initialization on hosted Windows can exceed the application's
+   # own UI wait. Keep that separate without relaxing any functional assertion.
+   assert w.events.loaded.wait(90), 'WebView2 did not initialize within 90 seconds'
    wait("window.pywebview && document.querySelector('#posExitButton') && !document.querySelector('#posExitButton').hidden")
    wait("window.deskPinReady && window.deskPinReady() && document.activeElement===document.querySelector('#deskPinForm [name=pin]')")
    assert bridge.focus_pin().get('focused')
@@ -61,7 +65,7 @@ def run():
    wait('!unfinished()')
    assert bridge.request_exit('987654').get('ok')
   except Exception:
-   errors.append(traceback.format_exc());bridge._exiting=True;w.destroy()
+   errors.append(traceback.format_exc());print(errors[-1],flush=True);bridge._exiting=True;w.destroy()
  try:
   webview.start(test,gui='edgechromium',debug=False,private_mode=True,storage_path=str(Path(tmp.name)/'webview'))
   if errors:raise AssertionError(errors[0])

@@ -8,7 +8,7 @@ from test_update_coordination import CoordinatorFixture
 
 def run():
  import faulthandler
- faulthandler.dump_traceback_later(80,exit=True)
+ faulthandler.dump_traceback_later(240,exit=True)
  f=CoordinatorFixture();tmp=tempfile.TemporaryDirectory();errors=[];os.environ['APPDATA']=tmp.name;w=office_window(f'http://127.0.0.1:{f.port}',Path(tmp.name),hidden=True)
  def wait(js):
   for _ in range(150):
@@ -19,6 +19,7 @@ def run():
   raise AssertionError('Timed out: '+js)
  def test():
   try:
+   assert w.events.loaded.wait(90), 'WebView2 did not initialize within 90 seconds'
    wait("document.querySelector('#login') && typeof officeAction==='function'")
    w.show()
    assert not w.events.maximized.is_set(), 'Login should start at the normal window size'
@@ -47,7 +48,7 @@ def run():
    w.evaluate_js("document.querySelector('#officeAddUser').reset()")
    wait('!unfinished()');w.destroy()
   except Exception:
-   errors.append(traceback.format_exc())
+   errors.append(traceback.format_exc());print(errors[-1],flush=True)
    try:w.evaluate_js('changedForms.clear();posPending=null;writeCount=0;posBusy=false');w.destroy()
    except Exception:pass
  try:
