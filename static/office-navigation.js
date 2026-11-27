@@ -28,7 +28,7 @@ const officeNavigationGroups=[
  {section:'reports',id:'labor',title:'Labor & schedules',description:'Time-entry reports and printable employee schedules.',actions:['labor-reports','schedule-report']},
  {section:'system',id:'stores',title:'Stores & appearance',description:'Store profiles, branding and your color theme.',actions:['stores-profiles','office-appearance']},
  {section:'system',id:'checkout',title:'Checkout & printing',description:'Terminals, DESK layouts, customer displays and ticket printing.',actions:['terminals','layouts','customer-display','printing-categories','printing']},
- {section:'system',id:'computers',title:'Computers & versions',description:'Computer registration, installed versions and the shared server.',actions:['computer-register','computer-updates','server']}
+ {section:'system',id:'computers',title:'Computers & versions',description:'Computer registration, installed versions and the shared server.',actions:['computer-register','computer-updates','connection-settings','server']}
 ];
 const officeNavigationAliases={'product-tools':'catalog',receipt:'stores-profiles',cards:'card-future-settings'};
 function officeSettingsPath(entry){
@@ -42,6 +42,7 @@ function officeMenuCards(){
  return [...officeAvailableCards().filter(c=>!officeNavigationAliases[c.action]),{action:'office-appearance',title:'Appearance & themes',description:'Choose your color theme or the store default.',section:'system',icon:'◐',keywords:'color colour liquid glass aero dark light gray grey'}];
 }
 if(officeMode){
+ officeCards.push({section:'system',title:'Server connection',description:'Set the connection timeout shared by DESK, OFFICE and STORE OPS.',icon:'↔',action:'connection-settings',permission:'admin',keywords:'timeout connection seconds server retry network offline'});
  officeSections.splice(0,officeSections.length,...officeNavigationSections);
  const labels={
   catalog:['Products & item choices','Create items, set prices, and configure open prices, weights and add-ons.'],
@@ -110,6 +111,7 @@ if(officeMode){
   if(group){officeSection=group.section;officeGroup=group.id;}
   officeOpenedAction=action;officeRender();
   if(action==='office-appearance')retailAppearanceButton.click();
+  else if(action==='connection-settings')await officeConnectionSettings();
   else await openExisting(action);
   officeRender();
  };
@@ -117,4 +119,14 @@ if(officeMode){
  navigation.onclick=e=>{const b=e.target.closest('button');if(b?.dataset.officeCategory)officeHome(b.dataset.officeCategory);else if(b?.dataset.officeGroup)officeHome(officeSection,b.dataset.officeGroup);};
  $('officeBack').onclick=()=>officeHome(officeSection,officeGroup);
  new MutationObserver(()=>{if($('auth').hidden)return;officeSection='home';officeGroup='';officeOpenedAction='';$('officeWork').hidden=true;$('officeTiles').hidden=false;officeRender();}).observe($('auth'),{attributes:true,attributeFilter:['hidden']});
+}
+
+async function officeConnectionSettings(){
+ try{
+  const settings=await api('connection-settings');
+  const d=checkoutModal('Server connection',`<p>This setting applies to DESK, OFFICE and STORE OPS on all computers connected to this Operations server.</p><form id="officeConnectionSettings"><label>Connection timeout (seconds)<input name="timeout_seconds" type="number" min="1" max="120" step="1" required value="${settings.timeout_seconds}"></label><p>Default: <strong>10 seconds</strong>. Choose 1–120 whole seconds.</p><p>After the first successful login, each application saves this setting on its computer. Each time the application opens and connects, it checks for changes and updates its saved value. If the server is unavailable, it uses the last saved value.</p><button type="submit" class="primary">Save connection setting</button></form>`);
+  d.classList.add('connectionSettingsDialog');
+  const f=d.querySelector('form');let saving=false;
+  f.onsubmit=async event=>{event.preventDefault();if(saving)return;saving=true;const button=f.querySelector('button');button.disabled=true;try{await api('connection-settings',{timeout_seconds:Number(f.elements.timeout_seconds.value),revision:settings.revision});changedForms.delete(f);checkoutClose(d);posMessage('Connection timeout saved. Applications refresh their saved setting when they connect.');}catch(error){checkoutError(d,error);}finally{saving=false;button.disabled=false;}};
+ }catch(error){posMessage(error.message);}
 }

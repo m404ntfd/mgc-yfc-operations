@@ -1,4 +1,4 @@
-"""Device-local connection presentation only; no credentials or business records."""
+"""Local connection policy cache and appearance; no credentials or business records."""
 import json
 import os
 from pathlib import Path
@@ -21,6 +21,7 @@ def clean(value):
     if not isinstance(value, dict): return result
     timeout = value.get('timeout_seconds')
     if type(timeout) is int and 1 <= timeout <= 120: result['timeout_seconds'] = timeout
+    if value.get('managed') is True:result['managed']=True
     for key in ('background','panel','text','muted','accent','border'):
         if isinstance(value.get(key),str) and re.fullmatch(r'#[0-9a-fA-F]{6}',value[key]):
             result[key] = value[key]

@@ -66,12 +66,12 @@ def run():
                 page.evaluate("ConnectionStatus.fail('Sample connection timeout')")
                 page.locator('#serverConnectionConfigure').click()
                 expect(page.locator('#browserServerConnection')).to_be_visible()
-                page.locator('#browserServerConnection [name=timeout]').fill('3')
+                expect(page.locator('#browserServerConnection [name=timeout]')).to_have_count(0)
                 page.locator('#browserServerConnection button').first.click();expect(dialog).not_to_be_visible()
-                assert page.evaluate('ConnectionStatus.timeout')==3
+                assert page.evaluate('ConnectionStatus.timeout')==10
                 # A late completion cannot close a newer failed check or expose credentials.
                 page.evaluate("{window.pendingCheck=ConnectionStatus.run(()=>new Promise(r=>window.resolveLate=r)).catch(()=>{});}")
-                page.clock.fast_forward(3100);expect(dialog).to_have_attribute('data-state','failed')
+                page.clock.fast_forward(10100);expect(dialog).to_have_attribute('data-state','failed')
                 page.evaluate('window.resolveLate({ok:true})');expect(dialog).to_have_attribute('data-state','failed')
                 page.set_viewport_size({'width':390,'height':844})
                 assert dialog.evaluate('(e)=>{const r=e.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight}')

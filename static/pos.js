@@ -6,6 +6,8 @@
  const key='coastyouth-connection-'+app,logoutKey=key+'-logout';
  const read=()=>{try{return JSON.parse(localStorage.getItem(key)||'{}');}catch{return {};}};
  let preferences=read(),dialog=null,sequence=0,active=null,failed=false,logoutPending=false;
+ let authenticated=false,serverSettingsSeen=false,nativeReady=false,nativeLoading=null,nativeWrites=Promise.resolve(),settingsRefresh=null,refreshNeeded=false,refreshAfter=0;
+ let serverRevision=-1;
  try{logoutPending=localStorage.getItem(logoutKey)==='1';}catch{}
  const timeout=()=>Number.isInteger(preferences.timeout_seconds)&&preferences.timeout_seconds>=1&&preferences.timeout_seconds<=120?preferences.timeout_seconds:10;
  const rings='<span class="connectionRings" role="img" aria-label="Youth for Christ three rings"><i></i><i></i><i></i></span>';
@@ -28,12 +30,12 @@
  function fail(message){stop();failed=true;paint(message,true);}
  async function run(task){
   if(active)throw Error('A connection check is already running.');
-  failed=false;paint();const id=++sequence,controller=new AbortController();let position=0,direction=1;
+  failed=false;paint();const id=++sequence,controller=new AbortController(),attemptTimeout=timeout();let position=0,direction=1;
   const cells=[...dialog.querySelectorAll('.connectionTrack i')];
   function animate(){for(let i=0;i<cells.length;i++)cells[i].classList.toggle('lit',i>=position&&i<position+7);if(!matchMedia('(prefers-reduced-motion: reduce)').matches){position+=direction;if(position===15||position===0)direction*=-1;}}
   animate();const current={controller,animation:setInterval(animate,80),timer:null};active=current;
   try{
-   const result=await Promise.race([Promise.resolve().then(()=>task(controller.signal)),new Promise((_,reject)=>{current.timer=setTimeout(()=>{reject(Error('No response within '+timeout()+' seconds. Check the server address or retry the connection.'));controller.abort();},timeout()*1000);})]);
+   const result=await Promise.race([Promise.resolve().then(()=>task(controller.signal)),new Promise((_,reject)=>{current.timer=setTimeout(()=>{reject(Error('No response within '+attemptTimeout+' seconds. Check the server address or retry the connection.'));controller.abort();},attemptTimeout*1000);})]);
    if(sequence!==id)throw Object.assign(Error('Connection check was canceled.'),{connectionCanceled:true});
    close(false);return result;
   }catch(error){if(sequence===id){if(error.status&&error.status<500)close();else fail(error.message);}throw error;}
@@ -41,12 +43,12 @@
  async function verified(signal){
   const response=await fetch('/api/session',{cache:'no-store',signal,redirect:'error'});
   if(!response.ok)throw Error('The Operations server is unavailable.');
-  const data=await response.json();if(data.application!=='thrift-mart-dispatch')throw Error('This address is not an Operations server.');return data;
+  const data=await response.json();if(data.application!=='thrift-mart-dispatch')throw Error('This address is not an Operations server.');if(!signal.aborted&&!logoutPending)syncSession(data);return data;
  }
  async function finishLogout(signal){
   const response=await fetch('/api/logout',{method:'POST',headers:{'Content-Type':'application/json','X-Dispatch':'1'},body:'{}',signal,redirect:'error'});
   if(!response.ok)throw Error('Reconnect to finish signing out of the server.');
-  logoutPending=false;try{localStorage.removeItem(logoutKey);}catch{}
+  logoutPending=false;authenticated=false;try{localStorage.removeItem(logoutKey);}catch{}
  }
  async function retry(){
   try{await run(async signal=>{await verified(signal);if(logoutPending)await finishLogout(signal);});if(window.retryTerminalConnection)await window.retryTerminalConnection();else if(typeof boot==='function')await boot();}catch{}
@@ -64,33 +66,59 @@
   close();if(window.pywebview?.api?.desktop_reconnect&&window.openServerConnection){window.openServerConnection();return;}browserEditor();
  }
  function browserEditor(){
-  make();dialog.dataset.state='configure';dialog.innerHTML=rings+'<h2 id="serverConnectionTitle">Configure Server Connection</h2><form id="browserServerConnection"><label>Server address<input name="server" value="'+safe(location.origin)+'" required></label><label>Connection timeout (seconds)<input name="timeout" type="number" min="1" max="120" step="1" value="'+timeout()+'" required></label><p>Default: 10 seconds. Saved on this device. Opening another server requires signing in there.</p><p id="connectionConfigError" role="status"></p><div class="connectionActions"><button class="primary">Connect</button><button type="button" id="connectionConfigCancel">Cancel</button></div></form>';dialog.showModal();
+  make();dialog.dataset.state='configure';dialog.innerHTML=rings+'<h2 id="serverConnectionTitle">Configure Server Connection</h2><form id="browserServerConnection"><label>Server address<input name="server" value="'+safe(location.origin)+'" required></label><p>Connection timeout: <strong>'+timeout()+' seconds</strong>. Managed in OFFICE and refreshed after a successful login. Opening another server requires signing in there.</p><p id="connectionConfigError" role="status"></p><div class="connectionActions"><button class="primary">Connect</button><button type="button" id="connectionConfigCancel">Cancel</button></div></form>';dialog.showModal();
   dialog.querySelector('#connectionConfigCancel').onclick=()=>{close();fail();};
-  dialog.querySelector('form').onsubmit=async e=>{e.preventDefault();const f=e.target;try{let text=f.elements.server.value.trim();if(!text.includes('://'))text=(text.split('/')[0].split(':')[0]==='operations.coastyfc.com'?'https://':'http://')+text;const url=new URL(text);if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.search||url.hash||!['','/'].includes(url.pathname))throw Error('Enter only the HTTP or HTTPS server address.');await saveTimeout(Number(f.elements.timeout.value));if(url.origin===location.origin){close();await retry();}else location.assign(url.origin+location.pathname);}catch(error){dialog.querySelector('#connectionConfigError').textContent=error.message;}};
+  dialog.querySelector('form').onsubmit=async e=>{e.preventDefault();const f=e.target;try{let text=f.elements.server.value.trim();if(!text.includes('://'))text=(text.split('/')[0].split(':')[0]==='operations.coastyfc.com'?'https://':'http://')+text;const url=new URL(text);if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.search||url.hash||!['','/'].includes(url.pathname))throw Error('Enter only the HTTP or HTTPS server address.');if(url.origin===location.origin){close();await retry();}else location.assign(url.origin+location.pathname);}catch(error){dialog.querySelector('#connectionConfigError').textContent=error.message;}};
  }
  function hex(color,fallback){const values=color.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)/);return values?'#'+values.slice(1,4).map(n=>(+n).toString(16).padStart(2,'0')).join(''):fallback;}
- function remember(required=false){
+ function remember(){
   const body=getComputedStyle(document.body),probe=document.createElement('dialog');probe.className='serverConnectionDialog';document.body.append(probe);const panel=getComputedStyle(probe);
   const button=document.createElement('button');button.className='primary';probe.append(button);const primary=getComputedStyle(button);
   const value={...preferences,timeout_seconds:timeout(),theme:document.body.dataset.retailTheme||preferences.theme,background:hex(body.backgroundColor,'#eef3f8'),panel:hex(panel.backgroundColor,'#ffffff'),text:hex(panel.color,'#19334a'),muted:hex(panel.color,'#41586c'),accent:hex(primary.backgroundColor,'#245c8e'),border:hex(panel.borderTopColor,'#8da4ba')};probe.remove();preferences=value;
   try{localStorage.setItem(key,JSON.stringify(value));}catch{}
-  return Promise.resolve(window.pywebview?.api?.connection_preferences?.(value)).then(result=>{if(result?.error)throw Error(result.error);}).catch(error=>{if(required)throw error;});
+  // Read the native cache before writing it, and serialize writes so an older
+  // theme update cannot overwrite a newly received OFFICE timeout.
+  if(nativeReady)nativeWrites=nativeWrites.catch(()=>{}).then(()=>window.pywebview.api.connection_preferences({...preferences}));
+  return nativeWrites.catch(()=>{});
  }
- async function saveTimeout(value){if(!Number.isInteger(value)||value<1||value>120)throw Error('Use a whole number from 1 to 120 seconds.');preferences.timeout_seconds=value;await remember(true);return value;}
+ function acceptSettings(settings){
+  const value=settings?.timeout_seconds;if(!Number.isInteger(value)||value<1||value>120)return false;
+  if(Number.isInteger(settings.revision)&&settings.revision>=0){if(settings.revision<serverRevision)return false;serverRevision=settings.revision;}
+  serverSettingsSeen=true;refreshNeeded=false;preferences.timeout_seconds=value;preferences.managed=true;remember();return true;
+ }
+ function syncSession(data){authenticated=!!data.user;if(authenticated)acceptSettings(data.connection_settings);}
+ async function nativeCache(){
+  if(nativeLoading||!window.pywebview?.api?.connection_preferences)return nativeLoading;
+  nativeLoading=(async()=>{try{const value=await window.pywebview.api.connection_preferences();if(value?.error)throw Error(value.error);if(value&&!serverSettingsSeen){preferences={...preferences,...value};}nativeReady=true;remember();}catch{nativeLoading=null;}})();return nativeLoading;
+ }
+ async function refreshSettings(){
+  if(!authenticated||logoutPending||settingsRefresh||Date.now()<refreshAfter)return settingsRefresh;
+  refreshAfter=Date.now()+30000;
+  settingsRefresh=(async()=>{try{const response=await ordinaryFetch('/api/connection-settings',{cache:'no-store',redirect:'error',signal:AbortSignal.timeout(timeout()*1000)});if(response.ok&&authenticated&&!logoutPending)acceptSettings(await response.json());}catch{}finally{settingsRefresh=null;}})();return settingsRefresh;
+ }
  const ordinaryFetch=window.fetch.bind(window);
  async function request(path,options){
   const isLogin=['session','login','pos-pin-login'].includes(path);
-  if(!isLogin)return ordinaryFetch('/api/'+path,options);
+  if(!isLogin){
+   try{const response=await ordinaryFetch('/api/'+path,options);
+    if(response.ok&&path==='logout')authenticated=false;
+    if(response.ok&&path==='connection-settings')acceptSettings(await response.clone().json());
+    else if(response.ok&&refreshNeeded)refreshSettings();
+    if(response.status>=500)refreshNeeded=true;
+    return response;
+   }catch(error){refreshNeeded=true;throw error;}
+  }
   // API response parsing remains with its existing caller. Invalid credentials
   // are an authentication error, not a lost server connection.
-  const task=async signal=>{if(logoutPending)await finishLogout(signal);const response=await ordinaryFetch('/api/'+path,{...options,signal,redirect:'error'});if(response.status>=500)throw Error('The Operations server is unavailable.');const body=await response.clone().text();if(path==='session'&&response.ok&&JSON.parse(body).application!=='thrift-mart-dispatch')throw Error('This address is not an Operations server.');return response;};
+  const task=async signal=>{if(logoutPending)await finishLogout(signal);const response=await ordinaryFetch('/api/'+path,{...options,signal,redirect:'error'});if(response.status>=500)throw Error('The Operations server is unavailable.');const body=await response.clone().text();if(response.ok){const data=JSON.parse(body);if(path==='session'&&data.application!=='thrift-mart-dispatch')throw Error('This address is not an Operations server.');if(!signal.aborted){if(path==='session')syncSession(data);else{authenticated=true;acceptSettings(data.connection_settings);}}}return response;};
   if(active)return task(AbortSignal.timeout(timeout()*1000));
   return run(task);
  }
- window.ConnectionStatus={run,fail,close,retry,configure,request,saveTimeout,get timeout(){return timeout();},get visible(){return !!dialog?.open;},get failed(){return failed;}};
+ window.ConnectionStatus={run,fail,close,retry,configure,request,get timeout(){return timeout();},get visible(){return !!dialog?.open;},get failed(){return failed;}};
  new MutationObserver(()=>remember()).observe(document.body,{attributes:true,attributeFilter:['data-retail-theme']});
  new MutationObserver(()=>remember()).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
- window.addEventListener('pywebviewready',async()=>{try{const value=await window.pywebview.api.connection_preferences?.();if(value&&!value.error){preferences={...preferences,...value};}remember();}catch{}});
+ window.addEventListener('pywebviewready',nativeCache);nativeCache();
+ window.addEventListener('online',()=>{refreshNeeded=true;refreshAfter=0;refreshSettings();});
  window.addEventListener('pagehide',stop);
 })();
 
@@ -1624,7 +1652,7 @@ const officeNavigationGroups=[
  {section:'reports',id:'labor',title:'Labor & schedules',description:'Time-entry reports and printable employee schedules.',actions:['labor-reports','schedule-report']},
  {section:'system',id:'stores',title:'Stores & appearance',description:'Store profiles, branding and your color theme.',actions:['stores-profiles','office-appearance']},
  {section:'system',id:'checkout',title:'Checkout & printing',description:'Terminals, DESK layouts, customer displays and ticket printing.',actions:['terminals','layouts','customer-display','printing-categories','printing']},
- {section:'system',id:'computers',title:'Computers & versions',description:'Computer registration, installed versions and the shared server.',actions:['computer-register','computer-updates','server']}
+ {section:'system',id:'computers',title:'Computers & versions',description:'Computer registration, installed versions and the shared server.',actions:['computer-register','computer-updates','connection-settings','server']}
 ];
 const officeNavigationAliases={'product-tools':'catalog',receipt:'stores-profiles',cards:'card-future-settings'};
 function officeSettingsPath(entry){
@@ -1638,6 +1666,7 @@ function officeMenuCards(){
  return [...officeAvailableCards().filter(c=>!officeNavigationAliases[c.action]),{action:'office-appearance',title:'Appearance & themes',description:'Choose your color theme or the store default.',section:'system',icon:'◐',keywords:'color colour liquid glass aero dark light gray grey'}];
 }
 if(officeMode){
+ officeCards.push({section:'system',title:'Server connection',description:'Set the connection timeout shared by DESK, OFFICE and STORE OPS.',icon:'↔',action:'connection-settings',permission:'admin',keywords:'timeout connection seconds server retry network offline'});
  officeSections.splice(0,officeSections.length,...officeNavigationSections);
  const labels={
   catalog:['Products & item choices','Create items, set prices, and configure open prices, weights and add-ons.'],
@@ -1706,6 +1735,7 @@ if(officeMode){
   if(group){officeSection=group.section;officeGroup=group.id;}
   officeOpenedAction=action;officeRender();
   if(action==='office-appearance')retailAppearanceButton.click();
+  else if(action==='connection-settings')await officeConnectionSettings();
   else await openExisting(action);
   officeRender();
  };
@@ -1713,6 +1743,16 @@ if(officeMode){
  navigation.onclick=e=>{const b=e.target.closest('button');if(b?.dataset.officeCategory)officeHome(b.dataset.officeCategory);else if(b?.dataset.officeGroup)officeHome(officeSection,b.dataset.officeGroup);};
  $('officeBack').onclick=()=>officeHome(officeSection,officeGroup);
  new MutationObserver(()=>{if($('auth').hidden)return;officeSection='home';officeGroup='';officeOpenedAction='';$('officeWork').hidden=true;$('officeTiles').hidden=false;officeRender();}).observe($('auth'),{attributes:true,attributeFilter:['hidden']});
+}
+
+async function officeConnectionSettings(){
+ try{
+  const settings=await api('connection-settings');
+  const d=checkoutModal('Server connection',`<p>This setting applies to DESK, OFFICE and STORE OPS on all computers connected to this Operations server.</p><form id="officeConnectionSettings"><label>Connection timeout (seconds)<input name="timeout_seconds" type="number" min="1" max="120" step="1" required value="${settings.timeout_seconds}"></label><p>Default: <strong>10 seconds</strong>. Choose 1–120 whole seconds.</p><p>After the first successful login, each application saves this setting on its computer. Each time the application opens and connects, it checks for changes and updates its saved value. If the server is unavailable, it uses the last saved value.</p><button type="submit" class="primary">Save connection setting</button></form>`);
+  d.classList.add('connectionSettingsDialog');
+  const f=d.querySelector('form');let saving=false;
+  f.onsubmit=async event=>{event.preventDefault();if(saving)return;saving=true;const button=f.querySelector('button');button.disabled=true;try{await api('connection-settings',{timeout_seconds:Number(f.elements.timeout_seconds.value),revision:settings.revision});changedForms.delete(f);checkoutClose(d);posMessage('Connection timeout saved. Applications refresh their saved setting when they connect.');}catch(error){checkoutError(d,error);}finally{saving=false;button.disabled=false;}};
+ }catch(error){posMessage(error.message);}
 }
 
 // END OFFICE NAVIGATION
@@ -2187,14 +2227,14 @@ if(!officeMode){
   dialog ||= document.createElement('dialog');dialog.id='nativeTerminalSetup';dialog.className='nativeTerminalSetup';
   if(!dialog.isConnected)document.body.append(dialog);
   clearForm(get('nativeTerminalLogin'));delete dialog.dataset.verifying;dialog.dataset.serverEditor='true';
-  dialog.innerHTML=`<h2>Server connection & PC registration</h2><p>Connect to your CoastYouth server, then sign in with an administrator account to register this PC.</p><form id="nativeServerForm"><label>Server address<input name="server" type="text" required value="${safe(location.origin)}" autocomplete="url" autocapitalize="none" spellcheck="false"></label><label>Connection timeout (seconds)<input name="timeout" type="number" min="1" max="120" step="1" required value="${window.ConnectionStatus.timeout}"></label><p>Default: 10 seconds. Saved on this computer.</p><p>Examples: https://operations.coastyfc.com or http://SERVER-PC:8080. Connect your VPN first if it is required.</p>${location.pathname.startsWith('/pos')?'<label>Admin exit passcode<input name="code" type="password" inputmode="numeric" autocomplete="off"></label><p>The existing exit passcode is needed only when changing the DESK server address.</p>':''}<p>Saved records and this computer’s identity are kept. An address is saved only after the server responds successfully.</p><button class="primary" type="submit">Connect & register PC</button></form><p id="nativeTerminalError" role="status"></p><button id="nativeServerCancel" type="button">Cancel</button>`;
+  dialog.innerHTML=`<h2>Server connection & PC registration</h2><p>Connect to your CoastYouth server, then sign in with an administrator account to register this PC.</p><form id="nativeServerForm"><label>Server address<input name="server" type="text" required value="${safe(location.origin)}" autocomplete="url" autocapitalize="none" spellcheck="false"></label><p>Connection timeout: <strong>${window.ConnectionStatus.timeout} seconds</strong>. Managed in OFFICE and refreshed after a successful login.</p><p>Examples: https://operations.coastyfc.com or http://SERVER-PC:8080. Connect your VPN first if it is required.</p>${location.pathname.startsWith('/pos')?'<label>Admin exit passcode<input name="code" type="password" inputmode="numeric" autocomplete="off"></label><p>The existing exit passcode is needed only when changing the DESK server address.</p>':''}<p>Saved records and this computer’s identity are kept. An address is saved only after the server responds successfully.</p><button class="primary" type="submit">Connect & register PC</button></form><p id="nativeTerminalError" role="status"></p><button id="nativeServerCancel" type="button">Cancel</button>`;
   const back=async()=>{if(dialog.dataset.saving)return;clearForm(get('nativeServerForm'));delete dialog.dataset.serverEditor;dialog.close();await refresh(true);if(required())await show();};
   get('nativeServerCancel').onclick=back;dialog.oncancel=e=>{e.preventDefault();back();};
   get('nativeServerForm').onsubmit=async e=>{
    e.preventDefault();if(dialog.dataset.saving)return;dialog.dataset.saving='true';const form=e.target;
    const address=form.elements.server.value,code=form.elements.code?.value||'';if(form.elements.code)form.elements.code.value='';
    for(const control of dialog.querySelectorAll('button,input'))control.disabled=true;reportError('Checking the server connection…');
-   try{await window.ConnectionStatus.saveTimeout(Number(form.elements.timeout.value));dialog.close();await window.ConnectionStatus.run(async()=>{const result=await window.pywebview.api.desktop_reconnect(address,code);if(result?.error)throw Error(result.error);return result;});clearForm(form);}
+   try{dialog.close();await window.ConnectionStatus.run(async()=>{const result=await window.pywebview.api.desktop_reconnect(address,code);if(result?.error)throw Error(result.error);return result;});clearForm(form);}
    catch(error){reportError(error.message);}
    finally{delete dialog.dataset.saving;for(const control of dialog.querySelectorAll('button,input'))control.disabled=false;}
   };

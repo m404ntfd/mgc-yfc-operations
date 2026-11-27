@@ -750,6 +750,7 @@ dialog.serverConnectionDialog{width:min(590px,calc(100vw - 36px));box-sizing:bor
 .connectionTrack i{display:block;flex:1;height:30px;min-width:0;border-radius:3px;background:currentColor;opacity:.14;transition:opacity 60ms linear}.connectionTrack i.lit{opacity:1}
 :root[data-theme="dark"] .connectionRings,:root[data-theme="dark"] .connectionTrack{color:inherit}
 .connectionActions{display:flex;justify-content:center;flex-wrap:wrap;gap:12px;margin-top:26px}.connectionActions button{min-height:52px;padding:12px 18px!important;font-size:15px!important;flex:1 1 160px}.connectionActions button:last-child{flex-basis:100%}
+dialog.checkoutDialog.connectionSettingsDialog{width:min(640px,92vw);box-sizing:border-box}.connectionSettingsDialog label{display:block;font-weight:600;margin:18px 0}.connectionSettingsDialog input{display:block;min-height:48px;margin-top:8px;max-width:220px;width:100%;box-sizing:border-box}.connectionSettingsDialog button{min-height:48px}.connectionSettingsDialog p{line-height:1.5}
 .serverConnectionDialog label{display:block;text-align:left;font-weight:600;margin:16px 0}.serverConnectionDialog input{display:block;box-sizing:border-box;width:100%;min-height:50px;margin-top:6px}.serverConnectionDialog p{line-height:1.5}
 @media(prefers-reduced-motion:reduce){.connectionTrack i{transition:none}}
 }

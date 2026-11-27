@@ -4,7 +4,7 @@ import threading
 import time
 import tkinter as tk
 from tkinter import ttk
-from connection_preferences import load, save as save_preferences
+from connection_preferences import load
 
 def connect(app,address,save,probe,normalize,*,configure=False,authorize=None,on_register=None):
     preferences=load(app); root=tk.Tk();root.title('CoastYouth Retail — Server Connection')
@@ -20,10 +20,9 @@ def connect(app,address,save,probe,normalize,*,configure=False,authorize=None,on
     track=tk.Canvas(panel,width=610,height=50,bg=preferences['panel'],highlightthickness=0)
     heading=tk.StringVar();title=label(panel,textvariable=heading,wraplength=620);title.configure(font=('Segoe UI',22,'bold'))
     status=tk.StringVar();detail=label(panel,textvariable=status,wraplength=610,justify='center')
-    editor=tk.Frame(panel,bg=preferences['panel']);value=tk.StringVar(value=address);seconds=tk.StringVar(value=str(preferences['timeout_seconds']))
+    editor=tk.Frame(panel,bg=preferences['panel']);value=tk.StringVar(value=address)
     label(editor,'Server address',anchor='w').pack(fill='x');entry=ttk.Entry(editor,textvariable=value,font=('Segoe UI',13),style='Connection.TEntry');entry.pack(fill='x',pady=(5,12))
-    label(editor,'Connection timeout (seconds)',anchor='w').pack(fill='x');duration=ttk.Entry(editor,textvariable=seconds,font=('Segoe UI',13),style='Connection.TEntry');duration.pack(fill='x',pady=(5,12))
-    label(editor,'Default: 10 seconds. Use 1–120 seconds. Connect your VPN first if needed.\nAfter connecting, an administrator can register this PC.',wraplength=610,justify='left').pack(fill='x')
+    label(editor,'Connection timeout: '+str(preferences['timeout_seconds'])+' seconds. Managed in OFFICE.\nThe saved setting refreshes after a successful login.\nConnect your VPN first if needed. An administrator can then register this PC.',wraplength=610,justify='left').pack(fill='x')
     actions=tk.Frame(panel,bg=preferences['panel']);results=queue.Queue();selected=[]
     state=dict(busy=False,closed=False,editing=configure,generation=0,deadline=0,position=0,direction=1,timer=None)
     def layout(mode):
@@ -53,12 +52,9 @@ def connect(app,address,save,probe,normalize,*,configure=False,authorize=None,on
     def check():
         if state['busy']:return
         try:
-            candidate=normalize(value.get());duration_value=int(seconds.get())
-            if not 1<=duration_value<=120:raise ValueError('Use a connection timeout from 1 to 120 seconds.')
+            candidate=normalize(value.get());duration_value=preferences['timeout_seconds']
             if candidate!=address and authorize and not authorize(candidate,root):
                 status.set('The connection was not changed. Enter the current administrator passcode to change servers.');return
-            if duration_value!=preferences['timeout_seconds']:
-                updated=dict(preferences,timeout_seconds=duration_value);save_preferences(app,updated);preferences.update(updated)
         except Exception as error:
             heading.set('Configure Server Connection');status.set(str(error));layout('configure');return
         state['generation']+=1;generation=state['generation'];state['deadline']=time.monotonic()+duration_value
