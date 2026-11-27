@@ -1,32 +1,32 @@
-# CoastYouth Retail Clover Setup — v0.66.0
+# CoastYouth Retail Server Connection — v0.67.0
 
-Administrators can prepare a registered DESK computer for a Clover connection test while merchant authorization is pending. **Card payments remain disabled.** This release cannot charge, refund, or cancel a Clover payment and does not create Clover orders.
+DESK, OFFICE and STORE OPS now show a themed connection dialog with the three-rings logo and a bouncing seven-bar indicator while connecting to the Operations server. Administrators can manage the connection timeout in OFFICE, and each client keeps the latest setting for its next startup, including when the server is unavailable.
 
-## Clover connection setup
+## Connection and recovery
 
-- In **OFFICE → System → Payment devices → Clover connection setup**, select the registered terminal and save its Clover local IP address, serial number, and optional confirmed merchant ID.
-- On that computer, open **DESK → MORE → Clover connection setup → Check connection · no charge**. REST Pay Display must be running on the Clover and both devices must be on the same local network. The check reports which computer performed it.
-- A reachable device is clearly distinguished from an authorized device. Clover approval and a later merchant-authorization step are still required; this release provides setup and network testing only.
-- Administrator permissions are checked on the server. Tests use short-lived, single-use approval tied to the current terminal, administrator session, and saved configuration. Certificates remain verified. No token, password, API key, or card-number entry is requested.
-- Store transfers require the administrator to reconfirm Clover settings. Duplicate serial assignments and stale edits are rejected. Existing terminal registrations, receipt settings, taxes and transactions remain intact.
+- The dialog says **Connecting to Server** and uses the application's saved theme colors. Reduced-motion preferences are respected.
+- The default timeout is **10 seconds**. If the connection fails or times out, the logo remains with **Can Not Connect to Operations Server** and **Retry Connection**, **Configure Server Connection**, and **Log Out** options.
+- Retry checks server connectivity without replaying a login, sale or payment. Late responses from an earlier attempt cannot override the current connection state. Existing unsaved-work and DESK exit-passcode protections remain in place.
 
-## Online donation request controls
+## Timeout setting in OFFICE
 
-This release also includes the previously prepared **Pause Online Requests** control in Dispatch's Pending Requests box. Authorized staff can pause requests across coastyfc.com, thriftmart.coastyfc.com and binopoly.coastyfc.com for **8, 12 or 24 hours**, see current status, or resume early. Requests remain active by default. Customers see a reopening notice when entering the item-donation flow. Existing requests and appointments are retained, staff can continue managing them, and monetary giving is unaffected.
+- Open **OFFICE → System → Computers & versions → Server connection**. Administrators can select a whole-number timeout from **1 to 120 seconds**.
+- Each application saves the server's setting on the client after a successful login, checks for changes when it loads and reconnects, and retains its last confirmed value while offline.
+- Client connection setup shows the current timeout. The shared setting is managed in OFFICE. Local preference files contain appearance and timeout settings, not passwords or business records.
 
 ## Installation and automatic updates
 
-- Server / Server Admin / Computer Setup: **0.66.0**
-- DESK: **1.24.0**
-- OFFICE: **1.20.0** (unchanged launcher; server supplies the new setup screen)
-- STORE OPS desktop: **1.6.1** (unchanged launcher; server supplies current screens)
+- Server / Server Admin / Computer Setup: **0.67.0**
+- DESK: **1.25.0**
+- OFFICE: **1.21.0**
+- STORE OPS desktop: **1.7.0**
 
-Update the existing Operations server first. Then use the all-in-one installer on **pos1**, selecting **POS checkout**, to update DESK. Install over the existing versions; do not uninstall or remove application data. Keep the existing server address and terminal registration. The release is offered through the existing update checks and OFFICE update controls; publishing does not force an immediate installation.
+Update the existing Operations server first, then update the installed desktop applications. The all-in-one installer can update the selected applications over their existing installations; keep the current server address and terminal registration. Desktop updates are required for the new native startup dialogs. Server updates supply the web screens and shared timeout setting.
 
-Older clients that cannot download updates because of a certificate error can use the browser-downloaded installer. Certificate and checksum verification remain enabled.
+The release is offered through the existing automatic update checks and OFFICE update controls. Publishing does not force an immediate installation. Clients that cannot download updates can use the browser-downloaded installer; certificate and checksum verification remain enabled.
 
-## Data integrity and validation
+## Data preservation and validation
 
-Only additive Clover-configuration and online-request-settings tables are introduced. Existing sales, reports, timecards, open punches and breaks, reservations and attachments, store-credit records, users, and terminal history are preserved. No payment processing is enabled and no production data is included in release files.
+The timeout setting uses a new, additive configuration table. Existing sales, reports, timecards, open punches and breaks, reservations and attachments, credit accounts, users, terminal registrations and audit history are retained. No production data or credentials are included in the release. Clover card payments remain disabled.
 
-Release checks cover a populated **0.65.0 → 0.66.0** upgrade, backup, repeated startup and code rollback; permission and configuration isolation; TLS and authorization restrictions; light/dark theme readability; preserved active carts; and actual installed Windows application startup. Automated Clover device responses use isolated fixtures. The real authorized connection on pos1 remains pending Clover approval and merchant authorization.
+Release checks cover a populated **0.66.0 → 0.67.0** upgrade, backup, repeated startup and code rollback; administrator permissions and stale edits; timeout synchronization and offline caching; delayed connection responses; theme contrast; browser recovery; and installed Windows application startup.

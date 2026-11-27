@@ -158,7 +158,7 @@ Use the full 0.39.3 Windows installer to replace both the server executable and 
 
 The separate Windows POS installer connects to Operations 0.39.4 or later at `/pos`. See [POS installation and features](POS-README.txt). It shares accounts and data with Operations, with links to Time Clock, Reservations and Paging. Credit cards will be added in future updates.
 
-## Connection dialog (unreleased)
+## Connection dialog (v0.67.0)
 
 DESK, OFFICE and STORE OPS show the three-rings mark and a seven-segment bouncing indicator while checking startup, sign-in and desktop registration connections. The default timeout is 10 seconds. Administrators configure 1–120 seconds in **OFFICE → System → Computers & versions → Server connection**. The setting applies to all three applications. After the first successful password or staff PIN login, each application saves the server setting locally. Each new load with a valid session refreshes it, as does reconnection after an outage. Until the server responds, the last saved value remains in use. **Configure Server Connection** displays the saved timeout and provides the server address and existing administrator registration flow. The native startup window uses the last saved application colors; a new installation starts with the default colors.
 
