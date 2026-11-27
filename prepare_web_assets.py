@@ -16,6 +16,9 @@ def prepare(root=None):
  js=root/'static/pos.js';text=js.read_text(encoding='utf-8');text=re.sub(r'// BEGIN CUSTOMER OFFICE.*?// END CUSTOMER OFFICE',lambda _: '// BEGIN CUSTOMER OFFICE\n'+(root/'static/customer-office.js').read_text(encoding='utf-8')+'\n// END CUSTOMER OFFICE',text,flags=re.S);js.write_text(text,encoding='utf-8')
  for filename in ('app.js','pos.js'):
   file=root/'static'/filename;content=file.read_text(encoding='utf-8')
+  content=re.sub(r'// BEGIN CONNECTION STATUS.*?// END CONNECTION STATUS\n*','',content,flags=re.S)
+  content=re.sub(r"^(?:'use strict';\s*)+","",content)
+  content="'use strict';\n// BEGIN CONNECTION STATUS\n"+(root/'static/connection-status.js').read_text(encoding='utf-8')+'\n// END CONNECTION STATUS\n'+content
   content=re.sub(r'// BEGIN FULFILLMENT PRINT.*?// END FULFILLMENT PRINT',lambda _: '// BEGIN FULFILLMENT PRINT\n'+(root/'static/fulfillment-print.js').read_text(encoding='utf-8')+'\n// END FULFILLMENT PRINT',content,flags=re.S)
   if filename=='pos.js':content=re.sub(r'// BEGIN PICKUP FOLLOWUP.*?// END PICKUP FOLLOWUP',lambda _: '// BEGIN PICKUP FOLLOWUP\n'+(root/'static/pickup-followup.js').read_text(encoding='utf-8')+'\n// END PICKUP FOLLOWUP',content,flags=re.S)
   if filename=='app.js':content=re.sub(r'// BEGIN DELIVERY WORKSPACE.*?// END DELIVERY WORKSPACE',lambda _: '// BEGIN DELIVERY WORKSPACE\n'+(root/'static/delivery-workspace.js').read_text(encoding='utf-8')+'\n// END DELIVERY WORKSPACE',content,flags=re.S)

@@ -25,7 +25,7 @@ class ReconnectTests(unittest.TestCase):
     bridge,store=self.bridge(app);before=json.loads(store.path.read_text());nonce=getattr(bridge,'_nonce',None);version=bridge._updates.version if app=='pos' else None
     with patch.object(connection,'probe_server',return_value=self.new) as probe:
      self.assertEqual(bridge.desktop_reconnect(self.new,'123456'),{'ok':True})
-    probe.assert_called_once_with(self.new,app)
+    probe.assert_called_once_with(self.new,app,timeout_seconds=10)
     self.assertEqual(json.loads(store.path.read_text()),dict(before,server=self.new))
     bridge._window.load_url.assert_called_once_with(self.new+('/pos?kiosk=1&setup=1' if app=='pos' else '/office?setup=1'))
     self.assertEqual(bridge._address,self.new)
@@ -57,7 +57,7 @@ class ReconnectTests(unittest.TestCase):
    self.assertEqual(json.loads(store.path.read_text())['server'],self.old)
    for _ in range(4):bridge.desktop_reconnect(self.new,'000000')
    self.assertIn('Too many',bridge.desktop_reconnect(self.new,'123456')['error']);probe.assert_not_called()
-   self.assertEqual(bridge.desktop_reconnect(self.old),{'ok':True});probe.assert_called_once_with(self.old,'pos')
+   self.assertEqual(bridge.desktop_reconnect(self.old),{'ok':True});probe.assert_called_once_with(self.old,'pos',timeout_seconds=10)
  def test_failed_save_and_page_navigation_cannot_replace_address(self):
   bridge,store=self.bridge('office');before=store.path.read_bytes()
   with patch.object(connection,'probe_server'),patch.object(KioskStore,'save',side_effect=OSError('Read-only settings')):

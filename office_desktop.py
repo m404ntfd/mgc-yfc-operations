@@ -44,6 +44,9 @@ class OfficeBridge:
   })();""")
  def terminal_info(self):
   info=self.office_update_info();return {**info,'app':'office'}
+ def connection_preferences(self,value=None):
+  from connection_preferences import bridge_preferences
+  return bridge_preferences(self,'office',value)
  def desktop_reconnect(self,address,exit_code=''):
   from desktop_connection import reconnect_desktop
   with self._connection_lock:return reconnect_desktop(self,'office',address)

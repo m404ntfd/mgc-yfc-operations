@@ -11,7 +11,7 @@
  window.desktopConnectionCanChange=()=>{
   if(window.posUpdateInstalling)return false;
   const excluded=[];
-  for(const id of ['nativeServerForm','nativeTerminalLogin']){const form=get(id);if(form&&changedForms.has(form)){excluded.push([form,changedForms.get(form)]);changedForms.delete(form);}}
+  for(const id of ['nativeServerForm','nativeTerminalLogin',...(!user?['login']:[])]){const form=get(id);if(form&&changedForms.has(form)){excluded.push([form,changedForms.get(form)]);changedForms.delete(form);}}
   try{return !dirty();}finally{for(const [form,value]of excluded)changedForms.set(form,value);}
  };
  function bindConnection(){for(const b of dialog.querySelectorAll('[data-terminal-connection]'))b.onclick=serverEditor;}
@@ -20,23 +20,23 @@
   if(busy||dialog?.dataset.saving){reportError('Finish checking the connection, then try again.');return;}
   if(!discard())return;clearForm(get('nativeTerminalForm'));
   if(!window.desktopConnectionCanChange()){reportError('Finish or save current work before changing the server connection.');return;}
-  if(!info){try{info=await window.pywebview.api.terminal_info();}catch{} }
   dialog ||= document.createElement('dialog');dialog.id='nativeTerminalSetup';dialog.className='nativeTerminalSetup';
   if(!dialog.isConnected)document.body.append(dialog);
   clearForm(get('nativeTerminalLogin'));delete dialog.dataset.verifying;dialog.dataset.serverEditor='true';
-  dialog.innerHTML=`<h2>Server connection & PC registration</h2><p>Connect to your CoastYouth server, then sign in with an administrator account to register this PC.</p><form id="nativeServerForm"><label>Server address<input name="server" type="text" required value="${safe(location.origin)}" autocomplete="url" autocapitalize="none" spellcheck="false"></label><p>Examples: https://operations.coastyfc.com or http://SERVER-PC:8080. Connect your VPN first if it is required.</p>${info?.app==='pos'&&info.configured?'<label>Admin exit passcode<input name="code" type="password" inputmode="numeric" autocomplete="off"></label><p>The existing exit passcode is needed only when changing the DESK server address.</p>':''}<p>Saved records and this computer’s identity are kept. An address is saved only after the server responds successfully.</p><button class="primary" type="submit">Connect & register PC</button></form><p id="nativeTerminalError" role="status"></p><button id="nativeServerCancel" type="button">Cancel</button>`;
+  dialog.innerHTML=`<h2>Server connection & PC registration</h2><p>Connect to your CoastYouth server, then sign in with an administrator account to register this PC.</p><form id="nativeServerForm"><label>Server address<input name="server" type="text" required value="${safe(location.origin)}" autocomplete="url" autocapitalize="none" spellcheck="false"></label><label>Connection timeout (seconds)<input name="timeout" type="number" min="1" max="120" step="1" required value="${window.ConnectionStatus.timeout}"></label><p>Default: 10 seconds. Saved on this computer.</p><p>Examples: https://operations.coastyfc.com or http://SERVER-PC:8080. Connect your VPN first if it is required.</p>${location.pathname.startsWith('/pos')?'<label>Admin exit passcode<input name="code" type="password" inputmode="numeric" autocomplete="off"></label><p>The existing exit passcode is needed only when changing the DESK server address.</p>':''}<p>Saved records and this computer’s identity are kept. An address is saved only after the server responds successfully.</p><button class="primary" type="submit">Connect & register PC</button></form><p id="nativeTerminalError" role="status"></p><button id="nativeServerCancel" type="button">Cancel</button>`;
   const back=async()=>{if(dialog.dataset.saving)return;clearForm(get('nativeServerForm'));delete dialog.dataset.serverEditor;dialog.close();await refresh(true);if(required())await show();};
   get('nativeServerCancel').onclick=back;dialog.oncancel=e=>{e.preventDefault();back();};
   get('nativeServerForm').onsubmit=async e=>{
    e.preventDefault();if(dialog.dataset.saving)return;dialog.dataset.saving='true';const form=e.target;
    const address=form.elements.server.value,code=form.elements.code?.value||'';if(form.elements.code)form.elements.code.value='';
    for(const control of dialog.querySelectorAll('button,input'))control.disabled=true;reportError('Checking the server connection…');
-   try{const result=await window.pywebview.api.desktop_reconnect(address,code);if(result?.error)throw Error(result.error);clearForm(form);reportError('Connected. Opening administrator sign-in and terminal registration…');}
+   try{await window.ConnectionStatus.saveTimeout(Number(form.elements.timeout.value));dialog.close();await window.ConnectionStatus.run(async()=>{const result=await window.pywebview.api.desktop_reconnect(address,code);if(result?.error)throw Error(result.error);return result;});clearForm(form);}
    catch(error){reportError(error.message);}
    finally{delete dialog.dataset.saving;for(const control of dialog.querySelectorAll('button,input'))control.disabled=false;}
   };
   if(!dialog.open)dialog.showModal();
  }
+ window.openServerConnection=serverEditor;
  function connectionEntry(){
   if(!window.pywebview?.api?.desktop_reconnect||get('desktopConnectionSetup'))return;
   const control=document.createElement('button');control.type='button';control.id='desktopConnectionSetup';control.textContent='Server connection / register PC';control.onclick=serverEditor;
@@ -44,15 +44,10 @@
  }
  function label(){if(!button)return;button.disabled=false;button.textContent=state?.computer.registered&&!required()?'Terminal: '+state.computer.name+' · Registered':'Terminal setup · Registration required';}
  function recovery(message){
-  dialog ||= document.createElement('dialog');dialog.id='nativeTerminalSetup';dialog.className='nativeTerminalSetup';dialog.dataset.verifying='true';
-  if(!dialog.isConnected)document.body.append(dialog);
-  dialog.innerHTML='<h2>Connect & register this PC</h2><p>Verify the server connection to continue. An administrator can register this computer after connecting.</p><p id="nativeTerminalError" role="status"></p><div class="actions"><button id="nativeTerminalRetry" type="button">Retry connection</button>'+connectionButton()+'<button id="nativeTerminalSignOut" type="button">Sign out</button></div>';
-  get('nativeTerminalError').textContent=message;dialog.oncancel=e=>e.preventDefault();get('nativeTerminalRetry').onclick=()=>refresh(true);bindConnection();
-  get('nativeTerminalSignOut').onclick=async()=>{try{await api('logout',{});location.reload();}catch(error){reportError(error.message);}};
-  if(!dialog.open)dialog.showModal();
+  window.ConnectionStatus.fail(message);
  }
  async function show(){
-  if(dialog?.open)return;
+  if(dialog?.open||window.ConnectionStatus.visible)return;
   if(!state||!user)return;
   dialog ||= document.createElement('dialog');dialog.id='nativeTerminalSetup';dialog.className='nativeTerminalSetup';
   if(!dialog.isConnected)document.body.append(dialog);
@@ -105,20 +100,20 @@
   };
   dialog.showModal();
  }
- window.openTerminalRegistration=async()=>{if(dirty()){(typeof posMessage==='function'?posMessage:toast)('Save or finish your current work before opening terminal setup.');return;}await refresh(true);await show();};
+ window.openTerminalRegistration=async()=>{if(dirty()){(typeof posMessage==='function'?posMessage:toast)('Save or finish your current work before opening terminal setup.');return;}if(await refresh(true))await show();};
+ window.retryTerminalConnection=async()=>{delete dialog?.dataset.serverEditor;if(!user){await boot();return;}await refresh(true);};
  async function refresh(force=false){
-  const native=window.pywebview?.api;connectionEntry();if(!native?.terminal_info||busy||window.posUpdateInstalling||dialog?.dataset.serverEditor||dialog?.dataset.saving)return;
+  const native=window.pywebview?.api;connectionEntry();if(!native?.terminal_info||busy||window.posUpdateInstalling||dialog?.dataset.serverEditor||dialog?.dataset.saving||(!force&&window.ConnectionStatus.visible))return;
   if(!user){if(get('login')&&!get('desktopSetupHint')){const hint=document.createElement('p');hint.id='desktopSetupHint';hint.textContent='First-time computer setup: sign in with an administrator account to register this terminal.';get('login').append(hint);}return;}
   busy=true;
-  if(!state){
-   recovery('Checking this computer’s registration with the server…');
-  }
   try{
-   info=await native.terminal_info();if(info.error)throw Error(info.error);window.nativeTerminalAvailable=true;
+   const check=async signal=>{const nextInfo=await native.terminal_info();if(nextInfo.error)throw Error(nextInfo.error);if(signal.aborted)throw Error('Connection check was canceled.');const nextState=await api('computers/self',{...nextInfo,status:lastStatus},{signal});return {nextInfo,nextState};};
+   const result=(!state||force)?await window.ConnectionStatus.run(check):await check(AbortSignal.timeout(window.ConnectionStatus.timeout*1000));
+   info=result.nextInfo;window.nativeTerminalAvailable=true;
    if(!button){button=document.createElement('button');button.id='nativeTerminalStatus';button.type='button';button.textContent='Terminal setup';button.onclick=window.openTerminalRegistration;(document.querySelector('.headerRight')||document.querySelector('.connectionInfo')||document.querySelector('body>header')).append(button);}
-   const wasRequired=required();state=await api('computers/self',{...info,status:lastStatus});window.terminalRegistration=state;label();if(dialog?.dataset.verifying){delete dialog.dataset.verifying;dialog.close();}
+   const wasRequired=required();state=result.nextState;window.terminalRegistration=state;label();
    if(wasRequired&&!required()&&dialog?.open&&!changedForms.has(get('nativeTerminalForm'))&&!changedForms.has(get('nativeTerminalLogin')))dialog.close();
-   if(required()||setupRequested){setupRequested=false;if(!dialog?.open)await show();return;}
+   if(required()||setupRequested){setupRequested=false;if(!dialog?.open)await show();}return true;
 
   }catch(error){if(button)button.textContent='Terminal setup · Unable to verify';if(dialog?.open)reportError(error.message);else if(force&&!dirty())recovery(error.message);}
   finally{busy=false;}

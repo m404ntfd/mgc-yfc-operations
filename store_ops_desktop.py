@@ -35,6 +35,13 @@ class CloseGuard:
     def desktop_update_status(self):
         from desktop_updates import bridge_update_status
         return bridge_update_status(self,'ops',VERSION)
+    def connection_preferences(self,value=None):
+        from connection_preferences import bridge_preferences
+        return bridge_preferences(self,'ops',value)
+    def desktop_reconnect(self,address,exit_code=''):
+        from desktop_connection import reconnect_desktop
+        if not hasattr(self,'_connection_lock'): self._connection_lock=threading.RLock()
+        with self._connection_lock:return reconnect_desktop(self,'ops',address)
     def ops_update_status(self, ident=None):
         if self.terminal_info().get('error'):return {'error':'Open the configured server.'}
         return self._updates.observe(ident)

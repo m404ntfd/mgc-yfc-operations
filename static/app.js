@@ -1,3 +1,100 @@
+'use strict';
+// BEGIN CONNECTION STATUS
+// Connection checks only. Never retry a sale, payment, or sign-in submission.
+(()=>{
+ const app=location.pathname.startsWith('/office')?'office':location.pathname.startsWith('/pos')?'pos':'ops';
+ const key='coastyouth-connection-'+app,logoutKey=key+'-logout';
+ const read=()=>{try{return JSON.parse(localStorage.getItem(key)||'{}');}catch{return {};}};
+ let preferences=read(),dialog=null,sequence=0,active=null,failed=false,logoutPending=false;
+ try{logoutPending=localStorage.getItem(logoutKey)==='1';}catch{}
+ const timeout=()=>Number.isInteger(preferences.timeout_seconds)&&preferences.timeout_seconds>=1&&preferences.timeout_seconds<=120?preferences.timeout_seconds:10;
+ const rings='<span class="connectionRings" role="img" aria-label="Youth for Christ three rings"><i></i><i></i><i></i></span>';
+ const bars='<div class="connectionTrack" role="progressbar" aria-label="Connecting to Server">'+Array.from({length:22},()=>'<i></i>').join('')+'</div>';
+ const safe=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ if(/^(glass-(blue|teal|violet|rose|graphite)|classic-gray|harbor-blue|coastal-teal|midnight|coastyouth-red)$/.test(preferences.theme||''))document.body.dataset.retailTheme=preferences.theme;
+ function make(){
+  if(!dialog){dialog=document.createElement('dialog');dialog.id='serverConnectionDialog';dialog.className='serverConnectionDialog';dialog.setAttribute('aria-labelledby','serverConnectionTitle');dialog.addEventListener('cancel',e=>e.preventDefault());document.body.append(dialog);}
+  return dialog;
+ }
+ function stop(abort=true){if(active){clearTimeout(active.timer);clearInterval(active.animation);if(abort)active.controller.abort();active=null;}sequence++;}
+ function clearConnectionForm(){const form=document.getElementById('browserServerConnection');if(form&&typeof changedForms!=='undefined')changedForms.delete(form);}
+ function close(abort=true){stop(abort);failed=false;clearConnectionForm();dialog?.close();}
+ function paint(message,error=false){
+  make();clearConnectionForm();dialog.dataset.state=error?'failed':'connecting';
+  dialog.innerHTML=rings+(error?'':bars)+'<h2 id="serverConnectionTitle">'+(error?'Can Not Connect to Operations Server':'Connecting to Server')+'</h2>'+(error?'<p id="serverConnectionDetail"></p><div class="connectionActions"><button type="button" id="serverConnectionRetry" class="primary">Retry Connection</button><button type="button" id="serverConnectionConfigure">Configure Server Connection</button><button type="button" id="serverConnectionLogout">Log Out</button></div>':'');
+  dialog.setAttribute('aria-busy',String(!error));if(!dialog.open)dialog.showModal();
+  if(error){dialog.querySelector('#serverConnectionDetail').textContent=message||'Check that the server and your network or VPN are available.';dialog.querySelector('#serverConnectionRetry').onclick=retry;dialog.querySelector('#serverConnectionConfigure').onclick=configure;dialog.querySelector('#serverConnectionLogout').onclick=logout;dialog.querySelector('#serverConnectionRetry').focus();}
+ }
+ function fail(message){stop();failed=true;paint(message,true);}
+ async function run(task){
+  if(active)throw Error('A connection check is already running.');
+  failed=false;paint();const id=++sequence,controller=new AbortController();let position=0,direction=1;
+  const cells=[...dialog.querySelectorAll('.connectionTrack i')];
+  function animate(){for(let i=0;i<cells.length;i++)cells[i].classList.toggle('lit',i>=position&&i<position+7);if(!matchMedia('(prefers-reduced-motion: reduce)').matches){position+=direction;if(position===15||position===0)direction*=-1;}}
+  animate();const current={controller,animation:setInterval(animate,80),timer:null};active=current;
+  try{
+   const result=await Promise.race([Promise.resolve().then(()=>task(controller.signal)),new Promise((_,reject)=>{current.timer=setTimeout(()=>{reject(Error('No response within '+timeout()+' seconds. Check the server address or retry the connection.'));controller.abort();},timeout()*1000);})]);
+   if(sequence!==id)throw Object.assign(Error('Connection check was canceled.'),{connectionCanceled:true});
+   close(false);return result;
+  }catch(error){if(sequence===id){if(error.status&&error.status<500)close();else fail(error.message);}throw error;}
+ }
+ async function verified(signal){
+  const response=await fetch('/api/session',{cache:'no-store',signal,redirect:'error'});
+  if(!response.ok)throw Error('The Operations server is unavailable.');
+  const data=await response.json();if(data.application!=='thrift-mart-dispatch')throw Error('This address is not an Operations server.');return data;
+ }
+ async function finishLogout(signal){
+  const response=await fetch('/api/logout',{method:'POST',headers:{'Content-Type':'application/json','X-Dispatch':'1'},body:'{}',signal,redirect:'error'});
+  if(!response.ok)throw Error('Reconnect to finish signing out of the server.');
+  logoutPending=false;try{localStorage.removeItem(logoutKey);}catch{}
+ }
+ async function retry(){
+  try{await run(async signal=>{await verified(signal);if(logoutPending)await finishLogout(signal);});if(window.retryTerminalConnection)await window.retryTerminalConnection();else if(typeof boot==='function')await boot();}catch{}
+ }
+ async function logout(){
+  if(window.desktopConnectionCanChange&&!window.desktopConnectionCanChange()){dialog.querySelector('#serverConnectionDetail').textContent='Save or finish current work before logging out.';return;}
+  logoutPending=true;try{localStorage.setItem(logoutKey,'1');}catch{try{await run(finishLogout);}catch{return;}}
+  if(typeof changedForms!=='undefined')for(const id of ['nativeServerForm','nativeTerminalLogin',...(typeof user==='undefined'||!user?['login']:[])])changedForms.delete(document.getElementById(id));
+  // Reload clears this screen immediately. A pending logout must finish before
+  // the next session/sign-in response can expose an authenticated application.
+  location.reload();
+ }
+ function configure(){
+  if(window.desktopConnectionCanChange&&!window.desktopConnectionCanChange()){dialog.querySelector('#serverConnectionDetail').textContent='Save or finish current work before changing the connection.';return;}
+  close();if(window.pywebview?.api?.desktop_reconnect&&window.openServerConnection){window.openServerConnection();return;}browserEditor();
+ }
+ function browserEditor(){
+  make();dialog.dataset.state='configure';dialog.innerHTML=rings+'<h2 id="serverConnectionTitle">Configure Server Connection</h2><form id="browserServerConnection"><label>Server address<input name="server" value="'+safe(location.origin)+'" required></label><label>Connection timeout (seconds)<input name="timeout" type="number" min="1" max="120" step="1" value="'+timeout()+'" required></label><p>Default: 10 seconds. Saved on this device. Opening another server requires signing in there.</p><p id="connectionConfigError" role="status"></p><div class="connectionActions"><button class="primary">Connect</button><button type="button" id="connectionConfigCancel">Cancel</button></div></form>';dialog.showModal();
+  dialog.querySelector('#connectionConfigCancel').onclick=()=>{close();fail();};
+  dialog.querySelector('form').onsubmit=async e=>{e.preventDefault();const f=e.target;try{let text=f.elements.server.value.trim();if(!text.includes('://'))text=(text.split('/')[0].split(':')[0]==='operations.coastyfc.com'?'https://':'http://')+text;const url=new URL(text);if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.search||url.hash||!['','/'].includes(url.pathname))throw Error('Enter only the HTTP or HTTPS server address.');await saveTimeout(Number(f.elements.timeout.value));if(url.origin===location.origin){close();await retry();}else location.assign(url.origin+location.pathname);}catch(error){dialog.querySelector('#connectionConfigError').textContent=error.message;}};
+ }
+ function hex(color,fallback){const values=color.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)/);return values?'#'+values.slice(1,4).map(n=>(+n).toString(16).padStart(2,'0')).join(''):fallback;}
+ function remember(required=false){
+  const body=getComputedStyle(document.body),probe=document.createElement('dialog');probe.className='serverConnectionDialog';document.body.append(probe);const panel=getComputedStyle(probe);
+  const button=document.createElement('button');button.className='primary';probe.append(button);const primary=getComputedStyle(button);
+  const value={...preferences,timeout_seconds:timeout(),theme:document.body.dataset.retailTheme||preferences.theme,background:hex(body.backgroundColor,'#eef3f8'),panel:hex(panel.backgroundColor,'#ffffff'),text:hex(panel.color,'#19334a'),muted:hex(panel.color,'#41586c'),accent:hex(primary.backgroundColor,'#245c8e'),border:hex(panel.borderTopColor,'#8da4ba')};probe.remove();preferences=value;
+  try{localStorage.setItem(key,JSON.stringify(value));}catch{}
+  return Promise.resolve(window.pywebview?.api?.connection_preferences?.(value)).then(result=>{if(result?.error)throw Error(result.error);}).catch(error=>{if(required)throw error;});
+ }
+ async function saveTimeout(value){if(!Number.isInteger(value)||value<1||value>120)throw Error('Use a whole number from 1 to 120 seconds.');preferences.timeout_seconds=value;await remember(true);return value;}
+ const ordinaryFetch=window.fetch.bind(window);
+ async function request(path,options){
+  const isLogin=['session','login','pos-pin-login'].includes(path);
+  if(!isLogin)return ordinaryFetch('/api/'+path,options);
+  // API response parsing remains with its existing caller. Invalid credentials
+  // are an authentication error, not a lost server connection.
+  const task=async signal=>{if(logoutPending)await finishLogout(signal);const response=await ordinaryFetch('/api/'+path,{...options,signal,redirect:'error'});if(response.status>=500)throw Error('The Operations server is unavailable.');const body=await response.clone().text();if(path==='session'&&response.ok&&JSON.parse(body).application!=='thrift-mart-dispatch')throw Error('This address is not an Operations server.');return response;};
+  if(active)return task(AbortSignal.timeout(timeout()*1000));
+  return run(task);
+ }
+ window.ConnectionStatus={run,fail,close,retry,configure,request,saveTimeout,get timeout(){return timeout();},get visible(){return !!dialog?.open;},get failed(){return failed;}};
+ new MutationObserver(()=>remember()).observe(document.body,{attributes:true,attributeFilter:['data-retail-theme']});
+ new MutationObserver(()=>remember()).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+ window.addEventListener('pywebviewready',async()=>{try{const value=await window.pywebview.api.connection_preferences?.();if(value&&!value.error){preferences={...preferences,...value};}remember();}catch{}});
+ window.addEventListener('pagehide',stop);
+})();
+
+// END CONNECTION STATUS
 // Restore this device’s appearance before initializing the application.
 (()=>{
  'use strict';
@@ -28,13 +125,13 @@ const offlineOverlay=document.createElement('dialog');offlineOverlay.id='offline
 let serverOnline=true,serverUpdateAvailable=false;
 const connectionDot=document.createElement('span');connectionDot.id='connectionDot';connectionDot.className='statusDot';connectionDot.setAttribute('aria-hidden','true');const connectionLine=document.createElement('div');connectionLine.id='connectionLine';$('connection').before(connectionLine);connectionLine.append(connectionDot,$('connection'));
 const loggedOutStatus=document.createElement('div');loggedOutStatus.id='loggedOutStatus';loggedOutStatus.innerHTML='<span class="statusDot signedOutDot" aria-hidden="true"></span>No User Currently Logged In';connectionLine.after(loggedOutStatus);
-function setServerConnection(online){serverOnline=online;if(online){if(offlineOverlay.open)offlineOverlay.close();offlineOverlay.hidden=true;}else if(!$('addUserStatus')?.open){offlineOverlay.hidden=false;if(!offlineOverlay.open)offlineOverlay.showModal();}connectionDot.dataset.connectionState=online?(serverUpdateAvailable?'update':'online'):'offline';connectionDot.title=online?(serverUpdateAvailable?'Server online — update available':'Server online'):'Server offline';if(!online)$('connection').textContent='Server offline';}
+function setServerConnection(online){serverOnline=online;if(online){if(offlineOverlay.open)offlineOverlay.close();offlineOverlay.hidden=true;}else if(!window.ConnectionStatus?.visible&&!$('addUserStatus')?.open){offlineOverlay.hidden=false;if(!offlineOverlay.open)offlineOverlay.showModal();}connectionDot.dataset.connectionState=online?(serverUpdateAvailable?'update':'online'):'offline';connectionDot.title=online?(serverUpdateAvailable?'Server online — update available':'Server online'):'Server offline';if(!online)$('connection').textContent='Server offline';}
 async function pollServerConnection(){try{const r=await api('connection-status');serverUpdateAvailable=!!r.update_available;setServerConnection(true);$('connection').textContent=serverUpdateAvailable?'Store server online · Update available':'Store server online';}catch{setServerConnection(false);}}
 setServerConnection(true);setInterval(pollServerConnection,15000);pollServerConnection();
 const localDate=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 $('date').value=localDate(new Date());
 $('mobileLink').href=location.origin+'/mobile';$('mobileLink').textContent=location.origin+'/mobile';
-async function api(path,data){let r;try{r=await fetch('/api/'+path,{method:data?'POST':'GET',headers:{'X-Dispatch-Connection':connectionId,...(data?{'Content-Type':'application/json','X-Dispatch':'1'}:{})},body:data?JSON.stringify(data):undefined,signal:AbortSignal.timeout(20000)});if(r.status>=500)throw Error('Server unavailable');setServerConnection(true);}catch(e){setServerConnection(false);throw e;}const v=await r.json();if(!r.ok){if(r.status===401&&user){user=null;updateSignedInUser();clearInterval(timer);$('app').hidden=true;$('paging').hidden=true;$('receipts').hidden=true;$('receiptHistory')?.setAttribute('hidden','');$('printPurpose')?.setAttribute('hidden','');setSectionHeader('Sign in','signin');$('auth').hidden=false;$('editor').close();$('passwordDialog').close();$('statusDialog').close();}throw Object.assign(Error(v.error||'Request failed'),{status:r.status,attemptsRemaining:v.attempts_remaining});}return v;}
+async function api(path,data,options={}){let r;try{r=await window.ConnectionStatus.request(path,{method:data?'POST':'GET',headers:{'X-Dispatch-Connection':connectionId,...(data?{'Content-Type':'application/json','X-Dispatch':'1'}:{})},body:data?JSON.stringify(data):undefined,signal:options.signal||AbortSignal.timeout(20000)});if(r.status>=500)throw Error('Server unavailable');setServerConnection(true);}catch(e){setServerConnection(false);throw e;}const v=await r.json();if(!r.ok){if(r.status===401&&user){user=null;updateSignedInUser();clearInterval(timer);$('app').hidden=true;$('paging').hidden=true;$('receipts').hidden=true;$('receiptHistory')?.setAttribute('hidden','');$('printPurpose')?.setAttribute('hidden','');setSectionHeader('Sign in','signin');$('auth').hidden=false;$('editor').close();$('passwordDialog').close();$('statusDialog').close();}throw Object.assign(Error(v.error||'Request failed'),{status:r.status,attemptsRemaining:v.attempts_remaining});}return v;}
 let toastTimer;
 function toast(message,action){
  const notice=$('toast');
@@ -3384,6 +3481,27 @@ api('session').then(s=>{hrOpsButton.hidden=!s.user||!(s.user.admin||s.user.grant
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // BEGIN TERMINAL REGISTRATION
 // Shared native desktop registration; ordinary web browsers keep their current login flow.
 (()=>{
@@ -3398,7 +3516,7 @@ api('session').then(s=>{hrOpsButton.hidden=!s.user||!(s.user.admin||s.user.grant
  window.desktopConnectionCanChange=()=>{
   if(window.posUpdateInstalling)return false;
   const excluded=[];
-  for(const id of ['nativeServerForm','nativeTerminalLogin']){const form=get(id);if(form&&changedForms.has(form)){excluded.push([form,changedForms.get(form)]);changedForms.delete(form);}}
+  for(const id of ['nativeServerForm','nativeTerminalLogin',...(!user?['login']:[])]){const form=get(id);if(form&&changedForms.has(form)){excluded.push([form,changedForms.get(form)]);changedForms.delete(form);}}
   try{return !dirty();}finally{for(const [form,value]of excluded)changedForms.set(form,value);}
  };
  function bindConnection(){for(const b of dialog.querySelectorAll('[data-terminal-connection]'))b.onclick=serverEditor;}
@@ -3407,23 +3525,23 @@ api('session').then(s=>{hrOpsButton.hidden=!s.user||!(s.user.admin||s.user.grant
   if(busy||dialog?.dataset.saving){reportError('Finish checking the connection, then try again.');return;}
   if(!discard())return;clearForm(get('nativeTerminalForm'));
   if(!window.desktopConnectionCanChange()){reportError('Finish or save current work before changing the server connection.');return;}
-  if(!info){try{info=await window.pywebview.api.terminal_info();}catch{} }
   dialog ||= document.createElement('dialog');dialog.id='nativeTerminalSetup';dialog.className='nativeTerminalSetup';
   if(!dialog.isConnected)document.body.append(dialog);
   clearForm(get('nativeTerminalLogin'));delete dialog.dataset.verifying;dialog.dataset.serverEditor='true';
-  dialog.innerHTML=`<h2>Server connection & PC registration</h2><p>Connect to your CoastYouth server, then sign in with an administrator account to register this PC.</p><form id="nativeServerForm"><label>Server address<input name="server" type="text" required value="${safe(location.origin)}" autocomplete="url" autocapitalize="none" spellcheck="false"></label><p>Examples: https://operations.coastyfc.com or http://SERVER-PC:8080. Connect your VPN first if it is required.</p>${info?.app==='pos'&&info.configured?'<label>Admin exit passcode<input name="code" type="password" inputmode="numeric" autocomplete="off"></label><p>The existing exit passcode is needed only when changing the DESK server address.</p>':''}<p>Saved records and this computer’s identity are kept. An address is saved only after the server responds successfully.</p><button class="primary" type="submit">Connect & register PC</button></form><p id="nativeTerminalError" role="status"></p><button id="nativeServerCancel" type="button">Cancel</button>`;
+  dialog.innerHTML=`<h2>Server connection & PC registration</h2><p>Connect to your CoastYouth server, then sign in with an administrator account to register this PC.</p><form id="nativeServerForm"><label>Server address<input name="server" type="text" required value="${safe(location.origin)}" autocomplete="url" autocapitalize="none" spellcheck="false"></label><label>Connection timeout (seconds)<input name="timeout" type="number" min="1" max="120" step="1" required value="${window.ConnectionStatus.timeout}"></label><p>Default: 10 seconds. Saved on this computer.</p><p>Examples: https://operations.coastyfc.com or http://SERVER-PC:8080. Connect your VPN first if it is required.</p>${location.pathname.startsWith('/pos')?'<label>Admin exit passcode<input name="code" type="password" inputmode="numeric" autocomplete="off"></label><p>The existing exit passcode is needed only when changing the DESK server address.</p>':''}<p>Saved records and this computer’s identity are kept. An address is saved only after the server responds successfully.</p><button class="primary" type="submit">Connect & register PC</button></form><p id="nativeTerminalError" role="status"></p><button id="nativeServerCancel" type="button">Cancel</button>`;
   const back=async()=>{if(dialog.dataset.saving)return;clearForm(get('nativeServerForm'));delete dialog.dataset.serverEditor;dialog.close();await refresh(true);if(required())await show();};
   get('nativeServerCancel').onclick=back;dialog.oncancel=e=>{e.preventDefault();back();};
   get('nativeServerForm').onsubmit=async e=>{
    e.preventDefault();if(dialog.dataset.saving)return;dialog.dataset.saving='true';const form=e.target;
    const address=form.elements.server.value,code=form.elements.code?.value||'';if(form.elements.code)form.elements.code.value='';
    for(const control of dialog.querySelectorAll('button,input'))control.disabled=true;reportError('Checking the server connection…');
-   try{const result=await window.pywebview.api.desktop_reconnect(address,code);if(result?.error)throw Error(result.error);clearForm(form);reportError('Connected. Opening administrator sign-in and terminal registration…');}
+   try{await window.ConnectionStatus.saveTimeout(Number(form.elements.timeout.value));dialog.close();await window.ConnectionStatus.run(async()=>{const result=await window.pywebview.api.desktop_reconnect(address,code);if(result?.error)throw Error(result.error);return result;});clearForm(form);}
    catch(error){reportError(error.message);}
    finally{delete dialog.dataset.saving;for(const control of dialog.querySelectorAll('button,input'))control.disabled=false;}
   };
   if(!dialog.open)dialog.showModal();
  }
+ window.openServerConnection=serverEditor;
  function connectionEntry(){
   if(!window.pywebview?.api?.desktop_reconnect||get('desktopConnectionSetup'))return;
   const control=document.createElement('button');control.type='button';control.id='desktopConnectionSetup';control.textContent='Server connection / register PC';control.onclick=serverEditor;
@@ -3431,15 +3549,10 @@ api('session').then(s=>{hrOpsButton.hidden=!s.user||!(s.user.admin||s.user.grant
  }
  function label(){if(!button)return;button.disabled=false;button.textContent=state?.computer.registered&&!required()?'Terminal: '+state.computer.name+' · Registered':'Terminal setup · Registration required';}
  function recovery(message){
-  dialog ||= document.createElement('dialog');dialog.id='nativeTerminalSetup';dialog.className='nativeTerminalSetup';dialog.dataset.verifying='true';
-  if(!dialog.isConnected)document.body.append(dialog);
-  dialog.innerHTML='<h2>Connect & register this PC</h2><p>Verify the server connection to continue. An administrator can register this computer after connecting.</p><p id="nativeTerminalError" role="status"></p><div class="actions"><button id="nativeTerminalRetry" type="button">Retry connection</button>'+connectionButton()+'<button id="nativeTerminalSignOut" type="button">Sign out</button></div>';
-  get('nativeTerminalError').textContent=message;dialog.oncancel=e=>e.preventDefault();get('nativeTerminalRetry').onclick=()=>refresh(true);bindConnection();
-  get('nativeTerminalSignOut').onclick=async()=>{try{await api('logout',{});location.reload();}catch(error){reportError(error.message);}};
-  if(!dialog.open)dialog.showModal();
+  window.ConnectionStatus.fail(message);
  }
  async function show(){
-  if(dialog?.open)return;
+  if(dialog?.open||window.ConnectionStatus.visible)return;
   if(!state||!user)return;
   dialog ||= document.createElement('dialog');dialog.id='nativeTerminalSetup';dialog.className='nativeTerminalSetup';
   if(!dialog.isConnected)document.body.append(dialog);
@@ -3492,20 +3605,20 @@ api('session').then(s=>{hrOpsButton.hidden=!s.user||!(s.user.admin||s.user.grant
   };
   dialog.showModal();
  }
- window.openTerminalRegistration=async()=>{if(dirty()){(typeof posMessage==='function'?posMessage:toast)('Save or finish your current work before opening terminal setup.');return;}await refresh(true);await show();};
+ window.openTerminalRegistration=async()=>{if(dirty()){(typeof posMessage==='function'?posMessage:toast)('Save or finish your current work before opening terminal setup.');return;}if(await refresh(true))await show();};
+ window.retryTerminalConnection=async()=>{delete dialog?.dataset.serverEditor;if(!user){await boot();return;}await refresh(true);};
  async function refresh(force=false){
-  const native=window.pywebview?.api;connectionEntry();if(!native?.terminal_info||busy||window.posUpdateInstalling||dialog?.dataset.serverEditor||dialog?.dataset.saving)return;
+  const native=window.pywebview?.api;connectionEntry();if(!native?.terminal_info||busy||window.posUpdateInstalling||dialog?.dataset.serverEditor||dialog?.dataset.saving||(!force&&window.ConnectionStatus.visible))return;
   if(!user){if(get('login')&&!get('desktopSetupHint')){const hint=document.createElement('p');hint.id='desktopSetupHint';hint.textContent='First-time computer setup: sign in with an administrator account to register this terminal.';get('login').append(hint);}return;}
   busy=true;
-  if(!state){
-   recovery('Checking this computer’s registration with the server…');
-  }
   try{
-   info=await native.terminal_info();if(info.error)throw Error(info.error);window.nativeTerminalAvailable=true;
+   const check=async signal=>{const nextInfo=await native.terminal_info();if(nextInfo.error)throw Error(nextInfo.error);if(signal.aborted)throw Error('Connection check was canceled.');const nextState=await api('computers/self',{...nextInfo,status:lastStatus},{signal});return {nextInfo,nextState};};
+   const result=(!state||force)?await window.ConnectionStatus.run(check):await check(AbortSignal.timeout(window.ConnectionStatus.timeout*1000));
+   info=result.nextInfo;window.nativeTerminalAvailable=true;
    if(!button){button=document.createElement('button');button.id='nativeTerminalStatus';button.type='button';button.textContent='Terminal setup';button.onclick=window.openTerminalRegistration;(document.querySelector('.headerRight')||document.querySelector('.connectionInfo')||document.querySelector('body>header')).append(button);}
-   const wasRequired=required();state=await api('computers/self',{...info,status:lastStatus});window.terminalRegistration=state;label();if(dialog?.dataset.verifying){delete dialog.dataset.verifying;dialog.close();}
+   const wasRequired=required();state=result.nextState;window.terminalRegistration=state;label();
    if(wasRequired&&!required()&&dialog?.open&&!changedForms.has(get('nativeTerminalForm'))&&!changedForms.has(get('nativeTerminalLogin')))dialog.close();
-   if(required()||setupRequested){setupRequested=false;if(!dialog?.open)await show();return;}
+   if(required()||setupRequested){setupRequested=false;if(!dialog?.open)await show();}return true;
 
   }catch(error){if(button)button.textContent='Terminal setup · Unable to verify';if(dialog?.open)reportError(error.message);else if(force&&!dirty())recovery(error.message);}
   finally{busy=false;}

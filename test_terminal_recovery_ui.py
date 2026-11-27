@@ -25,7 +25,7 @@ def run():
     page.locator('#nativeServerForm [name=server]').fill('https://operations.coastyfc.com')
     if app=='pos':page.locator('#nativeServerForm [name=code]').fill('123456')
     assert page.evaluate('window.desktopConnectionCanChange()')
-    page.locator('#nativeServerForm button').click();expect(page.locator('#nativeTerminalError')).to_contain_text('did not respond')
+    page.locator('#nativeServerForm button').click();expect(page.locator('#serverConnectionDetail')).to_contain_text('did not respond');page.locator('#serverConnectionConfigure').click()
     contrast=page.locator('#nativeServerForm button').evaluate('''button=>{const css=getComputedStyle(button),light=color=>{const channels=color.match(/[\\d.]+/g).slice(0,3).map(n=>Number(n)/255).map(n=>n<=.04045?n/12.92:((n+.055)/1.055)**2.4);return channels[0]*.2126+channels[1]*.7152+channels[2]*.0722;};const a=light(css.color),b=light(css.backgroundColor);return (Math.max(a,b)+.05)/(Math.min(a,b)+.05);}''')
     assert contrast>=4.5,(app,contrast)
     assert page.evaluate('window.reconnectCalls')==[['https://operations.coastyfc.com','123456' if app=='pos' else '']]
@@ -49,8 +49,8 @@ def run():
     expect(page.locator('#nativeTerminalSetup')).to_contain_text('Registered: '+name);page.locator('#nativeTerminalClose').click()
     # An unreachable server exposes both retry and address editing from status.
     page.route('**/api/computers/self',lambda route:route.abort())
-    page.locator('#nativeTerminalStatus').click();expect(page.locator('#nativeTerminalRetry')).to_be_visible()
-    page.locator('#nativeTerminalSetup [data-terminal-connection]').click();expect(page.locator('#nativeServerForm')).to_be_visible()
+    page.locator('#nativeTerminalStatus').click();expect(page.locator('#serverConnectionRetry')).to_be_visible()
+    page.locator('#serverConnectionConfigure').click();expect(page.locator('#nativeServerForm')).to_be_visible()
     page.evaluate("const draft=document.createElement('form');draft.id='fixtureDraft';document.body.append(draft);changedForms.set(draft,'unsaved');")
     assert not page.evaluate('window.desktopConnectionCanChange()')
     page.evaluate("changedForms.delete(document.getElementById('fixtureDraft'));document.getElementById('fixtureDraft').remove()")

@@ -157,3 +157,9 @@ Use the full 0.39.3 Windows installer to replace both the server executable and 
 ## Separate Point of Sale 1.0.0
 
 The separate Windows POS installer connects to Operations 0.39.4 or later at `/pos`. See [POS installation and features](POS-README.txt). It shares accounts and data with Operations, with links to Time Clock, Reservations and Paging. Credit cards will be added in future updates.
+
+## Connection dialog (unreleased)
+
+DESK, OFFICE and STORE OPS show the three-rings mark and a seven-segment bouncing indicator while checking startup, sign-in and desktop registration connections. The default timeout is 10 seconds. **Configure Server Connection** provides a device-local timeout of 1–120 seconds, the server address, and the existing administrator registration flow. The native startup window uses the last saved application colors; a new installation starts with the default colors.
+
+On failure the logo remains above **Can Not Connect to Operations Server**, with **Retry Connection**, **Configure Server Connection**, and **Log Out**. Retrying only checks connectivity; it does not repeat a password submission, sale, payment or other business operation. An offline browser logout is completed on reconnection before restoring an authenticated screen. Existing work protections and DESK exit-passcode requirements remain in place. Connection preferences are separate from computer identity and business data; no database migration is required.
